@@ -1,26 +1,83 @@
-# Tukey's Bisquare Weight Function
-#
-# Computes Tukey's bisquare (biweight) robust weights for outlier downweighting.
-#
-# @param resid matrix of residuals (same dimension as X)
-# @param c tuning constant (default: 4.685 for 95% efficiency)
-#
-# @returns Matrix of weights between 0 and 1, same shape as resid
-#
-# @details The bisquare weight function is:
-# w(u) = (1 - (u/c)^2)^2 if |u| <= c, 0 otherwise
-# where u = row-wise standardized residuals.
-#
-bisquare0 <- function(resid, c = 4.685) {
-    # Row-wise MAD
-    mad_row <- apply(resid, 1, stats::mad, na.rm = TRUE)
-    mad_row[mad_row == 0] <- 1  # avoid division by zero
+# Tukey's bisquare row weights from squared row residual norms.
+.aa_bisquare_weights <- function(row_rss, c = 4.685) {
+    stopifnot("`c` must be positive" = length(c) == 1L && is.finite(c) && c > 0)
+    row_resid <- sqrt(pmax(row_rss, 0))
+    scale <- stats::mad(row_resid, center = 0)
+    if (!is.finite(scale) || scale <= .Machine$double.eps)
+        return(rep(1, length(row_rss)))
 
-    # Standardize each row
-    u <- resid / mad_row
+    u <- row_resid / scale
+    ifelse(u <= c, (1 - (u / c)^2)^2, 0)
+}
 
-    weights <- ifelse(abs(u) <= c, (1 - (u/c)^2)^2, 0)
-    return(weights)
+.aa_unit_weights <- function(row_rss) rep(1, length(row_rss))
+
+.aa_check_row_weights <- function(row_weights, n) {
+    stopifnot("row_weights must match rows in X" = length(row_weights) == n)
+    stopifnot("row_weights contain NA values" = !any(is.na(row_weights)))
+    stopifnot("row_weights must be non-negative" = all(row_weights >= 0))
+    invisible(TRUE)
+}
+
+.aa_loss_terms <- function(X, A, S, weight_fun,
+                           return_S_terms = TRUE,
+                           xss = NULL,
+                           rss = NULL,
+                           x2 = NULL,
+                           row_rss = NULL,
+                           row_weights = NULL,
+                           StS = NULL,
+                           StX = NULL,
+                           AAt = NULL,
+                           XAt = NULL) {
+    iM <- attr(X, "bigM")
+    if (!is.null(iM)) {
+        X <- X[, -iM, drop = FALSE]
+        A <- A[, -iM, drop = FALSE]
+    }
+    if (is.null(AAt))
+        AAt <- tcrossprod(A)
+    if (is.null(XAt))
+        XAt <- tcrossprod(X, A)
+    if (is.null(x2))
+        x2 <- matrixStats::rowSums2(X * X)
+    if (is.null(row_rss)) {
+        row_rss <- x2 - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt))
+        row_rss <- pmax(row_rss, 0)
+    }
+
+    if (is.null(row_weights))
+        row_weights <- weight_fun(row_rss)
+    .aa_check_row_weights(row_weights, nrow(X))
+
+    if (is.null(xss))
+        xss <- sum(row_weights * x2)
+    if (is.null(rss))
+        rss <- sum(row_weights * row_rss)
+    if (return_S_terms && (is.null(StX) || is.null(StS))) {
+        S_weighted <- S * row_weights
+        if (is.null(StX))
+            StX <- crossprod(S_weighted, X)
+        if (is.null(StS))
+            StS <- crossprod(S_weighted, S)
+    }
+    if (!return_S_terms) {
+        StX <- NULL
+        StS <- NULL
+    }
+
+    list(
+        rss = rss,
+        xss = xss,
+        x2 = x2,
+        row_rss = row_rss,
+        row_weights = row_weights,
+        StS = StS,
+        StX = StX,
+        AAt = AAt,
+        XAt = XAt,
+        A = A
+    )
 }
 
 # Compute squared Euclidean distance of each sample from center
@@ -371,44 +428,22 @@ effic <- function(X, Y) {
     return(init_vars)
 }
 
-.aa_update_loss <- function(loss, i, verbose, max_kappa = 1, X = NULL, ...) {
-    res <- if (is.null(X)) .aa_loss_pdg(...) else .aa_loss_nnls(X, ...)
-    loss[["rss"]][i] <- res[["rss"]]
-    loss[["r2"]][i]  <- 1 - res[["rss"]] / res[["xss"]]
+.aa_update_loss <- function(loss, i, loss_terms, verbose, max_kappa = 1) {
+    loss[["rss"]][i] <- loss_terms[["rss"]]
+    loss[["r2"]][i]  <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
     if (i %% 10 != 0) {
         loss[["k_S"]][i] <- NA_real_
         loss[["k_A"]][i] <- NA_real_
     } else if (max_kappa > 1) {
-        loss[["k_S"]][i] <- sqrt(1/rcond(res[["StS"]]))
-        A <- res[["A"]]
-        Gram <- if (nrow(A) < ncol(A)) res[["AAt"]] else crossprod(A)
+        loss[["k_S"]][i] <- sqrt(1/rcond(loss_terms[["StS"]]))
+        A <- loss_terms[["A"]]
+        Gram <- if (nrow(A) < ncol(A)) loss_terms[["AAt"]] else crossprod(A)
         loss[["k_A"]][i] <- sqrt(1/rcond(Gram))
     } else {
         loss[["k_S"]][i] <- max_kappa
         loss[["k_A"]][i] <- max_kappa
     }
     return(loss)
-}
-
-.aa_loss_nnls <- function(X, xss, A, S,...) {
-    # Compute RSS without forming the full residual matrix,
-    # using the cosine law: ||X||^2 + ||AS||^2 - 2*trace(S %*% t(A) %*% X)
-    iM <- attr(X, "bigM")
-    if (!is.null(iM)) {
-        # if bigM column is present, we need to remove it from the loss computation
-        A <- A[, -iM, drop = FALSE]
-        X <- X[, -iM, drop = FALSE]
-    }
-    AAt <- tcrossprod(A)
-    StX <- crossprod(S, X)
-    StS <- crossprod(S)
-    rss <- xss - 2 * sum(A * StX) + sum(StS * AAt)
-    list(rss = rss, xss = xss, StS = StS, AAt = AAt, A = A)
-}
-
-.aa_loss_pdg <- function(rss, xss, StS, AAt, A = NULL, ...) {
-    # Just reformat the arguments into a consistent list format for the loss update function
-    list(rss = rss, xss = xss, StS = StS, AAt = AAt, A = A)
 }
 
 .aa_check_convergence <- function(loss, i, tol, tol_r2, max_kappa, verbose) {

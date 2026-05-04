@@ -10,6 +10,8 @@ archetypes_pgd(
   init = "furthest_sum",
   init_args = list(),
   weights = NULL,
+  robust = FALSE,
+  tukey_c = 4.685,
   sd_threshold = 1e-04,
   max_iter = 500L,
   tol = 1e-06,
@@ -38,6 +40,10 @@ present, are used as archetype names.}
 \item{init_args}{list of additional arguments for the initialization function}
 
 \item{weights}{optional vector of sample weights (default: NULL)}
+
+\item{robust}{whether to use Tukey bisquare row reweighting (default: FALSE)}
+
+\item{tukey_c}{tuning constant for Tukey bisquare weights (default: 4.685)}
 
 \item{sd_threshold}{threshold for feature standard deviation to filter low-variance features (default: 1e-4)}
 

@@ -9,6 +9,8 @@
 #'   present, are used as archetype names.
 #' @param init_args list of additional arguments for the initialization function
 #' @param weights optional vector of sample weights (default: NULL)
+#' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
+#' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
 #' @param sd_threshold threshold for feature standard deviation to filter low-variance features (default: 1e-4)
 #' @param max_iter maximum number of iterations (default: 500)
 #' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
@@ -40,6 +42,8 @@ archetypes_pgd <- function(data,
                            init = "furthest_sum",
                            init_args = list(),
                            weights = NULL,
+                           robust = FALSE,
+                           tukey_c = 4.685,
                            sd_threshold = 1e-4,
                            max_iter = 500L,
                            tol = 1e-6,
@@ -57,8 +61,19 @@ archetypes_pgd <- function(data,
     # Input Check -------------------------------------------------------------
 
     # Generic Checks
-    .aa_check_inputs(data = data, K = K, tol = tol, tol_r2 = tol_r2, max_kappa = max_kappa, eps = eps)
+    .aa_check_inputs(
+        data = data,
+        K = K,
+        tol = tol,
+        tol_r2 = tol_r2,
+        max_kappa = max_kappa,
+        eps = eps
+    )
     # PGD specific checks
+    stopifnot("robust must be TRUE or FALSE" =
+                  is.logical(robust) && length(robust) == 1L && !is.na(robust))
+    stopifnot("tukey_c must be positive" =
+                  length(tukey_c) == 1L && is.finite(tukey_c) && tukey_c > 0)
     stopifnot("step_size must be positive" = step_size > 0)
     stopifnot("step_shrinkage must be between (0, 1)" = step_shrinkage > 0 && step_shrinkage < 1)
     stopifnot("delta must be single non-negative number" = length(delta) == 1 && delta >= 0)
@@ -98,6 +113,11 @@ archetypes_pgd <- function(data,
         grad_B  <- grad_B_simplex
         project <- proj_simplex
     }
+    weight_fun <- if (robust) {
+        function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
+    } else {
+        .aa_unit_weights
+    }
 
     # Setup alpha updates
     update_alpha <- delta > 0
@@ -123,28 +143,31 @@ archetypes_pgd <- function(data,
 
     # Compute auxiliary variables
     A     <- A0                # (K x M) = Archetypes = a*B %*% X
-    AAt   <- tcrossprod(A)     # (K x K)
     XAt   <- tcrossprod(X, A)  # (N x K)
-    StS   <- crossprod(S)      # (K x K)
-    StX   <- crossprod(S, X)   # (K x M)
     XXt   <- tcrossprod(X)     # (N x N)
-    StXXt <- crossprod(S, XXt) # (K x N)
+    loss_terms <- .aa_loss_terms(
+        X,
+        A,
+        S,
+        weight_fun = weight_fun,
+        return_S_terms = TRUE
+    )
+    row_weights <- loss_terms[["row_weights"]]
+    AAt   <- loss_terms[["AAt"]] # (K x K)
+    StS   <- loss_terms[["StS"]] # (K x K)
+    StX   <- loss_terms[["StX"]] # (K x M)
+    xss   <- loss_terms[["xss"]]
+    rss   <- loss_terms[["rss"]]
+    StXXt <- crossprod(S * row_weights, XXt) # (K x N)
 
     # Loss
     loss <- init_vars[["loss"]]
-    ### RSS: ||X - SA||^2 = ||X||^2 - 2 * tr(X^T SA) + tr(SA A^T S^T)
-    ### Reorganize the terms inside trace to minimize memory footprint
-    rss <- xss - 2 * sum(A * StX) + sum(StS * AAt)
     loss <- .aa_update_loss(
         loss,
         1L,
+        loss_terms,
         verbose = verbose,
-        max_kappa = max_kappa,
-        rss = rss,
-        xss = xss,
-        StS = StS,
-        AAt = AAt,
-        A = A
+        max_kappa = max_kappa
     )
     converged <- FALSE
 
@@ -161,17 +184,19 @@ archetypes_pgd <- function(data,
     for (i in seq_len(max_iter)) {
         ## Update S
         grad <- grad_S(S, AAt, XAt) # (N x K) - diag(a) is absorbed in A
+        grad <- grad * row_weights
         for (k in seq_len(max_iter_optimizer)) { # line search
             S_new   <- project(S - step_S * grad, eps = eps)
-            StS_new <- crossprod(S_new)
-            StX_new <- crossprod(S_new, X)
+            S_new_weighted <- S_new * row_weights
+            StS_new <- crossprod(S_new_weighted, S_new)
+            StX_new <- crossprod(S_new_weighted, X)
             rss_new <- xss - 2 * sum(A * StX_new) + sum(StS_new * AAt)
             if (rss_new < rss) { # update variables
                 S      <- S_new
                 StS    <- StS_new
                 StX    <- StX_new
                 rss    <- rss_new
-                StXXt  <- crossprod(S, XXt)
+                StXXt  <- crossprod(S * row_weights, XXt)
                 step_S <- step_S / step_shrinkage # leave room for shrinkage
                 break
             }
@@ -219,18 +244,28 @@ archetypes_pgd <- function(data,
             }
         }
 
+        loss_terms <- if (robust) {
+            .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE)
+        } else {
+            .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE,
+                           xss = xss, rss = rss, row_weights = row_weights,
+                           StS = StS, StX = StX, AAt = AAt, XAt = XAt)
+        }
+        row_weights <- loss_terms[["row_weights"]]
+        AAt   <- loss_terms[["AAt"]]
+        StS   <- loss_terms[["StS"]]
+        StX   <- loss_terms[["StX"]]
+        xss   <- loss_terms[["xss"]]
+        rss   <- loss_terms[["rss"]]
+        StXXt <- crossprod(S * row_weights, XXt)
 
         # Check convergence
         loss <- .aa_update_loss(
             loss,
             i + 1L,
+            loss_terms,
             verbose = verbose,
-            max_kappa = max_kappa,
-            rss = rss,
-            xss = xss,
-            StS = StS,
-            AAt = AAt,
-            A = A
+            max_kappa = max_kappa
         )
         converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
         if (converged) break

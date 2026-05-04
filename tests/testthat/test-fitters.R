@@ -28,6 +28,45 @@ test_that("archetypes_nnls fits toy data with expected invariants", {
     expect_equal(dim(residuals(fit)), dim(X))
 })
 
+test_that("Tukey row weights downweight large row residuals", {
+    weights <- .aa_bisquare_weights(c(0, 1, 4, 1e6))
+
+    expect_equal(weights[1], 1)
+    expect_true(weights[4] < weights[2])
+    expect_equal(.aa_bisquare_weights(rep(0, 4)), rep(1, 4))
+})
+
+test_that("robust archetypes fitters keep expected invariants", {
+    set.seed(1)
+    X <- toy_matrix()
+    X[1, ] <- X[1, ] + 25
+
+    pgd <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 3L,
+        robust = TRUE,
+        max_iter = 5L,
+        tol_r2 = 0.95
+    ))
+    nnls <- suppressWarnings(archetypes_nnls(
+        X,
+        K = 3L,
+        robust = TRUE,
+        max_iter = 3L,
+        tol_r2 = 0.95
+    ))
+
+    for (fit in list(pgd, nnls)) {
+        expect_s3_class(fit, "archetypes")
+        expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
+        expect_matrix_dim(fit[["coefficients"]], 3L, 250L)
+        expect_matrix_dim(fit[["compositions"]], 250L, 3L)
+        expect_row_stochastic(fit[["coefficients"]])
+        expect_row_stochastic(fit[["compositions"]])
+        expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+    }
+})
+
 test_that("archetypes fitters accept named coordinate matrix initialization", {
     X <- matrix(
         c(

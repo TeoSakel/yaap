@@ -9,6 +9,8 @@
 #'   archetype names.
 #' @param init_args list of additional arguments for the initialization function
 #' @param weights optional vector of sample weights (default: NULL)
+#' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
+#' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
 #' @param sd_threshold threshold for feature standard deviation to filter
 #'   low-variance features (default: 1e-6)
 #' @param max_iter maximum number of iterations (default: 100)
@@ -37,8 +39,10 @@ archetypes_nnls <- function(data,
                             init = "furthest_sum",
                             init_args = list(),
                             weights = NULL,
+                            robust = FALSE,
+                            tukey_c = 4.685,
                             sd_threshold = 1e-6,
-                            max_iter=100L,
+                            max_iter = 100L,
                             tol = 1e-6,
                             tol_r2 = 0.9999,
                             max_kappa = 1000,
@@ -51,10 +55,26 @@ archetypes_nnls <- function(data,
     # Input Checks  -----------------------------------------------------------
 
     # Generic Checks
-    .aa_check_inputs(data=data, K=K, tol=tol, tol_r2=tol_r2, max_kappa=max_kappa, eps=eps)
+    .aa_check_inputs(
+        data = data,
+        K = K,
+        tol = tol,
+        tol_r2 = tol_r2,
+        max_kappa = max_kappa,
+        eps = eps
+    )
     # NNLS specific checks
     ols_solver <- match.arg(ols_solver)
+    stopifnot("robust must be TRUE or FALSE" =
+                  is.logical(robust) && length(robust) == 1L && !is.na(robust))
+    stopifnot("tukey_c must be positive" =
+                  length(tukey_c) == 1L && is.finite(tukey_c) && tukey_c > 0)
     stopifnot("`bigM` must be greater than 0" = bigM > 0)
+    weight_fun <- if (robust) {
+        function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
+    } else {
+        .aa_unit_weights
+    }
 
     # Edge Case checks
     out <- .aa_checks_edge_cases(data, K, verbose)  # edge cases
@@ -67,7 +87,6 @@ archetypes_nnls <- function(data,
     X <- pre[["X"]]                    # preprocessed data
     # N <- nrow(X)
     undo_scale <- pre[["undo_scale"]]  # function to undo preprocessing
-    xss <- pre[["xss"]]                # total sum of squares
     init <- .aa_preprocess_init(init, data, X)
     rm(pre)
 
@@ -86,15 +105,20 @@ archetypes_nnls <- function(data,
     S <- init_vars[["S"]]
     loss <- init_vars[["loss"]]
     rm(init_vars)
+    loss_terms <- .aa_loss_terms(
+        X,
+        A,
+        S,
+        weight_fun = weight_fun,
+        return_S_terms = FALSE
+    )
+    row_weights <- loss_terms[["row_weights"]]
     loss <- .aa_update_loss(
         loss,
         1L,
+        loss_terms,
         verbose = verbose,
-        max_kappa = max_kappa,
-        xss = xss,
-        A = A,
-        S = S,
-        X = X
+        max_kappa = max_kappa
     )
     converged <- FALSE
 
@@ -105,21 +129,26 @@ archetypes_nnls <- function(data,
     # TODO: use heuristic to choose between fit_nnls and fit_nnls_svd
     for (i in seq_len(max_iter)) {
         # Step
-        S <- fit_nnls(X, t(A), eps = eps)        # Project X to A-simplex
-        A <- fit_ols(S, X, method = ols_solver)  # Unconstrained A
-        B <- fit_nnls(A, t(X), eps = eps)        # Project A to X-simplex
+        S <- fit_nnls(X, t(A), eps = eps) # Project X to A-simplex
+        A <- fit_ols(S, X, method = ols_solver, row_weights = row_weights)
+        B <- fit_nnls(A, t(X), eps = eps) # Project A to X-simplex
         A <- B %*% X
+        loss_terms <- .aa_loss_terms(
+            X,
+            A,
+            S,
+            weight_fun = weight_fun,
+            return_S_terms = (i + 1L) %% 10L == 0L && max_kappa > 1
+        )
+        row_weights <- loss_terms[["row_weights"]]
 
         # Check convergence
         loss <- .aa_update_loss(
             loss,
             i + 1L,
+            loss_terms,
             verbose = verbose,
-            max_kappa = max_kappa,
-            xss = xss,
-            A = A,
-            S = S,
-            X = X
+            max_kappa = max_kappa
         )
         converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
         if (converged) break
@@ -178,9 +207,15 @@ fit_nnls <- function(Y, X, eps = 1e-8, project = proj_l1, use_svd = FALSE) {
 # @param X data matrix (rows = samples, columns = dimensions)
 # @param method method to use for solving the OLS problem (default: "qr")
 # @param a0 initial guess for the coefficients (optional)
+# @param row_weights optional vector of row weights
 # @param ... additional arguments passed to the solver
-fit_ols <- function(S, X, method, a0 = NULL, ...) {
+fit_ols <- function(S, X, method, a0 = NULL, row_weights = NULL, ...) {
     # Solve min ||X - S %*% A||_F
+    if (!is.null(row_weights)) {
+        sqrt_weights <- sqrt(row_weights)
+        S <- S * sqrt_weights
+        X <- X * sqrt_weights
+    }
 
     if (tolower(method) == "qr") return(qr.solve(S, X))
     if (tolower(method) == "ginv") return(MASS::ginv(S) %*% X)
@@ -212,5 +247,5 @@ fit_ols <- function(S, X, method, a0 = NULL, ...) {
     }
 
     res <- stats::optim(a0, fn, gr, method = method)
-    matrix(res$par, nrow=K, ncol = M)
+    matrix(res$par, nrow = K, ncol = M)
 }
