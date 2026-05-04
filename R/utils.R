@@ -1,17 +1,16 @@
-#' Tukey's Bisquare Weight Function
-#'
-#' Computes Tukey's bisquare (biweight) robust weights for outlier downweighting.
-#'
-#' @param resid matrix of residuals (same dimension as X)
-#' @param c tuning constant (default: 4.685 for 95% efficiency)
-#'
-#' @returns Matrix of weights between 0 and 1, same shape as resid
-#'
-#' @details The bisquare weight function is:
-#' w(u) = (1 - (u/c)^2)^2 if |u| <= c, 0 otherwise
-#' where u = row-wise standardized residuals.
-#'
-#' @keywords internal
+# Tukey's Bisquare Weight Function
+#
+# Computes Tukey's bisquare (biweight) robust weights for outlier downweighting.
+#
+# @param resid matrix of residuals (same dimension as X)
+# @param c tuning constant (default: 4.685 for 95% efficiency)
+#
+# @returns Matrix of weights between 0 and 1, same shape as resid
+#
+# @details The bisquare weight function is:
+# w(u) = (1 - (u/c)^2)^2 if |u| <= c, 0 otherwise
+# where u = row-wise standardized residuals.
+#
 bisquare0 <- function(resid, c = 4.685) {
     # Row-wise MAD
     mad_row <- apply(resid, 1, mad, na.rm = TRUE)
@@ -159,7 +158,7 @@ effic <- function(X, Y) {
     )
 }
 
-#' Filter out features (columns of X) with low variance
+# Filter out features (columns of X) with low variance
 .filter_low_variance <- function(X, sd_threshold) {
     sd_vals <- attr(X, "scaled:scale")
     if (is.null(sd_vals))
@@ -179,7 +178,7 @@ effic <- function(X, Y) {
         X <- X[, mask, drop = FALSE]
         attributes(X) <- x_attrs
     }
-    return(X)
+    X
 }
 
 
@@ -192,7 +191,6 @@ effic <- function(X, Y) {
 
     # Filter out low-variance features
     X <- .filter_low_variance(X, sd_threshold)
-    M <- ncol(X) # number of features after filtering
     N <- nrow(X) # number of samples
 
     # Weight samples by user-provided "importance" weights
@@ -252,10 +250,10 @@ effic <- function(X, Y) {
                       dimnames = list(NULL, names(x_mean)))
         out[, mask] <- out[, mask, drop = FALSE] + mat * x_std
 
-        return(out)
+        out
     }
 
-    return(list(X = X, undo_scale = undo_scale, xss = xss))
+    list(X = X, undo_scale = undo_scale, xss = xss)
 }
 
 .aa_init_vars <- function(X, K, init, init_args, eps, max_iter, verbose) {
@@ -298,16 +296,24 @@ effic <- function(X, Y) {
 }
 
 .aa_loss_nnls <- function(X, xss, A, S,...) {
-    Am1 <- A[, -1, drop = FALSE]
-    AAt <- tcrossprod(Am1)
-    StX <- crossprod(S, X[, -1, drop = FALSE])
+    # Compute RSS without forming the full residual matrix,
+    # using the cosine law: ||X||^2 + ||AS||^2 - 2*trace(S %*% t(A) %*% X)
+    iM <- attr(X, "bigM")
+    if (!is.null(iM)) {
+        # if bigM column is present, we need to remove it from the loss computation
+        A <- A[, -iM, drop = FALSE]
+        X <- X[, -iM, drop = FALSE]
+    }
+    AAt <- tcrossprod(A)
+    StX <- crossprod(S, X)
     StS <- crossprod(S)
-    rss <- xss - 2 * sum(Am1 * StX) + sum(StS * AAt)
-    return(list(rss = rss, xss = xss, StS = StS, AAt = AAt, A = Am1))
+    rss <- xss - 2 * sum(A * StX) + sum(StS * AAt)
+    list(rss = rss, xss = xss, StS = StS, AAt = AAt, A = A)
 }
 
 .aa_loss_pdg <- function(rss, xss, StS, AAt, A = NULL, ...) {
-    return(list(rss = rss, xss = xss, StS = StS, AAt = AAt, A = A))
+    # Just reformat the arguments into a consistent list format for the loss update function
+    list(rss = rss, xss = xss, StS = StS, AAt = AAt, A = A)
 }
 
 .aa_check_convergence <- function(loss, i, tol, tol_r2, max_kappa, verbose) {
@@ -328,7 +334,7 @@ effic <- function(X, Y) {
         fmt <- "Warning: Condition number exceeded max_kappa (k_S=%.1f, k_A=%.1f)"
         warning(sprintf(fmt, k_S, k_A))
     }
-    return(converged)
+    converged
 }
 
 .aa_prepare_output <- function(X, A, B, S,
@@ -368,5 +374,5 @@ effic <- function(X, Y) {
         loss         = loss,
         converged    = converged
     )
-    return(out)
+    out
 }

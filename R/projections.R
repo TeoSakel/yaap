@@ -117,7 +117,6 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     S
 }
 
-#' @importFrom quadprog solve.QP
 fit_qp <- function(A, X, eps, project, lambda, ...) {
 
     N <- nrow(X)
@@ -141,7 +140,7 @@ fit_qp <- function(A, X, eps, project, lambda, ...) {
     S <- matrix(eps, nrow = N, ncol = K)
     for (i in seq_len(N)) {
         dvec   <- A %*% X[i, ]
-        fit    <- solve.QP(Dmat, dvec, Amat, bvec, meq)
+        fit    <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)
         S[i, ] <- project(fit$solution, eps = eps)
     }
     S

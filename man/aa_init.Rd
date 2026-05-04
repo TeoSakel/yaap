@@ -23,7 +23,7 @@ aa_init(
 \code{"furthest_first"}, \code{"kmeans_pp"}, \code{"furthest_sum"}, \code{"coreset_initfn"},
 \code{"aa_pp"}, or \code{"aa_pp_mc"} (default: \code{"furthest_sum"}).}
 
-\item{sparse}{whether \code{B} should be a sparse matrix (default: FALSE)}
+\item{sparse}{whether \code{B} should be a sparse matrix (default: same as X)}
 
 \item{m}{optional batch size for coreset initialization}
 

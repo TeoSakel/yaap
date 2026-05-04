@@ -103,7 +103,7 @@ new_archetypes <- function(coordinates,
 
     # Dimension checks
     K <- nrow(coordinates)   # number of archetypes
-    M <- ncol(coordinates)   # number of features
+    # M <- ncol(coordinates)   # number of features
     N <- nrow(compositions)  # number of samples
 
 

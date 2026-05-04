@@ -77,7 +77,7 @@ archetypes_pgd <- function(data,
     cl <- match.call()
     pre <- .aa_preprocess(data, sd_threshold, weights, verbose)
     X <- pre[["X"]]                    # preprocessed data
-    N <- nrow(X)
+    # N <- nrow(X)
     undo_scale <- pre[["undo_scale"]]  # function to undo preprocessing
     xss <- pre[["xss"]]                # total sum of squares
     rm(pre)

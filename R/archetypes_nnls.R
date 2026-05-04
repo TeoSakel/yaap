@@ -63,7 +63,7 @@ archetypes_nnls <- function(data,
     cl <- match.call()
     pre <- .aa_preprocess(data, sd_threshold, weights, verbose, bigM = bigM)
     X <- pre[["X"]]                    # preprocessed data
-    N <- nrow(X)
+    # N <- nrow(X)
     undo_scale <- pre[["undo_scale"]]  # function to undo preprocessing
     xss <- pre[["xss"]]                # total sum of squares
     rm(pre)
@@ -124,7 +124,7 @@ archetypes_nnls <- function(data,
 
     # Prepare Output  ---------------------------------------------------------
 
-    out <- .aa_prepare_output(
+    .aa_prepare_output(
         call = cl,
         data = data,
         A0 = A0,
@@ -139,19 +139,17 @@ archetypes_nnls <- function(data,
         max_iter = max_iter,
         verbose = verbose
     )
-    return(out)
 }
 
-#' Fit Non-negative Least Squares for every row of Y
-#'
-#' This function solves the problem: $\min_{B} ||Y - BX||_2 s.t. B >= 0$
-#'
-#' @param Y data matrix (rows = samples, columns = dimensions)
-#' @param X data matrix (rows = samples, columns = dimensions)
-#' @param eps small positive number to ensure numerical stability (default: 1e-8)
-#' @param project function to project the results onto the simplex (default: `proj_l1`)
-#' @param use_svd logical, whether to use SVD for dimensionality reduction (default: FALSE)
-#' @importFrom nnls nnls
+# Fit Non-negative Least Squares for every row of Y
+#
+# This function solves the problem: $\min_{B} ||Y - BX||_2 s.t. B >= 0$
+#
+# @param Y data matrix (rows = samples, columns = dimensions)
+# @param X data matrix (rows = samples, columns = dimensions)
+# @param eps small positive number to ensure numerical stability (default: 1e-8)
+# @param project function to project the results onto the simplex (default: `proj_l1`)
+# @param use_svd logical, whether to use SVD for dimensionality reduction (default: FALSE)
 fit_nnls <- function(Y, X, eps = 1e-8, project = proj_l1, use_svd = FALSE) {
     # min ||Y - Beta %*% X||_2 s.t. Beta >= eps
 
@@ -164,28 +162,25 @@ fit_nnls <- function(Y, X, eps = 1e-8, project = proj_l1, use_svd = FALSE) {
     # TODO: parallelize
     Beta <- matrix(eps, nrow = nrow(Y), ncol = ncol(X))
     for (i in seq_len(nrow(Y)))
-        Beta[i, ] <- coef(nnls(X, Y[i, ]))
+        Beta[i, ] <- coef(nnls::nnls(X, Y[i, ]))
     Beta <- project(Beta, eps = eps)
-    return(Beta)
+    Beta
 }
 
-#' Fit Ordinary Least Squares (OLS) for every column of X
-#'
-#' This function solves the problem: $\min_{A} ||X - SA||_F$
-#'
-#' @param S data matrix (rows = samples, columns = archetypes)
-#' @param X data matrix (rows = samples, columns = dimensions)
-#' @param method method to use for solving the OLS problem (default: "qr")
-#' @param a0 initial guess for the coefficients (optional)
-#' @param ... additional arguments passed to the solver
-#'
-#' @importFrom MASS ginv
-#' @importFrom stats optim rnorm
+# Fit Ordinary Least Squares (OLS) for every column of X
+#
+# This function solves the problem: $\min_{A} ||X - SA||_F$
+#
+# @param S data matrix (rows = samples, columns = archetypes)
+# @param X data matrix (rows = samples, columns = dimensions)
+# @param method method to use for solving the OLS problem (default: "qr")
+# @param a0 initial guess for the coefficients (optional)
+# @param ... additional arguments passed to the solver
 fit_ols <- function(S, X, method, a0 = NULL, ...) {
     # Solve min ||X - S %*% A||_F
 
     if (tolower(method) == "qr") return(qr.solve(S, X))
-    if (tolower(method) == "ginv") return(ginv(S) %*% X)
+    if (tolower(method) == "ginv") return(MASS::ginv(S) %*% X)
     # TODO: test if computing Gram matrix is faster than using `qr.solve` or `ginv`
     # TODO: if "qr" return StS from Gram matrix as it's part of computation
     # A = solve(t(S) %*% S) %*% t(S) %*% X
@@ -194,7 +189,7 @@ fit_ols <- function(S, X, method, a0 = NULL, ...) {
     M <- ncol(X)
     K <- ncol(S)
     if (is.null(a0))  # random initial guess
-        a0 <- apply(X, 2L, function(x) rnorm(K, mean(x), sd(x)))
+        a0 <- apply(X, 2L, function(x) stats::rnorm(K, mean(x), sd(x)))
 
     a0 <- as.vector(a0)
     stopifnot(length(a0) == K * M)
@@ -213,6 +208,6 @@ fit_ols <- function(S, X, method, a0 = NULL, ...) {
         as.vector(-2 * crossprod(S, R))
     }
 
-    res <- optim(a0, fn, gr, method = method)
-    return(matrix(res$par, nrow=K, ncol = M))
+    res <- stats::optim(a0, fn, gr, method = method)
+    matrix(res$par, nrow=K, ncol = M)
 }
