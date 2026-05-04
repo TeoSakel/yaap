@@ -1,0 +1,12 @@
+Package: YAAAP
+Title: Yet Another Archetypal Analysis Package
+Version: 0.0.0.9000
+Authors@R:
+    person("Teo", "Sakel", , "teo@intelligentbiodata.com", role = c("aut", "cre"))
+Description: Implements different flavors of the archetypal analysis.
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Imports:
+    matrixStats
+Config/roxygen2/version: 8.0.0
