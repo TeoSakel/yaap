@@ -8,7 +8,7 @@ aa_init(
   X,
   K,
   method = "furthest_sum",
-  sparse = is(X, "sparseMatrix"),
+  sparse = inherits(X, "sparseMatrix"),
   m = NULL,
   batch_size = NULL,
   ...

@@ -13,7 +13,7 @@
 #
 bisquare0 <- function(resid, c = 4.685) {
     # Row-wise MAD
-    mad_row <- apply(resid, 1, mad, na.rm = TRUE)
+    mad_row <- apply(resid, 1, stats::mad, na.rm = TRUE)
     mad_row[mad_row == 0] <- 1  # avoid division by zero
 
     # Standardize each row
@@ -49,12 +49,12 @@ effic <- function(X, Y) {
     # X, Y: data matrices (N×M), rows = samples, cols = features
     N <- nrow(X)
     M <- ncol(X)
-    Sx <- cov(X)  # (M×M)
+    Sx <- stats::cov(X)  # (M×M)
 
     # Try using Cholesky to invert PD matrix
     cx <- tryCatch(chol(Sx), error = function(e) NULL)
     if (is.null(cx))  # FALLBACK to general solution
-        return(sum(diag( solve(Sx, cov(Y)) )))
+        return(sum(diag( solve(Sx, stats::cov(Y)) )))
 
 
     # Edge Case: # of samples smaller than the # of features
@@ -66,7 +66,7 @@ effic <- function(X, Y) {
         return(norm(Z, type = "F")^2 / (N - 1))
     }
     # since trace(AB) = sum(A * t(B)) = sum(A * B) when symmetric
-     sum(cov(Y) * chol2inv(cx))
+     sum(stats::cov(Y) * chol2inv(cx))
 }
 
 # Blocks of code for archetypes fitting ---------------------------------------
@@ -162,7 +162,7 @@ effic <- function(X, Y) {
 .filter_low_variance <- function(X, sd_threshold) {
     sd_vals <- attr(X, "scaled:scale")
     if (is.null(sd_vals))
-        sd_vals <- apply(X, 2, sd)
+        sd_vals <- apply(X, 2, stats::sd)
     mask <- sd_vals >= sd_threshold
     M <- sum(mask)
     if (M < ncol(X)) {
@@ -221,6 +221,7 @@ effic <- function(X, Y) {
         attr(X, "scaled:center") <- x_attrs[["scaled:center"]]
         attr(X, "scaled:scale")  <- x_attrs[["scaled:scale"]]
         attr(X, "bigM")  <- 1L
+        attr(X, "bigM.value") <- bigM
     }
 
     # To undo scaling when returning archetypes
@@ -256,7 +257,87 @@ effic <- function(X, Y) {
     list(X = X, undo_scale = undo_scale, xss = xss)
 }
 
-.aa_init_vars <- function(X, K, init, init_args, eps, max_iter, verbose) {
+.aa_preprocess_init <- function(init, data, X) {
+    if (!is.matrix(init))
+        return(init)
+
+    if (ncol(init) != ncol(data)) {
+        fmt <- "ncol(init) = %d does not match number of data features (%d)"
+        stop(sprintf(fmt, ncol(init), ncol(data)))
+    }
+
+    init <- as.matrix(init)
+    x_center <- attr(X, "scaled:center")
+    x_scale <- attr(X, "scaled:scale")
+    if (!is.null(x_center))
+        init <- sweep(init, 2L, x_center, "-")
+    if (!is.null(x_scale))
+        init <- sweep(init, 2L, x_scale, "/")
+
+    mask <- attr(X, "mask")
+    if (!is.null(mask))
+        init <- init[, mask, drop = FALSE]
+
+    iM <- attr(X, "bigM")
+    if (!is.null(iM)) {
+        init <- cbind(
+            matrix(attr(X, "bigM.value"), nrow = nrow(init), ncol = 1L),
+            init
+        )
+        colnames(init)[iM] <- "bigM"
+    }
+
+    init
+}
+
+.aa_init_names <- function(A) {
+    nm <- rownames(A)
+    if (is.null(nm))
+        return(paste0("A", seq_len(nrow(A))))
+
+    stopifnot("Archetype names must not be missing" = !any(is.na(nm)))
+    stopifnot("Archetype names must not be empty" = all(nzchar(nm)))
+    stopifnot("Archetype names must be unique" = !anyDuplicated(nm))
+    nm
+}
+
+.aa_matrix_init <- function(X, K, init, eps, delta = 0, tol = 1e-6) {
+    if (nrow(init) != K) {
+        fmt <- "nrow(init) = %d does not match K (%d)"
+        stop(sprintf(fmt, nrow(init), K))
+    }
+    if (ncol(init) != ncol(X)) {
+        fmt <- "ncol(init) = %d does not match preprocessed data features (%d)"
+        stop(sprintf(fmt, ncol(init), ncol(X)))
+    }
+
+    nm <- .aa_init_names(init)
+    a_lo <- max(1 - delta, ifelse(eps > 0, eps, 1e-8))
+    a_hi <- 1 + delta
+    B <- fit_qp(
+        A = X,
+        X = init,
+        eps = eps,
+        project = if (delta == 0) proj_l1 else NULL,
+        row_sum_bounds = c(a_lo, a_hi)
+    )
+    A <- B %*% X
+    err <- norm(A - init, type = "F")
+    if (any(err > tol)) {
+        ix <- which(err > tol)
+        fmt <- paste(
+            "Initial archetype coordinates outside the allowed data hull were",
+            "projected; affected rows: %s"
+        )
+        warning(sprintf(fmt, paste(utils::head(ix, 10L), collapse = ", ")))
+    }
+
+    rownames(A) <- rownames(B) <- nm
+    colnames(B) <- rownames(X)
+    list(A = A, B = B)
+}
+
+.aa_init_vars <- function(X, K, init, init_args, eps, max_iter, verbose, delta = 0) {
 
     if (verbose) message("Initializing archetypes...")
     L <- max_iter + 1L
@@ -264,10 +345,24 @@ effic <- function(X, Y) {
         stopifnot("`init` must be a single string" = length(init) == 1L)
         init_args <- c(list(method = init), init_args)
         init <- aa_init
+    } else if (is.matrix(init)) {
+        if (length(init_args) > 0L) {
+            warning("`init_args` are ignored when `init` is a matrix")
+            init_args <- list()
+        }
+        init_vars <- .aa_matrix_init(X, K, init, eps, delta)
+        init_vars[["S"]] <- .init_S(X, init_vars[["A"]], eps = eps)
+        init_vars[["loss"]] <- list(rss = rep(NA_real_, L),
+                                    r2  = rep(NA_real_, L),
+                                    k_S = rep(NA_real_, L),
+                                    k_A = rep(NA_real_, L))
+        return(init_vars)
     } else {
-        stopifnot("`init` must be a function or a single string" = is.function(init))
+        stopifnot("`init` must be a function, a single string, or a coordinate matrix" = is.function(init))
     }
     init_vars <- do.call(init, args = c(list(X = X, K = K), init_args))
+    rownames(init_vars[["A"]]) <- .aa_init_names(init_vars[["A"]])
+    rownames(init_vars[["B"]]) <- rownames(init_vars[["A"]])
     init_vars[["S"]] <- .init_S(X, init_vars[["A"]], eps = eps)
     init_vars[["loss"]] <- list(rss = rep(NA_real_, L),
                                 r2  = rep(NA_real_, L),
@@ -343,12 +438,20 @@ effic <- function(X, Y) {
                                data = NULL, call = NULL, A0 = NULL) {
 
     j <- i + 1L
-    loss <- head(as.data.frame(loss), j)
+    loss <- as.data.frame(loss)[1:j, , drop = FALSE]
     rownames(loss) <- NULL
 
+    archetype_names <- if (!is.null(A0)) rownames(A0) else rownames(A)
     A <- undo_scale(A, X)
     if (!is.null(A0))
         A0 <- undo_scale(A0, X)
+
+    if (is.null(archetype_names))
+        archetype_names <- paste0("A", seq_len(nrow(A)))
+    rownames(A) <- rownames(B) <- colnames(S) <- archetype_names
+    if (!is.null(A0))
+        rownames(A0) <- archetype_names
+    colnames(B) <- rownames(S) <- rownames(X)
 
     if (!converged) {
         fmt <- "Algorithm did not converge after %d iterations"

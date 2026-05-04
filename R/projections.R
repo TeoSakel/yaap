@@ -117,10 +117,19 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     S
 }
 
-fit_qp <- function(A, X, eps, project, lambda, ...) {
+fit_qp <- function(A,
+                   X,
+                   eps,
+                   project = NULL,
+                   lambda = 1e-8,
+                   row_sum_bounds = c(1, 1),
+                   ...) {
 
     N <- nrow(X)
     K <- nrow(A)
+    stopifnot("row_sum_bounds must be a length-two numeric vector" = length(row_sum_bounds) == 2L)
+    stopifnot("row_sum_bounds must be non-negative and ordered" =
+                  row_sum_bounds[1L] >= 0 && row_sum_bounds[1L] <= row_sum_bounds[2L])
 
     # The QP program formulation is:
     # min 0.5 s' Q s - d' s  with constraints t(Amat) %*% s >= bvec
@@ -129,20 +138,27 @@ fit_qp <- function(A, X, eps, project, lambda, ...) {
     # Q = 2 A'A,
     Dmat <- tcrossprod(A)
     diag(Dmat) <- diag(Dmat) + lambda # for numerical stability
-    # We'll set equality 1' s = 1 via meq = 1, and inequalities s >= 0.
-    # Amat: columns are constraints; first column is equality (1's),
-    # next K columns are identify for s>=0
-    meq  <- 1L
-    Amat <- cbind(matrix(1, nrow = K, ncol = 1L), diag(K))
-    bvec <- c(1, rep(0, K))
+    if (diff(row_sum_bounds) == 0) {
+        # Equality 1' s = bound via meq = 1, plus inequalities s >= 0.
+        meq  <- 1L
+        Amat <- cbind(matrix(1, nrow = K, ncol = 1L), diag(K))
+        bvec <- c(row_sum_bounds[1L], rep(0, K))
+    } else {
+        # Inequalities lower <= 1' s <= upper, plus s >= 0.
+        meq  <- 0L
+        Amat <- cbind(rep(1, K), rep(-1, K), diag(K))
+        bvec <- c(row_sum_bounds[1L], -row_sum_bounds[2L], rep(0, K))
+    }
 
     # Main Loop
     S <- matrix(eps, nrow = N, ncol = K)
     for (i in seq_len(N)) {
         dvec   <- A %*% X[i, ]
-        fit    <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)
-        S[i, ] <- project(fit$solution, eps = eps)
+        S[i, ] <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)$solution
     }
+    # Make sure to project onto simplex if we only enforced equality constraints (i.e., no upper bound)
+    if (meq == 1L && !is.null(project))
+        S <- project(S, eps) * row_sum_bounds[1L]
     S
 }
 

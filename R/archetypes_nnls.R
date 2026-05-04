@@ -2,8 +2,11 @@
 #'
 #' @param data data matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes
-#' @param init function or method string to initialize archetypes
-#'   (default: `"furthest_sum"`)
+#' @param init function, method string, or numeric coordinate matrix to initialize
+#'   archetypes (default: `"furthest_sum"`). When a matrix is supplied it must
+#'   have dimension `K x ncol(data)`. Rows outside the convex hull of `data` are
+#'   projected into it with a warning; row names, when present, are used as
+#'   archetype names.
 #' @param init_args list of additional arguments for the initialization function
 #' @param weights optional vector of sample weights (default: NULL)
 #' @param sd_threshold threshold for feature standard deviation to filter
@@ -28,7 +31,6 @@
 #' A Survey on Archetypal Analysis. *arXiv preprint arXiv:2504.12392*.
 #' \url{https://arxiv.org/abs/2504.12392}
 #'
-#' @importFrom matrixStats colMeans2 colSds
 #' @export
 archetypes_nnls <- function(data,
                             K,
@@ -40,7 +42,7 @@ archetypes_nnls <- function(data,
                             tol = 1e-6,
                             tol_r2 = 0.9999,
                             max_kappa = 1000,
-                            eps = ifelse(is(data, "sparseMatrix"), 0, 1e-8),
+                            eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
                             verbose = FALSE,
                             # NNLS specific
                             ols_solver = c("qr", "ginv", "BFGS"),
@@ -66,6 +68,7 @@ archetypes_nnls <- function(data,
     # N <- nrow(X)
     undo_scale <- pre[["undo_scale"]]  # function to undo preprocessing
     xss <- pre[["xss"]]                # total sum of squares
+    init <- .aa_preprocess_init(init, data, X)
     rm(pre)
 
 
@@ -162,7 +165,7 @@ fit_nnls <- function(Y, X, eps = 1e-8, project = proj_l1, use_svd = FALSE) {
     # TODO: parallelize
     Beta <- matrix(eps, nrow = nrow(Y), ncol = ncol(X))
     for (i in seq_len(nrow(Y)))
-        Beta[i, ] <- coef(nnls::nnls(X, Y[i, ]))
+        Beta[i, ] <- stats::coef(nnls::nnls(X, Y[i, ]))
     Beta <- project(Beta, eps = eps)
     Beta
 }
@@ -189,7 +192,7 @@ fit_ols <- function(S, X, method, a0 = NULL, ...) {
     M <- ncol(X)
     K <- ncol(S)
     if (is.null(a0))  # random initial guess
-        a0 <- apply(X, 2L, function(x) stats::rnorm(K, mean(x), sd(x)))
+        a0 <- apply(X, 2L, function(x) stats::rnorm(K, mean(x), stats::sd(x)))
 
     a0 <- as.vector(a0)
     stopifnot(length(a0) == K * M)

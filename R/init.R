@@ -62,7 +62,7 @@
 aa_init <- function(X,
                     K,
                     method = "furthest_sum",
-                    sparse = is(X, "sparseMatrix"),
+                    sparse = inherits(X, "sparseMatrix"),
                     m = NULL,
                     batch_size = NULL,
                     ...) {
@@ -133,16 +133,16 @@ furthest_first <- function(X, K, ...) {
     b[1L] <- .sample_distal_points(dists, 1L)
 
     # 2) compute next K-1 archetypes by selecting the furthest from current set
-    for (k in seq_len(K-1L)) {
+    for (k in seq_len(K - 1L)) {
         dists <- .dist_to_nearest_archetype(X, b[1:k])
-        b[k+1L] <- which.max(dists)
+        b[k + 1L] <- which.max(dists)
     }
 
     b
 }
 
 
-kmeans_pp <- function(X, K, sparse = is(X, "sparseMatrix"), ...) {
+kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"), ...) {
     # Soft version of furthest first initialization
     # samples from furthest points instead of always picking the furthest
 
@@ -153,12 +153,12 @@ kmeans_pp <- function(X, K, sparse = is(X, "sparseMatrix"), ...) {
     b[1L] <- .sample_distal_points(dists, 1L)
 
     # 2) compute next K-1 archetypes by sampling from the points furthest from the current set
-    for (k in seq_len(K-1)) {
+    for (k in seq_len(K - 1)) {
         dists <- .dist_to_nearest_archetype(X, b[1:k])
-        b[k+1L] <- .sample_distal_points(dists, 1L)
+        b[k + 1L] <- .sample_distal_points(dists, 1L)
     }
 
-    return(b)
+    b
 }
 
 furthest_sum <- function(X, K, ...) {
@@ -178,16 +178,15 @@ furthest_sum <- function(X, K, ...) {
         which.max(dists)
     }
 
-    for (k in seq_len(K-1)) {
-        b[k+1L] <- select_max(dists, b[1:k])
-        dists <- dists + .dist2(X, X[b[k+1L], , drop = FALSE])
+    for (k in seq_len(K - 1)) {
+        b[k + 1L] <- select_max(dists, b[1:k])
+        dists <- dists + .dist2(X, X[b[k + 1L], , drop = FALSE])
     }
 
     # 4) “forget” the very first random pick and select new first archetype
     dists <- dists - initial_dists
     dists[b[-1]] <- 0  # do not select any archetype from from 2:K
     b[1] <- which.max(dists)
-
     b
 }
 
@@ -200,11 +199,10 @@ coreset_initfn <- function(X, K, m, ...) {
     q <- .dist2(X, center = TRUE)  # distances from the mean
     coreset <- .sample_distal_points(q, m)
     b <- furthest_sum(X[coreset, , drop = FALSE], K, ...)
-
     coreset[b]
 }
 
-aa_pp <- function(X, K, sparse = is(X, "sparseMatrix"),...) {
+aa_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"), ...) {
     # A++ initialization for Archetypal Analysis - Mair and Brefeld, 2019
 
     # if K is 2 AA++ reduces to kmeans++
@@ -221,13 +219,12 @@ aa_pp <- function(X, K, sparse = is(X, "sparseMatrix"),...) {
     # 3) compute the first K-2 archetypes by iteratively running AA and sampling
     # from the points distal to the current archetype convex-hull.
     for (k in 3:K) {
-        A <- X[b[1:(k-1)], , drop = FALSE]  # current archetypes
+        A <- X[b[1:(k - 1)], , drop = FALSE]  # current archetypes
         S <- fit_nnls(X, t(A))
         res <- X - S %*% A
         dists <- rowSums(res * res)  # squared residuals
         b[k] <- .sample_distal_points(dists, 1L)
     }
-
     b
 }
 
@@ -250,7 +247,7 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
 
     # 3) compute the first K-2 archetypes by iteratively running AA.
     for (k in 3:K) {
-        A <- X[b[1:(k-1)], , drop = FALSE]  # current archetypes
+        A <- X[b[1:(k - 1)], , drop = FALSE]  # current archetypes
 
         batch <- sample(nrow(X), batch_size, replace = TRUE)
         S <- fit_nnls(X[batch, , drop = FALSE], t(A))
@@ -259,11 +256,10 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
 
         ib <- 1L
         for (j in seq_along(dists))
-            if (dists[j] > runif(1) * dists[ib])
+            if (dists[j] > stats::runif(1) * dists[ib])
                 ib <- j
         b[k] <- batch[ib]
     }
-
     b
 }
 
@@ -273,7 +269,7 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
     # ind is a vector of indices selecting the archetypes from X
     A <- X[ind, , drop = FALSE]  # archetypes
     dists <- .pdist2(A, X)
-    return(matrixStats::colMins(dists))
+    matrixStats::colMins(dists)
 }
 
 # Sample points proportionally to their distance from a reference point
@@ -287,7 +283,9 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
     # make sure ind is positive indices selecting rows
     stopifnot(mode(ind) %in% c("numeric", "logical", "character"))
     if (mode(ind) == "logical") {
-        stopifnot("Logical indices must be of length equal to numinder of rows in X" = length(ind) == nrow(X))
+        stopifnot(
+            "Logical indices length must be equal to number of rows in X" = length(ind) == nrow(X)
+        )
         ind <- which(ind)  # convert logical to indices
     } else if (mode(ind) == "character") {
         ind <- match(ind, rownames(X), nomatch = 0L)
@@ -297,13 +295,21 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
     }
 
     ind <- ind[ind > 0]
-    list(
-        A = X[ind, , drop = FALSE],  # Archetypes
-        B = onehot(ind, sparse = sparse, nrow(X))  # Row-stochastic matrix
-    )
+    nm <- if (!is.null(names(ind))) {
+        names(ind)
+    } else if (!is.null(rownames(X))) {
+        rownames(X)[ind]
+    } else {
+        paste0("A", seq_along(ind))
+    }
+
+    A <- X[ind, , drop = FALSE]  # Archetypes
+    B <- onehot(ind, sparse = sparse, nrow(X))  # Row-stochastic matrix
+    rownames(A) <- rownames(B) <- nm
+    list(A = A, B = B)
 }
 
-.init_S <- function (X, A, eps = 0) {
+.init_S <- function(X, A, eps = 0) {
     S <- proj_l1(1 / .pdist2(X, A), eps = eps)  # init S by similarity score
     S[is.nan(S)] <- 1 # NaNs = Inf/Inf for the archetypes
     S

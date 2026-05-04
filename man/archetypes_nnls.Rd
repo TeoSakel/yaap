@@ -15,7 +15,7 @@ archetypes_nnls(
   tol = 1e-06,
   tol_r2 = 0.9999,
   max_kappa = 1000,
-  eps = ifelse(is(data, "sparseMatrix"), 0, 1e-08),
+  eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
   ols_solver = c("qr", "ginv", "BFGS"),
   bigM = 200
@@ -26,8 +26,11 @@ archetypes_nnls(
 
 \item{K}{number of archetypes}
 
-\item{init}{function or method string to initialize archetypes
-(default: \code{"furthest_sum"})}
+\item{init}{function, method string, or numeric coordinate matrix to initialize
+archetypes (default: \code{"furthest_sum"}). When a matrix is supplied it must
+have dimension \verb{K x ncol(data)}. Rows outside the convex hull of \code{data} are
+projected into it with a warning; row names, when present, are used as
+archetype names.}
 
 \item{init_args}{list of additional arguments for the initialization function}
 

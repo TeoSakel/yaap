@@ -2,8 +2,11 @@
 #'
 #' @param data data matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes
-#' @param init function or method string to initialize archetypes
-#'   (default: `"furthest_sum"`)
+#' @param init function, method string, or numeric coordinate matrix to initialize
+#'   archetypes (default: `"furthest_sum"`). When a matrix is supplied it must
+#'   have dimension `K x ncol(data)`. Rows outside the `delta`-relaxed convex
+#'   hull of `data` are projected into it with a warning; row names, when
+#'   present, are used as archetype names.
 #' @param init_args list of additional arguments for the initialization function
 #' @param weights optional vector of sample weights (default: NULL)
 #' @param sd_threshold threshold for feature standard deviation to filter low-variance features (default: 1e-4)
@@ -42,7 +45,7 @@ archetypes_pgd <- function(data,
                            tol = 1e-6,
                            tol_r2 = 0.9999,
                            max_kappa = 1000,
-                           eps = ifelse(is(data, "sparseMatrix"), 0, 1e-8),
+                           eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
                            verbose = FALSE,
                            # PGD specific
                            delta = 0,
@@ -54,7 +57,7 @@ archetypes_pgd <- function(data,
     # Input Check -------------------------------------------------------------
 
     # Generic Checks
-    .aa_check_inputs(data=data, K=K, tol=tol, tol_r2=tol_r2, max_kappa=max_kappa, eps=eps)
+    .aa_check_inputs(data = data, K = K, tol = tol, tol_r2 = tol_r2, max_kappa = max_kappa, eps = eps)
     # PGD specific checks
     stopifnot("step_size must be positive" = step_size > 0)
     stopifnot("step_shrinkage must be between (0, 1)" = step_shrinkage > 0 && step_shrinkage < 1)
@@ -80,6 +83,7 @@ archetypes_pgd <- function(data,
     # N <- nrow(X)
     undo_scale <- pre[["undo_scale"]]  # function to undo preprocessing
     xss <- pre[["xss"]]                # total sum of squares
+    init <- .aa_preprocess_init(init, data, X)
     rm(pre)
 
     # PGD specific preparations -----------------------------------------------
@@ -104,13 +108,14 @@ archetypes_pgd <- function(data,
 
     # Initialization  ---------------------------------------------------------
 
-    init_vars <- .aa_init_vars(X, K, init, init_args, eps, max_iter, verbose)
+    init_vars <- .aa_init_vars(X, K, init, init_args, eps, max_iter, verbose, delta = delta)
     A0 <- init_vars[["A"]]
     B  <- init_vars[["B"]]
     S  <- init_vars[["S"]]
     a  <- rowSums(B)
 
-    if (any(a < a_lo) || any(a > a_hi)) {
+    slack_tol <- 1e-6
+    if (any(a < a_lo - slack_tol) || any(a > a_hi + slack_tol)) {
         fmt <- "Initialize B marginals are outside the specified delta range [%.3f, %.3f]"
         stop(sprintf(fmt, a_lo, a_hi))
     }
@@ -234,13 +239,13 @@ archetypes_pgd <- function(data,
 
     # Prepare Output  ---------------------------------------------------------
 
-    out <- .aa_prepare_output(
+    .aa_prepare_output(
         call = cl,
         data = data,
         X = X,
         A0 = A0,
         A = A,
-        B = a*B,
+        B = a * B,
         S = S,
         delta = delta,
         i = i,
@@ -250,34 +255,33 @@ archetypes_pgd <- function(data,
         max_iter = max_iter,
         verbose = verbose
     )
-    return(out)
 }
 
 # Gradient functions for RSS-normed archetypes analysis
 # ||X - SBX||^2 = tr(XXt - 2SBXXt + SBXXBtSt)
 grad_S_simplex <- function(S, AAt, XAt) {
     # 2 * (SBXXtBt - XXtBt) = 2 * (SAAt - XAt)
-    return(S %*% AAt - XAt)
+    S %*% AAt - XAt
 }
 
 grad_B_simplex <- function(B, A, X, StS, StXXt) {
     # 2 * (StSBXXt - StXXt) = 2 * (StSAXt - StXXt)
-    return(tcrossprod(StS %*% A, X) - StXXt)
+    tcrossprod(StS %*% A, X) - StXXt
 }
 
 grad_S_l1 <- function(S, ...) {
     grad <- grad_S_simplex(S, ...) # (N x K)
     row_dot <- rowSums(S * grad)
-    return(grad - row_dot)
+    grad - row_dot
 }
 
 grad_B_l1 <- function(B, ...) {
     grad <- grad_B_simplex(B, ...) # (K x N)
     row_dot <- rowSums(B * grad)
-    return(grad - row_dot)
+    grad - row_dot
 }
 
 grad_alpha <- function(B, grad_aB) {
     # dR/da = dR/d(aB) * d(aB)/da = dR/d(aB) * B
-    return(rowSums(grad_aB * B))
+    rowSums(grad_aB * B)
 }
