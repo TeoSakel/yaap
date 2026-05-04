@@ -144,7 +144,7 @@ new_archetypes <- function(coordinates,
         if (length(ix) > 0) {
             fmt <- "Some rowSums(coefficients) are above allowed slack: %s"
             if (length(ix) > 10) {
-                ix <- head(ix, 10)
+                ix <- utils::head(ix, 10)
                 fmt <- paste(fmt, "... (truncated)")
             }
             stop(sprintf(fmt, paste(ix, collapse = ", ")))
@@ -154,12 +154,12 @@ new_archetypes <- function(coordinates,
         if (length(ix) > 0) {
             fmt <- "Some rowSums(coefficients) are below allowed slack: %s"
             if (length(ix) > 10) {
-                ix <- head(ix, 10)
+                ix <- utils::head(ix, 10)
                 fmt <- paste(fmt, "... (truncated)")
             }
             stop(sprintf(fmt, paste(ix, collapse = ", ")))
         }
-    } else if (!all.equal(rowSums(coefficients), rep(1, K), check.attributes = FALSE)) {
+    } else if (!isTRUE(all.equal(rowSums(coefficients), rep(1, K), check.attributes = FALSE))) {
         stop("Coefficients must be row-stochastic (each row sums to 1) when slack = 0")
     }
 
@@ -168,7 +168,7 @@ new_archetypes <- function(coordinates,
         fmt <- "ncol(compositions) = %d does not match number of archetypes (%d)"
         stop(sprintf(fmt, ncol(compositions), K))
     }
-    if (!all.equal(rowSums(compositions), rep(1, N), check.attributes = FALSE))
+    if (!isTRUE(all.equal(rowSums(compositions), rep(1, N), check.attributes = FALSE)))
         stop("Compositions must be row-stochastic (each row sums to 1)")
 
     # Check loss
@@ -213,6 +213,48 @@ new_archetypes <- function(coordinates,
 #' @exportS3Method
 coefficients.archetypes <- function(object, ...)
     return(object[["coefficients"]])
+
+#' Archetype names
+#'
+#' Get or set the names of archetypes in an `archetypes` object.
+#'
+#' @param x An object of class `archetypes`.
+#' @param value Character vector with one name per archetype.
+#'
+#' @return
+#' `names.archetypes()` returns a character vector. The replacement method
+#' returns `x` with names updated consistently across archetype coordinates,
+#' coefficients, compositions, and initial coordinates when present.
+#'
+#' @examples
+#' # names(fit)
+#' # names(fit) <- c("A", "B", "C")
+#'
+#' @exportS3Method
+names.archetypes <- function(x)
+    rownames(x[["coordinates"]])
+
+#' @rdname names.archetypes
+#' @method names<- archetypes
+#' @export
+`names<-.archetypes` <- function(x, value) {
+    K <- nrow(x[["coordinates"]])
+    if (length(value) != K) {
+        fmt <- "Expected %d archetype names, got %d"
+        stop(sprintf(fmt, K, length(value)))
+    }
+    stopifnot("Archetype names must not be missing" = !any(is.na(value)))
+    stopifnot("Archetype names must not be empty" = all(nzchar(value)))
+    stopifnot("Archetype names must be unique" = !anyDuplicated(value))
+
+    rownames(x[["coordinates"]]) <- value
+    rownames(x[["coefficients"]]) <- value
+    colnames(x[["compositions"]]) <- value
+    if (!is.null(x[["init"]]))
+        rownames(x[["init"]]) <- value
+
+    x
+}
 
 #' Fitted values for archetypes objects
 #'
@@ -282,7 +324,7 @@ residuals.archetypes <- function(object, data = NULL, ...) {
 predict.archetypes <- function(object, newdata, ...) {
     A <- object[["coordinates"]]
     X <- if (!is.null(colnames(A))) {  # extract relevant columns
-        if (class(newdata) == "data.table") {
+        if (inherits(newdata, "data.table")) {
             newdata[, colnames(A), with = FALSE]
         } else {
             newdata[, colnames(A), drop = FALSE]
@@ -300,15 +342,16 @@ print.archetypes <- function(x, ...) {
     cat("\nCall:\n", call_str, "\n\n", sep = "")
     cat("Archetypes Summary:\n")
     K <- nrow(x[["coordinates"]])
+    loss <- x[["loss"]]
     cat("Number of Archetypes:", K, "\n")
     conv_info <- sprintf(
         "%s after %d iterations.\n",
         ifelse(x[["converged"]], "Converged", "DID NOT CONVERGE"),
-        nrow(x[["loss"]]) - 1L
+        nrow(loss) - 1L
     )
     cat(conv_info)
     cat("Final Loss Metrics:\n")
-    print(tail(x[["loss"]], 1), row.names = FALSE)
+    print(loss[nrow(loss), ], row.names = FALSE)
     cat("\n")
     invisible(x)
 }
@@ -532,9 +575,9 @@ AIC.archetypes <- function(object, ...) {
     # Compute AIC
     K     <- nrow(object[["coordinates"]])        # Number of Archetypes
     nelem <- prod(dim(X))                         # number of elements in X
-    rss   <- tail(object[["loss"]][["rss"]], 1L)  # final RSS
+    rss   <- object[["loss"]][["rss"]]
     X_hat <- fitted(object)
-    aic   <- log(rss / nelem) + 2 * (2*K - 1) / effic(X, X_hat)
+    aic   <- log(rss[length(rss)] / nelem) + 2 * (2*K - 1) / effic(X, X_hat)
 
     object[["AIC"]] <- aic  # cache for future calls
     return(aic)
