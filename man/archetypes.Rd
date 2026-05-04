@@ -50,6 +50,7 @@ An object of class \code{archetypes}, which is a list with components:
 \item \code{init} - optional initial coordinates.
 \item \code{loss} - data frame of per-iteration metrics.
 \item \code{converged} - logical convergence flag.
+\item \code{data} - optional original data matrix.
 \item \code{residuals} - \code{data - compositions \%*\% coordinates}
 \item \code{call} - the matched call.
 }

@@ -4,11 +4,51 @@
 \alias{plot.archetypes}
 \title{Plot method for archetypes objects}
 \usage{
-\method{plot}{archetypes}(x, what = c("compositions", "residuals", "coefficients"), ...)
+\method{plot}{archetypes}(
+  x,
+  what = c("compositions", "loss", "coordinates"),
+  data = NULL,
+  projection = c("none", "pca"),
+  ...
+)
 }
 \arguments{
 \item{x}{An object of class \code{archetypes}}
+
+\item{what}{Character string naming the plot to draw. Supported values are
+\code{"compositions"}, \code{"loss"}, and \code{"coordinates"}. \code{"composition"} and
+\code{"composision"} are accepted as aliases for \code{"compositions"}.}
+
+\item{data}{Optional numeric matrix with the original data. Required for
+\code{what = "coordinates"} if the object does not store its original data.}
+
+\item{projection}{Projection to use for coordinate plots. Use \code{"pca"} to
+project data with more than two dimensions to the first two principal
+component scores before plotting.}
+
+\item{...}{Additional graphical parameters passed to the underlying plotting
+functions.}
 }
 \description{
-Plot method for archetypes objects
+Draws diagnostic and geometric plots for a fitted archetypal analysis model.
+The \code{what} argument controls which part of the fit is visualized:
+}
+\details{
+\itemize{
+\item \code{"compositions"} plots the rows of \code{x$compositions}, i.e. the weights that
+express each observation as a mixture of the archetypes. For three
+archetypes this is a ternary plot: points near a corner are dominated by
+one archetype, points near an edge mix two archetypes, and points near the
+center mix all three.
+\item \code{"loss"} plots the residual sum of squares stored in \code{x$loss$rss} across
+optimization iterations. This is useful for checking whether the fitting
+algorithm reduced reconstruction error and whether the loss curve has
+plateaued.
+\item \code{"coordinates"} plots the original observations together with the fitted
+archetype coordinates in feature space. In two dimensions the archetypes
+are connected as a closed polygon. In more than two dimensions the method
+draws pairwise scatterplots and connects archetypes with dashed closed
+paths in each panel. With \code{projection = "pca"}, higher-dimensional data and
+archetypes are first projected to the first two principal components.
+}
 }

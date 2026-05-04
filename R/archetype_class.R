@@ -51,6 +51,7 @@
 #' - `init` - optional initial coordinates.
 #' - `loss` - data frame of per-iteration metrics.
 #' - `converged` - logical convergence flag.
+#' - `data` - optional original data matrix.
 #' - `residuals` - `data - compositions %*% coordinates`
 #' - `call` - the matched call.
 #'
@@ -169,6 +170,7 @@ new_archetypes <- function(coordinates,
             loss         = loss,
             AIC          = AIC,
             converged    = converged,
+            data         = data,
             call         = call
         ),
         class = "archetypes"
@@ -299,12 +301,181 @@ print.archetypes <- function(object, ...) {
 
 #' Plot method for archetypes objects
 #'
-#' @param x An object of class `archetypes`
+#' Draws diagnostic and geometric plots for a fitted archetypal analysis model.
+#' The `what` argument controls which part of the fit is visualized:
 #'
+#' * `"compositions"` plots the rows of `x$compositions`, i.e. the weights that
+#'   express each observation as a mixture of the archetypes. For three
+#'   archetypes this is a ternary plot: points near a corner are dominated by
+#'   one archetype, points near an edge mix two archetypes, and points near the
+#'   center mix all three.
+#' * `"loss"` plots the residual sum of squares stored in `x$loss$rss` across
+#'   optimization iterations. This is useful for checking whether the fitting
+#'   algorithm reduced reconstruction error and whether the loss curve has
+#'   plateaued.
+#' * `"coordinates"` plots the original observations together with the fitted
+#'   archetype coordinates in feature space. In two dimensions the archetypes
+#'   are connected as a closed polygon. In more than two dimensions the method
+#'   draws pairwise scatterplots and connects archetypes with dashed closed
+#'   paths in each panel. With `projection = "pca"`, higher-dimensional data and
+#'   archetypes are first projected to the first two principal components.
+#'
+#' @param x An object of class `archetypes`
+#' @param what Character string naming the plot to draw. Supported values are
+#'   `"compositions"`, `"loss"`, and `"coordinates"`. `"composition"` and
+#'   `"composision"` are accepted as aliases for `"compositions"`.
+#' @param data Optional numeric matrix with the original data. Required for
+#'   `what = "coordinates"` if the object does not store its original data.
+#' @param projection Projection to use for coordinate plots. Use `"pca"` to
+#'   project data with more than two dimensions to the first two principal
+#'   component scores before plotting.
+#' @param ... Additional graphical parameters passed to the underlying plotting
+#'   functions.
+#'
+#' @importFrom compositions acomp
 #' @exportS3Method
-plot.archetypes <- function(x, what = c("compositions", "residuals", "coefficients"), ...) {
+plot.archetypes <- function(x,
+                            what = c("compositions", "loss", "coordinates"),
+                            data = NULL,
+                            projection = c("none", "pca"),
+                            ...) {
     stopifnot(inherits(x, "archetypes"))
-    stop("Not yet implemented")
+
+    what <- match.arg(
+        tolower(what[1L]),
+        c("compositions", "composition", "composision", "loss", "coordinates")
+    )
+    if (what %in% c("composition", "composision"))
+        what <- "compositions"
+    projection <- match.arg(projection)
+
+    dots <- list(...)
+    plot_args <- function(defaults, dots) {
+        defaults[names(dots)] <- dots
+        defaults
+    }
+    arg_or <- function(name, default) {
+        value <- dots[[name]]
+        if (is.null(value)) default else value
+    }
+
+    if (what == "compositions") {
+        S <- as.matrix(x[["compositions"]])
+        if (is.null(colnames(S)))
+            colnames(S) <- paste0("A", seq_len(ncol(S)))
+        args <- plot_args(
+            list(x = compositions::acomp(S), axes = TRUE),
+            dots
+        )
+        do.call(graphics::plot, args)
+        return(invisible(x))
+    }
+
+    if (what == "loss") {
+        loss <- x[["loss"]]
+        if (is.null(loss[["rss"]]))
+            stop("`x$loss` must contain an `rss` column for loss plots")
+        args <- plot_args(
+            list(
+                x = seq_len(nrow(loss)) - 1L,
+                y = loss[["rss"]],
+                type = "l",
+                xlab = "Iteration",
+                ylab = "RSS"
+            ),
+            dots
+        )
+        do.call(graphics::plot, args)
+        return(invisible(x))
+    }
+
+    X <- if (is.null(data)) x[["data"]] else data
+    if (is.null(X)) {
+        msg <- paste("Original data must be provided either when constructing",
+                     "the archetypes object or through `data` for coordinate plots")
+        stop(msg)
+    }
+
+    X <- as.matrix(X)
+    A <- as.matrix(x[["coordinates"]])
+    if (ncol(X) != ncol(A)) {
+        fmt <- "`data` has %d columns but `x$coordinates` has %d columns"
+        stop(sprintf(fmt, ncol(X), ncol(A)))
+    }
+    if (ncol(X) < 2L)
+        stop("Coordinate plots require at least two dimensions")
+
+    if (projection == "pca" && ncol(X) > 2L) {
+        combined <- rbind(X, A)
+        pc <- stats::prcomp(combined, center = TRUE, scale. = FALSE)
+        scores <- pc[["x"]][, seq_len(2L), drop = FALSE]
+        rownames(scores) <- rownames(combined)
+        x_projected <- x
+        x_projected[["data"]] <- scores[seq_len(nrow(X)), , drop = FALSE]
+        x_projected[["coordinates"]] <- scores[nrow(X) + seq_len(nrow(A)), , drop = FALSE]
+        colnames(x_projected[["data"]]) <- colnames(x_projected[["coordinates"]]) <- c("PC1", "PC2")
+        plot(x_projected, what = "coordinates", projection = "none", ...)
+        return(invisible(x))
+    }
+
+    data_col <- arg_or("col", "black")
+    arch_col <- if (length(data_col) > 1L) data_col[2L] else "red"
+    data_col <- data_col[1L]
+    data_pch <- arg_or("pch", 1)
+    arch_pch <- if (length(data_pch) > 1L) data_pch[2L] else 16
+    data_pch <- data_pch[1L]
+    cex <- arg_or("cex", 1)
+    data_cex <- cex[1L]
+    arch_cex <- if (length(cex) > 1L) cex[2L] else 1.3
+    lwd <- arg_or("lwd", 1)
+
+    dots[c("col", "pch", "cex", "lwd", "lty")] <- NULL
+
+    if (is.null(colnames(X)))
+        colnames(X) <- paste0("V", seq_len(ncol(X)))
+    if (is.null(colnames(A)))
+        colnames(A) <- colnames(X)
+
+    if (ncol(X) == 2L) {
+        args <- plot_args(
+            list(
+                x = X[, 1L],
+                y = X[, 2L],
+                xlab = colnames(X)[1L],
+                ylab = colnames(X)[2L],
+                asp = 1,
+                col = data_col,
+                pch = data_pch,
+                cex = data_cex
+            ),
+            dots
+        )
+        do.call(graphics::plot, args)
+        A_closed <- A[c(seq_len(nrow(A)), 1L), , drop = FALSE]
+        graphics::lines(A_closed[, 1L], A_closed[, 2L], col = arch_col, lwd = lwd, lty = 1)
+        graphics::points(A[, 1L], A[, 2L], col = arch_col, pch = arch_pch, cex = arch_cex)
+        return(invisible(x))
+    }
+
+    combined <- rbind(X, A)
+    n_data <- nrow(X)
+    n_total <- nrow(combined)
+    panel <- function(x, y, ...) {
+        data_ix <- seq_len(n_data)
+        arch_ix <- (n_data + 1L):n_total
+        arch_closed <- c(arch_ix, arch_ix[1L])
+        graphics::points(x[data_ix], y[data_ix],
+                         col = data_col, pch = data_pch, cex = data_cex)
+        graphics::lines(x[arch_closed], y[arch_closed], col = arch_col, lwd = lwd, lty = 2)
+        graphics::points(x[arch_ix], y[arch_ix],
+                         col = arch_col, pch = arch_pch, cex = arch_cex)
+    }
+    args <- plot_args(
+        list(x = combined, panel = panel, lower.panel = panel, upper.panel = panel),
+        dots
+    )
+    do.call(graphics::pairs, args)
+    invisible(x)
 }
 
 #' AIC for archetypes objects
@@ -329,7 +500,7 @@ AIC.archetypes <- function(object, ...) {
     aic <- object[["AIC"]]
     if (!is.na(aic)) return(aic)  # check for cached value
     X <- object[["data"]]
-    if (!is.null(X))
+    if (is.null(X))
         stop(paste("AIC was not precomputed because original data `X`",
                    "was not provided when constructing the archetypes object."))
 
@@ -343,4 +514,3 @@ AIC.archetypes <- function(object, ...) {
     object[["AIC"]] <- aic  # cache for future calls
     return(aic)
 }
-
