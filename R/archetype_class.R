@@ -12,6 +12,8 @@
 #' @param compositions Numeric matrix (N x K) giving the barycentric
 #'   coordinates of each sample in the archetype space (how much each archetype
 #'   contributes to each sample).
+#' @param slack Non-negative numeric scalar or vector giving the allowed
+#'   relaxation of coefficient row sums away from 1.
 #' @param loss Data frame containing per-iteration metrics
 #' @param converged Logical. Whether the optimization converged.
 #' @param data Numeric matrix (N x M) with the original data used for
@@ -90,6 +92,18 @@ archetypes <- function(coordinates,
 }
 
 #' Archetypes object constructor
+#'
+#' @param coordinates Numeric matrix (K x M) giving archetype coordinates.
+#' @param coefficients Numeric matrix (K x N) giving archetype weights on samples.
+#' @param compositions Numeric matrix (N x K) giving sample weights on archetypes.
+#' @param slack Non-negative numeric scalar or vector giving allowed coefficient
+#'   row-sum relaxation.
+#' @param loss Data frame containing per-iteration metrics.
+#' @param converged Logical. Whether the optimization converged.
+#' @param AIC Numeric scalar with a precomputed AIC value.
+#' @param call The matched function call that created the object.
+#' @param data Optional original data matrix.
+#' @param init Optional initial archetype coordinates.
 new_archetypes <- function(coordinates,
                            coefficients,
                            compositions,
@@ -281,22 +295,22 @@ predict.archetypes <- function(object, newdata, ...) {
 }
 
 #' @exportS3Method
-print.archetypes <- function(object, ...) {
-    call_str <- paste(deparse(object[["call"]]), sep = "\n", collapse = "\n")
+print.archetypes <- function(x, ...) {
+    call_str <- paste(deparse(x[["call"]]), sep = "\n", collapse = "\n")
     cat("\nCall:\n", call_str, "\n\n", sep = "")
     cat("Archetypes Summary:\n")
-    K <- nrow(object[["coordinates"]])
+    K <- nrow(x[["coordinates"]])
     cat("Number of Archetypes:", K, "\n")
     conv_info <- sprintf(
         "%s after %d iterations.\n",
-        ifelse(object[["converged"]], "Converged", "DID NOT CONVERGE"),
-        nrow(object[["loss"]]) - 1L
+        ifelse(x[["converged"]], "Converged", "DID NOT CONVERGE"),
+        nrow(x[["loss"]]) - 1L
     )
     cat(conv_info)
     cat("Final Loss Metrics:\n")
-    print(tail(object[["loss"]], 1), row.names = FALSE)
+    print(tail(x[["loss"]], 1), row.names = FALSE)
     cat("\n")
-    invisible(object)
+    invisible(x)
 }
 
 #' Plot method for archetypes objects
@@ -330,9 +344,13 @@ print.archetypes <- function(object, ...) {
 #'   project data with more than two dimensions to the first two principal
 #'   component scores before plotting.
 #' @param ... Additional graphical parameters passed to the underlying plotting
-#'   functions.
+#'   functions. For `what = "coordinates"`, `col`, `pch`, and `cex` may be
+#'   length-two vectors: the first value is used for observations and the second
+#'   value is used for archetypes. If only one color is supplied, observations
+#'   use that color and archetypes are drawn in red.
 #'
 #' @importFrom compositions acomp
+#' @importFrom graphics lines pairs plot points
 #' @exportS3Method
 plot.archetypes <- function(x,
                             what = c("compositions", "loss", "coordinates"),
@@ -343,9 +361,12 @@ plot.archetypes <- function(x,
 
     what <- match.arg(
         tolower(what[1L]),
-        c("compositions", "composition", "composision", "loss", "coordinates")
+        c("compositions", "composition", "composision", "composisions", "loss", "coordinates")
     )
-    if (what %in% c("composition", "composision"))
+
+    # Composition Ternary Plot -----------------------------------------------
+
+    if (what %in% c("composition", "composision",  "composisions"))
         what <- "compositions"
     projection <- match.arg(projection)
 
@@ -364,12 +385,14 @@ plot.archetypes <- function(x,
         if (is.null(colnames(S)))
             colnames(S) <- paste0("A", seq_len(ncol(S)))
         args <- plot_args(
-            list(x = compositions::acomp(S), axes = TRUE),
+            list(x = acomp(S), axes = TRUE),
             dots
         )
-        do.call(graphics::plot, args)
+        do.call(plot, args)
         return(invisible(x))
     }
+
+    # Loss Plot --------------------------------------------------------------
 
     if (what == "loss") {
         loss <- x[["loss"]]
@@ -385,9 +408,11 @@ plot.archetypes <- function(x,
             ),
             dots
         )
-        do.call(graphics::plot, args)
+        do.call(plot, args)
         return(invisible(x))
     }
+
+    # Coordinate Plot -------------------------------------------------------
 
     X <- if (is.null(data)) x[["data"]] else data
     if (is.null(X)) {
@@ -450,10 +475,10 @@ plot.archetypes <- function(x,
             ),
             dots
         )
-        do.call(graphics::plot, args)
+        do.call(plot, args)
         A_closed <- A[c(seq_len(nrow(A)), 1L), , drop = FALSE]
-        graphics::lines(A_closed[, 1L], A_closed[, 2L], col = arch_col, lwd = lwd, lty = 1)
-        graphics::points(A[, 1L], A[, 2L], col = arch_col, pch = arch_pch, cex = arch_cex)
+        lines(A_closed[, 1L], A_closed[, 2L], col = arch_col, lwd = lwd, lty = 1)
+        points(A[, 1L], A[, 2L], col = arch_col, pch = arch_pch, cex = arch_cex)
         return(invisible(x))
     }
 
@@ -464,17 +489,17 @@ plot.archetypes <- function(x,
         data_ix <- seq_len(n_data)
         arch_ix <- (n_data + 1L):n_total
         arch_closed <- c(arch_ix, arch_ix[1L])
-        graphics::points(x[data_ix], y[data_ix],
-                         col = data_col, pch = data_pch, cex = data_cex)
-        graphics::lines(x[arch_closed], y[arch_closed], col = arch_col, lwd = lwd, lty = 2)
-        graphics::points(x[arch_ix], y[arch_ix],
-                         col = arch_col, pch = arch_pch, cex = arch_cex)
+        points(x[data_ix], y[data_ix],
+               col = data_col, pch = data_pch, cex = data_cex)
+        lines(x[arch_closed], y[arch_closed], col = arch_col, lwd = lwd, lty = 2)
+        points(x[arch_ix], y[arch_ix],
+               col = arch_col, pch = arch_pch, cex = arch_cex)
     }
     args <- plot_args(
         list(x = combined, panel = panel, lower.panel = panel, upper.panel = panel),
         dots
     )
-    do.call(graphics::pairs, args)
+    do.call(pairs, args)
     invisible(x)
 }
 

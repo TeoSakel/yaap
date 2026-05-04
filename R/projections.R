@@ -4,7 +4,7 @@
 #' probability simplex or the L1-norm ball respectively by implementing Condat's
 #' algorithm.
 #'
-#' @param M A numeric matrix where each row will be projected.
+#' @param mat A numeric matrix where each row will be projected.
 #' @param eps A small positive number to ensure numerical stability (default: 1e-8).
 #'
 #' @return A row-stochastic matrix.
@@ -74,8 +74,8 @@ proj_l1 <- function(mat, eps = 0) {
 #' @param lambda Numeric scalar used for numerical stability in `QP` solver (default: 1e-8).
 #'
 #' @details
-#' The function  solves the problem: $\min_{S} ||X - S*A||_2$ such that $S >= 0$
-#' and `rowSums(S) = 1`.
+#' The function solves the constrained least-squares problem that minimizes
+#' `||X - S*A||_2` such that `S >= 0` and `rowSums(S) = 1`.
 #'
 #' The method `"nnls"` fits `S` via non-negative least squares using the `nnls`
 #' package. The results are then projected onto the simplex to ensure
@@ -194,7 +194,7 @@ onehot <- function(ind, sparse = FALSE, ...) {
 #' @describeIn onehot Numeric indices
 #' @param nc Number of columns (for numeric input only). If `NULL`, uses `max(ind)`.
 #' @exportS3Method onehot default
-onehot.default <- function(ind, sparse = FALSE, nc = NULL) {
+onehot.default <- function(ind, sparse = FALSE, nc = NULL, ...) {
     nr <- length(ind)
     if (is.null(nc)) nc <- max(ind, na.rm = TRUE)
     dnames <- list(names(ind), NULL)
@@ -234,7 +234,7 @@ onehot.default <- function(ind, sparse = FALSE, nc = NULL) {
 
 #' @describeIn onehot Factor method: `nc` is fixed to the number of levels
 #' @exportS3Method onehot factor
-onehot.factor <- function(ind, sparse = FALSE) {
+onehot.factor <- function(ind, sparse = FALSE, ...) {
     lvl <- levels(ind)
     ind <- as.integer(ind)
     nc  <- length(lvl)
@@ -245,6 +245,6 @@ onehot.factor <- function(ind, sparse = FALSE) {
 
 #' @describeIn onehot Character method: delegates to `factor`
 #' @exportS3Method onehot character
-onehot.character <- function(ind, sparse = FALSE) {
+onehot.character <- function(ind, sparse = FALSE, ...) {
     onehot.factor(as.factor(ind), sparse = sparse)
 }

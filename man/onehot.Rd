@@ -9,11 +9,11 @@
 \usage{
 onehot(ind, sparse = FALSE, ...)
 
-\method{onehot}{default}(ind, sparse = FALSE, nc = NULL)
+\method{onehot}{default}(ind, sparse = FALSE, nc = NULL, ...)
 
-\method{onehot}{factor}(ind, sparse = FALSE)
+\method{onehot}{factor}(ind, sparse = FALSE, ...)
 
-\method{onehot}{character}(ind, sparse = FALSE)
+\method{onehot}{character}(ind, sparse = FALSE, ...)
 }
 \arguments{
 \item{ind}{A vector to encode. Can be numeric/integer, factor, or character.}

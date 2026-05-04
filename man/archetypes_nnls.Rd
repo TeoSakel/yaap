@@ -60,8 +60,8 @@ An object of class \code{\link{archetypes}}
 Perform Archetypal Analysis using NNLS
 }
 \examples{
-data(toy)
-archetypes_nnls(toy, K = 3)
+toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+archetypes_nnls(as.matrix(toy), K = 3)
 
 }
 \references{

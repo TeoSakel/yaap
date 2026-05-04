@@ -28,6 +28,9 @@ each archetype as a linear combination of the N samples in the input data.}
 coordinates of each sample in the archetype space (how much each archetype
 contributes to each sample).}
 
+\item{slack}{Non-negative numeric scalar or vector giving the allowed
+relaxation of coefficient row sums away from 1.}
+
 \item{loss}{Data frame containing per-iteration metrics}
 
 \item{converged}{Logical. Whether the optimization converged.}

@@ -21,8 +21,8 @@
 #' @returns An object of class \code{\link{archetypes}}
 #'
 #' @examples
-#' data(toy)
-#' archetypes_nnls(toy, K = 3)
+#' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+#' archetypes_nnls(as.matrix(toy), K = 3)
 #'
 #' @references Alcacer, A., Epifanio, I., Mair, S., & Mørup, M. (2025).
 #' A Survey on Archetypal Analysis. *arXiv preprint arXiv:2504.12392*.

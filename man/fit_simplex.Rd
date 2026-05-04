@@ -38,8 +38,8 @@ This function fits new data points to a convex hull of the given archetype
 coordinates by minimizing the square distance of the projection.
 }
 \details{
-The function  solves the problem: $\min_{S} ||X - S*A||_2$ such that $S >= 0$
-and \code{rowSums(S) = 1}.
+The function solves the constrained least-squares problem that minimizes
+\verb{||X - S*A||_2} such that \code{S >= 0} and \code{rowSums(S) = 1}.
 
 The method \code{"nnls"} fits \code{S} via non-negative least squares using the \code{nnls}
 package. The results are then projected onto the simplex to ensure

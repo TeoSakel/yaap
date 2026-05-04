@@ -68,8 +68,8 @@ An object of class \code{\link{archetypes}}
 Archetypes Analysis using Projected Gradient Descent
 }
 \examples{
-data(toy)
-archetypes_pgd(toy, K = 3)
+toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+archetypes_pgd(as.matrix(toy), K = 3)
 
 }
 \references{

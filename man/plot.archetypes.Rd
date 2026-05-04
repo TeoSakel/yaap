@@ -27,7 +27,10 @@ project data with more than two dimensions to the first two principal
 component scores before plotting.}
 
 \item{...}{Additional graphical parameters passed to the underlying plotting
-functions.}
+functions. For \code{what = "coordinates"}, \code{col}, \code{pch}, and \code{cex} may be
+length-two vectors: the first value is used for observations and the second
+value is used for archetypes. If only one color is supplied, observations
+use that color and archetypes are drawn in red.}
 }
 \description{
 Draws diagnostic and geometric plots for a fitted archetypal analysis model.

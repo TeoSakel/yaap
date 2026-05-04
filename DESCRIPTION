@@ -1,13 +1,26 @@
 Package: YAAAP
 Title: Yet Another Archetypal Analysis Package
 Version: 0.0.0.9000
-Authors@R:
-    person("Teo", "Sakel", , "teo@intelligentbiodata.com", role = c("aut", "cre"))
+Authors@R: person(given = "Teo", family = "Sakel", email = "teo@intelligentbiodata.com", role = c("aut", "cre"))
+Author: Teo Sakel [aut, cre]
+Maintainer: Teo Sakel <teo@intelligentbiodata.com>
 Description: Implements different flavors of the archetypal analysis.
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports:
     compositions,
-    matrixStats
+    graphics,
+    MASS,
+    methods,
+    Matrix,
+    matrixStats,
+    nnls,
+    quadprog,
+    stats,
+    utils
+Suggests:
+    archetypes,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0

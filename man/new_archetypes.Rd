@@ -17,6 +17,28 @@ new_archetypes(
   init = NULL
 )
 }
+\arguments{
+\item{coordinates}{Numeric matrix (K x M) giving archetype coordinates.}
+
+\item{coefficients}{Numeric matrix (K x N) giving archetype weights on samples.}
+
+\item{compositions}{Numeric matrix (N x K) giving sample weights on archetypes.}
+
+\item{slack}{Non-negative numeric scalar or vector giving allowed coefficient
+row-sum relaxation.}
+
+\item{loss}{Data frame containing per-iteration metrics.}
+
+\item{converged}{Logical. Whether the optimization converged.}
+
+\item{AIC}{Numeric scalar with a precomputed AIC value.}
+
+\item{call}{The matched function call that created the object.}
+
+\item{data}{Optional original data matrix.}
+
+\item{init}{Optional initial archetype coordinates.}
+}
 \description{
 Archetypes object constructor
 }

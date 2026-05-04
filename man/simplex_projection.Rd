@@ -11,9 +11,9 @@ proj_simplex(mat, eps = 0)
 proj_l1(mat, eps = 0)
 }
 \arguments{
-\item{eps}{A small positive number to ensure numerical stability (default: 1e-8).}
+\item{mat}{A numeric matrix where each row will be projected.}
 
-\item{M}{A numeric matrix where each row will be projected.}
+\item{eps}{A small positive number to ensure numerical stability (default: 1e-8).}
 }
 \value{
 A row-stochastic matrix.
