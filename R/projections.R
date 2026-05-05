@@ -34,7 +34,7 @@ proj_simplex <- function(mat, eps = 0) {
     stopifnot("eps must be non-negative" = eps >= 0)
     proj_row <- function(v) {
         sv <- sum(v)
-        if (abs(sv - 1) <= length(v) * eps) return(v/sv)
+        if (abs(sv - 1) <= length(v) * eps) return(v / sv)
         u     <- sort(v, decreasing = TRUE)
         cssv  <- cumsum(u)
         rho   <- max(which(u > (cssv - 1) / seq_along(u)))

@@ -28,6 +28,89 @@ test_that("archetypes_nnls fits toy data with expected invariants", {
     expect_equal(dim(residuals(fit)), dim(X))
 })
 
+test_that("sparse preprocessing preserves sparse structure without centering", {
+    X_dense <- matrix(
+        c(
+            1, 0, 2, 0,
+            0, 3, 0, 1,
+            4, 0, 0, 0,
+            0, 5, 1, 0,
+            2, 0, 0, 3,
+            0, 1, 0, 0
+        ),
+        nrow = 6L,
+        byrow = TRUE,
+        dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
+    )
+    X_sparse <- Matrix::Matrix(X_dense, sparse = TRUE)
+
+    pre <- .aa_preprocess(X_sparse, sd_threshold = 0, weights = NULL, verbose = FALSE)
+
+    expect_s4_class(pre[["X"]], "sparseMatrix")
+    expect_null(attr(pre[["X"]], "scaled:center"))
+    expect_equal(attr(pre[["X"]], "scaled:scale"), apply(X_dense, 2L, stats::sd))
+    expect_equal(.dist2(X_sparse, center = TRUE), .dist2(X_dense, center = TRUE))
+})
+
+test_that("sparse preprocessing keeps NNLS bigM column sparse", {
+    X <- Matrix::Matrix(
+        matrix(c(1, 0, 0, 2, 3, 0, 0, 4), nrow = 4L, byrow = TRUE),
+        sparse = TRUE
+    )
+
+    pre <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE, bigM = 200)
+
+    expect_s4_class(pre[["X"]], "sparseMatrix")
+    expect_equal(attr(pre[["X"]], "bigM"), 1L)
+    expect_equal(as.numeric(pre[["X"]][, 1L]), rep(200, nrow(X)))
+})
+
+test_that("archetypes fitters accept sparse input with expected invariants", {
+    X <- Matrix::Matrix(
+        matrix(
+            c(
+                1, 0, 2, 0,
+                0, 3, 0, 1,
+                4, 0, 0, 0,
+                0, 5, 1, 0,
+                2, 0, 0, 3,
+                0, 1, 0, 0
+            ),
+            nrow = 6L,
+            byrow = TRUE,
+            dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
+        ),
+        sparse = TRUE
+    )
+
+    set.seed(2)
+    pgd <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 2L,
+        init = "uniform_archetypes",
+        sd_threshold = 0,
+        max_iter = 2L
+    ))
+    set.seed(2)
+    nnls <- suppressWarnings(archetypes_nnls(
+        X,
+        K = 2L,
+        init = "uniform_archetypes",
+        sd_threshold = 0,
+        max_iter = 1L
+    ))
+
+    for (fit in list(pgd, nnls)) {
+        expect_s3_class(fit, "archetypes")
+        expect_matrix_dim(fit[["coordinates"]], 2L, 4L)
+        expect_equal(dim(fit[["coefficients"]]), c(2L, 6L))
+        expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
+        expect_row_stochastic(fit[["coefficients"]])
+        expect_row_stochastic(fit[["compositions"]])
+        expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+    }
+})
+
 test_that("Tukey row weights downweight large row residuals", {
     weights <- .aa_bisquare_weights(c(0, 1, 4, 1e6))
 

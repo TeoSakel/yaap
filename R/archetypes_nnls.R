@@ -104,14 +104,16 @@ archetypes_nnls <- function(data,
     S <- init_vars[["S"]]
     loss <- init_vars[["loss"]]
     rm(init_vars)
+    nnls_svd_kappa_threshold <- 500
     loss_terms <- .aa_loss_terms(
         X,
         A,
         S,
         weight_fun = weight_fun,
-        return_S_terms = FALSE
+        return_S_terms = max_kappa > 1
     )
     row_weights <- loss_terms[["row_weights"]]
+    loss[["k_A"]][1L] <- kappa(A, exact = TRUE)
     loss <- .aa_update_loss(
         loss,
         1L,
@@ -119,29 +121,29 @@ archetypes_nnls <- function(data,
         verbose = verbose,
         max_kappa = max_kappa
     )
+    use_svd_for_S <- loss[["k_A"]][1L] > nnls_svd_kappa_threshold
     converged <- FALSE
 
 
     # Main Loop  --------------------------------------------------------------
 
     if (verbose) message("Starting main loop...")
-    # TODO: use heuristic to choose between fit_nnls and fit_nnls_svd
     for (i in seq_len(max_iter)) {
+        check_kappa <- i %% 10L == 0L  # Check kappa every 10 iterations
         # Step
-        S <- fit_nnls(X, t(A), eps = eps) # Project X to A-simplex
+        S <- fit_nnls(X, t(A), eps = eps, use_svd = use_svd_for_S) # Project X to A-simplex
         A <- fit_ols(S, X, method = ols_solver, row_weights = row_weights)
-        B <- fit_nnls(A, t(X), eps = eps) # Project A to X-simplex
+        B <- fit_nnls(A, t(X), eps = eps, use_svd = FALSE) # Project A to X-simplex
         A <- B %*% X
         loss_terms <- .aa_loss_terms(
             X,
             A,
             S,
             weight_fun = weight_fun,
-            return_S_terms = (i + 1L) %% 10L == 0L && max_kappa > 1
+            return_S_terms = check_kappa && max_kappa > 1
         )
         row_weights <- loss_terms[["row_weights"]]
 
-        # Check convergence
         loss <- .aa_update_loss(
             loss,
             i + 1L,
@@ -149,6 +151,15 @@ archetypes_nnls <- function(data,
             verbose = verbose,
             max_kappa = max_kappa
         )
+        if (check_kappa) {
+            k_A <- loss[["k_A"]][i + 1L]
+            # TODO: exact kappa already computes the SVD? maybe we should resuse it.
+            if (is.na(k_A))
+                loss[["k_A"]][i + 1L] <- k_A <- kappa(A, exact = TRUE)
+            use_svd_for_S <- k_A > nnls_svd_kappa_threshold
+        }
+
+        # Check convergence
         converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
         if (converged) break
     }

@@ -104,8 +104,7 @@ aa_init <- function(X,
 
     # Edge case for K=1: return the point closest to the mean (the "archemean")
     if (K == 1) {
-        Xc <- scale(X, center = TRUE, scale = FALSE)
-        ind <- which.min(matrixStats::colMeans2(Xc * Xc))
+        ind <- which.min(.dist2(X, center = TRUE))
         return(.ind_to_init(X, ind, sparse = sparse))
     }
 

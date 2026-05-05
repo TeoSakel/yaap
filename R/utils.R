@@ -21,12 +21,72 @@
     invisible(TRUE)
 }
 
+# Scale data without forcing sparse inputs through dense centering.
+scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
+    is_sparse <- inherits(X, "sparseMatrix")
+    X_attrs <- attributes(X)
+
+    # Normalize center
+    if (is.numeric(center)) {
+        if (length(center) == 1L)
+            center <- rep(center, ncol(X))
+        stopifnot(length(center) == ncol(X))
+        if (all(center == 0))
+            center <- FALSE
+    }
+
+    if (isTRUE(center))
+        center <- colMeans(X)
+
+    if (!isFALSE(center)) {
+        X <- sweep(as.matrix(X), 2L, center, "-")
+        if (is_sparse)
+            warning("Centering matrices breaks sparsity; consider using `center = FALSE`")
+        is_sparse <- FALSE
+    }
+
+    if (!isTRUE(scale)) {
+        if (!isFALSE(center))
+            attr(X, "scaled:center") <- center
+        return(X)
+    }
+
+    if (is.numeric(scale)) {
+        if (length(scale) == 1L)
+            scale <- rep(scale, ncol(X))
+        stopifnot(length(scale) == ncol(X))
+        x_scale <- scale
+    } else {
+        n <- nrow(X)
+        x_mean <- colMeans(X)
+        x2 <- colSums(X * X)
+        x_var <- pmax((x2 - n * x_mean * x_mean) / max(n - 1L, 1L), 0)
+        x_scale <- sqrt(x_var)
+    }
+    names(x_scale) <- colnames(X)
+    safe_scale <- ifelse(x_scale > 0, x_scale, 1)
+
+    X <- if (is_sparse) Matrix::colScale(X, 1 / safe_scale) else sweep(X, 2L, safe_scale, "/")
+    if (!is.null(X_attrs[["dimnames"]]))
+        dimnames(X) <- X_attrs[["dimnames"]]
+    if (!isFALSE(center))
+        attr(X, "scaled:center") <- center
+    attr(X, "scaled:scale") <- x_scale
+    X
+}
+
 # Mathematical Subroutines -----------------------------------------------------
 
 # Compute squared Euclidean distance of each sample from center
 .dist2 <- function(X, center = FALSE) {
-    d <- scale(X, center = center, scale = FALSE)  # shift columns by a
-    matrixStats::rowSums2(d * d)
+    x2 <- rowSums(X * X)
+    if (isFALSE(center))
+        return(x2)
+
+    x_mean <- if (isTRUE(center)) colMeans(X) else as.numeric(center)
+    stopifnot("center must match columns in X" = length(x_mean) == ncol(X))
+    centered_x2 <- x2 - 2*as.numeric(X %*% x_mean) + as.numeric(x_mean %*% x_mean)
+    pmax(centered_x2, 0)
 }
 
 
@@ -36,10 +96,7 @@
     stopifnot(ncol(X) == ncol(Y))
 
     # squared distances from cosine law ||x||^2 + ||y||^2 − 2<x,y>
-    sx <- matrixStats::rowSums2(X * X)   # ||x||^2
-    sy <- matrixStats::rowSums2(Y * Y)   # ||y||^2
-    cp <- tcrossprod(X, Y)  # 2*<x,y>
-    D2 <- outer(sx, sy, "+") - 2*cp
+    D2 <- outer(rowSums(X * X), rowSums(Y * Y), "+") - 2*tcrossprod(X, Y)
     pmax(D2, 0)     # ensure non-negative distances
 }
 
@@ -124,7 +181,7 @@ effic <- function(X, Y) {
 
 # Edge case K == 1: single archetype at mean of X
 .mean_archetype <- function(X) {
-    x_mean <- matrixStats::colMeans2(X)
+    x_mean <- colMeans(X)
     A <- matrix(
         x_mean,
         nrow = 1L,
@@ -178,7 +235,11 @@ effic <- function(X, Y) {
         x_attrs <- attributes(X)
         x_attrs[["mask"]] <- mask
         X <- X[, mask, drop = FALSE]
-        attributes(X) <- x_attrs
+        if (inherits(X, "sparseMatrix")) {
+            attr(X, "mask") <- mask
+        } else {
+            attributes(X) <- x_attrs
+        }
     }
     X
 }
@@ -195,8 +256,7 @@ effic <- function(X, Y) {
 .aa_preprocess <- function(data, sd_threshold, weights, verbose, bigM = 0) {
     if (verbose) message("Preprocessing data...")
 
-    # Scale input matrix to 0 mean and unit variance
-    X <- scale(as.matrix(data))
+    X <- scale_safe(data)
 
     # Filter out low-variance features
     X <- .filter_low_variance(X, sd_threshold)
@@ -220,10 +280,10 @@ effic <- function(X, Y) {
     if (bigM > 0) {
         # add bigM intercept term to "force" the simplex constraint during nnls fit
         x_attrs <- attributes(X)
-        X <- cbind(
-            matrix(bigM, nrow = N, ncol = 1L, dimnames = list(rownames(X), "bigM")),
-            X
-        )
+        bigM_col <- matrix(bigM, nrow = N, ncol = 1L, dimnames = list(rownames(X), "bigM"))
+        if (inherits(X, "sparseMatrix"))
+            bigM_col <- as(bigM_col, "sparseMatrix")
+        X <- cbind(bigM_col, X)
         # Restore attributes
         attr(X, "scaled:center") <- x_attrs[["scaled:center"]]
         attr(X, "scaled:scale")  <- x_attrs[["scaled:scale"]]
@@ -237,14 +297,18 @@ effic <- function(X, Y) {
 
         # Remove bigM if present
         iM <- attr(X, "bigM")
+        x_names <- colnames(X)
         if (!is.null(iM))
             mat <- mat[, -iM, drop = FALSE]
+        if (!is.null(iM))
+            x_names <- x_names[-iM]
+        mat <- as.matrix(mat)
 
         # Undo scaling
         x_mean <- attr(X, "scaled:center")
         if (is.null(x_mean)) {
             x_mean <- rep(0, ncol(mat)) # no centering
-            names(x_mean) <- colnames(X)
+            names(x_mean) <- x_names
         }
         x_std <- attr(X, "scaled:scale")
         if (is.null(x_std))
@@ -421,7 +485,7 @@ effic <- function(X, Y) {
 
     if (is.null(AAt)) AAt <- tcrossprod(A)
     if (is.null(XAt)) XAt <- tcrossprod(X, A)
-    if (is.null(x2))  x2 <- matrixStats::rowSums2(X * X)
+    if (is.null(x2))  x2 <- rowSums(X * X)
     if (is.null(row_rss))
         row_rss <- pmax(x2 - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
     if (is.null(row_weights)) row_weights <- weight_fun(row_rss)
@@ -460,17 +524,18 @@ effic <- function(X, Y) {
     loss[["r2"]][i]  <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
 
     # Compute condition numbers
-    if (i %% 10 != 0) {
-        loss[["k_S"]][i] <- NA_real_
-        loss[["k_A"]][i] <- NA_real_
-    } else if (max_kappa > 1) {
+    if ((i - 1L) %% 10 != 0)
+        return(loss)  # only update kappa every 10 iterations for efficiency
+
+    if (max_kappa > 1) {
+        # S tends to be long and skinny (N >> K), so use rcond for better stability
+        # A tends to be roughly square (K ~ M), so use kappa directly
         loss[["k_S"]][i] <- sqrt(1 / rcond(loss_terms[["StS"]]))
-        A <- loss_terms[["A"]]
-        Gram <- if (nrow(A) < ncol(A)) loss_terms[["AAt"]] else crossprod(A)
-        loss[["k_A"]][i] <- sqrt(1 / rcond(Gram))
+        if (is.na(loss[["k_A"]][i]))
+            loss[["k_A"]][i] <- kappa(loss_terms[["A"]], exact = TRUE)
     } else {
         loss[["k_S"]][i] <- max_kappa
-        loss[["k_A"]][i] <- max_kappa
+        if (is.na(loss[["k_A"]][i])) loss[["k_A"]][i] <- max_kappa
     }
     loss
 }
