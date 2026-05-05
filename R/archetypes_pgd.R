@@ -11,8 +11,9 @@
 #' @param weights optional vector of sample weights (default: NULL)
 #' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
 #' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
-#' @param sd_threshold threshold for feature standard deviation to filter low-variance features (default: 1e-4)
-#' @param max_iter maximum number of iterations (default: 500)
+#' @param sd_threshold threshold for feature standard deviation to filter
+#'   low-variance features (default: 1e-6)
+#' @param max_iter maximum number of iterations (default: 100)
 #' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
 #' @param tol_r2 convergence tolerance based on R^2 (default: 0.9999)
 #' @param max_kappa maximum condition number for archetypes (default: 1000)
@@ -44,8 +45,8 @@ archetypes_pgd <- function(data,
                            weights = NULL,
                            robust = FALSE,
                            tukey_c = 4.685,
-                           sd_threshold = 1e-4,
-                           max_iter = 500L,
+                           sd_threshold = 1e-6,
+                           max_iter = 100L,
                            tol = 1e-6,
                            tol_r2 = 0.9999,
                            max_kappa = 1000,
@@ -57,31 +58,51 @@ archetypes_pgd <- function(data,
                            step_size = 1.0,
                            max_iter_optimizer = 10L,
                            step_shrinkage = 0.5) {
-
-    # Input Check -------------------------------------------------------------
-
-    # Generic Checks
-    .aa_check_inputs( # nolint: object_usage_linter.
+    .aa_run(
+        call = match.call(),
         data = data,
         K = K,
+        method = "pgd",
+        init = init,
+        init_args = init_args,
+        weights = weights,
+        robust = robust,
+        tukey_c = tukey_c,
+        sd_threshold = sd_threshold,
+        max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
         max_kappa = max_kappa,
         eps = eps,
-        robust = robust,
-        tukey_c = tukey_c
+        verbose = verbose,
+        method_args = list(
+            delta = delta,
+            pseudo_pgd = pseudo_pgd,
+            step_size = step_size,
+            max_iter_optimizer = max_iter_optimizer,
+            step_shrinkage = step_shrinkage
+        )
     )
-    # PGD specific checks
-    stopifnot("step_size must be positive" = step_size > 0)
-    stopifnot("step_shrinkage must be between (0, 1)" = step_shrinkage > 0 && step_shrinkage < 1)
-    stopifnot("delta must be single non-negative number" = length(delta) == 1 && delta >= 0)
+}
 
-    # Edge Case checks
-    out <- .aa_checks_edge_cases(data, K, verbose)  # edge cases
-    if (!is.null(out)) return(out)  # return early if edge case
-
-    # Prepossessing Data  -----------------------------------------------------
-
+.aa_fit_pgd <- function(X,
+                        weight_fun,
+                        robust,
+                        max_iter,
+                        tol,
+                        tol_r2,
+                        max_kappa,
+                        eps,
+                        verbose,
+                        A,
+                        B,
+                        S,
+                        loss,
+                        delta,
+                        pseudo_pgd,
+                        step_size,
+                        max_iter_optimizer,
+                        step_shrinkage) {
     # Nomenclature following www.doi.org/10.1016/j.neucom.2011.06.033:
     #   X ~ SA (N x M) Data Matrix
     #   A = aBX (K x M) Archetypes
@@ -89,19 +110,6 @@ archetypes_pgd <- function(data,
     #   a = (K x 1) Archetypes scaling (allows them to lay outside convex hull)
     #               In theory they are stored in diagonal matrix.
     #   S = (N x K) Archetypes Scores (new coordinates)
-
-    cl <- match.call()
-    pre <- .aa_preprocess(data, sd_threshold, weights, verbose)
-    X <- pre[["X"]]                    # preprocessed data
-    undo_scale <- pre[["undo_scale"]]  # function to undo preprocessing
-    init <- .aa_preprocess_init(init, data, X)
-    rm(pre)
-
-    weight_fun <- if (robust) {
-        function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
-    } else {
-        .aa_unit_weights
-    }
 
     # PGD specific preparations -----------------------------------------------
 
@@ -123,21 +131,7 @@ archetypes_pgd <- function(data,
     a_hi <- 1 + delta # upper bound for a
     clip <- function(a) pmax(pmin(a, a_hi), a_lo) # clip a to [a_lo, a_hi]
 
-    # Initialization  ---------------------------------------------------------
-
-    init_vars <- .aa_init_vars( # nolint: object_usage_linter.
-        X = X,
-        K = K,
-        init = init,
-        init_args = init_args,
-        eps = eps,
-        max_iter = max_iter,
-        verbose = verbose,
-        delta = delta
-    )
-    A0 <- init_vars[["A"]]
-    B  <- init_vars[["B"]]
-    S  <- init_vars[["S"]]
+    A0 <- A
     a  <- rowSums(B)
 
     slack_tol <- 1e-6
@@ -155,13 +149,12 @@ archetypes_pgd <- function(data,
     AAt   <- loss_terms[["AAt"]] # (K x K)
     StS   <- loss_terms[["StS"]] # (K x K)
     StX   <- loss_terms[["StX"]] # (K x M)
+    x2    <- loss_terms[["x2"]]  # (N x 1) row-wise sum of squares; invariant for fixed X
     xss   <- loss_terms[["xss"]] # scalar
     rss   <- loss_terms[["rss"]] # scalar
     XXt   <- tcrossprod(X)       # (N x N)
     StXXt <- crossprod(S * row_weights, XXt) # (K x N)
 
-    # Loss
-    loss <- init_vars[["loss"]]
     loss <- .aa_update_loss(
         loss,
         1L,
@@ -175,8 +168,6 @@ archetypes_pgd <- function(data,
     step_S <- step_size # mu_S in the paper
     step_B <- step_size # mu_C in the paper
     step_a <- step_size # mu_a in the paper
-
-    rm(init_vars)
 
     # Main optimization loop  -------------------------------------------------
 
@@ -196,7 +187,7 @@ archetypes_pgd <- function(data,
                 StS    <- StS_new
                 StX    <- StX_new
                 rss    <- rss_new
-                StXXt  <- crossprod(S * row_weights, XXt)
+                StXXt  <- crossprod(S_new_weighted, XXt)
                 step_S <- step_S / step_shrinkage # leave room for shrinkage
                 break
             }
@@ -245,10 +236,11 @@ archetypes_pgd <- function(data,
         }
 
         loss_terms <- if (robust) {
-            .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE)
+            .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE,
+                           x2 = x2)
         } else {
             .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE,
-                           xss = xss, rss = rss, row_weights = row_weights,
+                           xss = xss, rss = rss, x2 = x2, row_weights = row_weights,
                            StS = StS, StX = StX, AAt = AAt, XAt = XAt)
         }
         row_weights <- loss_terms[["row_weights"]]
@@ -272,12 +264,7 @@ archetypes_pgd <- function(data,
     }
 
 
-    # Prepare Output  ---------------------------------------------------------
-
-    .aa_prepare_output(
-        call = cl,
-        data = data,
-        X = X,
+    list(
         A0 = A0,
         A = A,
         B = a * B,
@@ -285,10 +272,7 @@ archetypes_pgd <- function(data,
         delta = delta,
         i = i,
         loss = loss,
-        converged = converged,
-        undo_scale = undo_scale,
-        max_iter = max_iter,
-        verbose = verbose
+        converged = converged
     )
 }
 

@@ -328,16 +328,23 @@ effic <- function(X, Y) {
     list(X = X, undo_scale = undo_scale)
 }
 
-# Common subroutine to preprocess `init` matrix of archetype coordinates (A)
-# maps `init` from original data space to preprocessed space of X
-.aa_preprocess_init <- function(init, data, X) {
+# Common subroutine to preprocess `init` matrix of archetype coordinates (A);
+# maps `init` from original data space to preprocessed space of X.
+.aa_preprocess_init <- function(init, X) {
     # If `init` is not a matrix, return it as is (it will be processed by the init function)
     if (!(is.matrix(init) || inherits(init, "data.frame")))
         return(init)
 
-    if (ncol(init) != ncol(data)) {
-        fmt <- "ncol(init) = %d does not match number of data features (%d)"
-        stop(sprintf(fmt, ncol(init), ncol(data)))
+    iM <- attr(X, "bigM")
+    n_features <- ncol(X) - !is.null(iM)
+    mask <- attr(X, "mask")
+
+    if (ncol(init) != n_features) {
+        can_subset <- !is.null(mask) && ncol(init) == length(mask)
+        if (!can_subset) {
+            fmt <- "ncol(init) = %d does not match number of data features (%d)"
+            stop(sprintf(fmt, ncol(init), n_features))
+        }
     }
 
     # Scale `init` to match X
@@ -350,12 +357,10 @@ effic <- function(X, Y) {
         init <- sweep(init, 2L, x_scale, "/")
 
     # Filter `init` to match filtered features in X
-    mask <- attr(X, "mask")
     if (!is.null(mask))
         init <- init[, mask, drop = FALSE]
 
     # Add bigM column to init
-    iM <- attr(X, "bigM")
     if (!is.null(iM)) {
         init <- cbind(
             matrix(attr(X, "bigM.value"), nrow = nrow(init), ncol = 1L),
@@ -437,7 +442,7 @@ effic <- function(X, Y) {
     # `init` is fixed coordinates of archetypes: call .aa_matrix_init
     if (is.matrix(init) || inherits(init, "data.frame")) {
         # use provided coordinate matrix as initialization; ignore `init_args`
-        init <- as.matrix(init)
+        init <- .aa_preprocess_init(init, X)
         if (length(init_args) > 0L) {
             warning("`init_args` are ignored when `init` is a matrix")
             init_args <- list()
@@ -485,7 +490,7 @@ effic <- function(X, Y) {
 
     if (is.null(AAt)) AAt <- tcrossprod(A)
     if (is.null(XAt)) XAt <- tcrossprod(X, A)
-    if (is.null(x2))  x2 <- rowSums(X * X)
+    if (is.null(x2))  x2 <- rowSums(X * X)  # should only run once per fit, then cached in the loop
     if (is.null(row_rss))
         row_rss <- pmax(x2 - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
     if (is.null(row_weights)) row_weights <- weight_fun(row_rss)

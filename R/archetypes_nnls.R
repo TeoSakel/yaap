@@ -51,59 +51,49 @@ archetypes_nnls <- function(data,
                             # NNLS specific
                             ols_solver = c("qr", "ginv", "BFGS"),
                             bigM = 200) {
-
-    # Input Checks  -----------------------------------------------------------
-
-    # Generic Checks
-    .aa_check_inputs( # nolint: object_usage_linter.
+    .aa_run(
+        call = match.call(),
         data = data,
         K = K,
+        method = "nnls",
+        init = init,
+        init_args = init_args,
+        weights = weights,
+        robust = robust,
+        tukey_c = tukey_c,
+        sd_threshold = sd_threshold,
+        max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
         max_kappa = max_kappa,
         eps = eps,
-        robust = robust,
-        tukey_c = tukey_c
+        verbose = verbose,
+        method_args = list(
+            ols_solver = ols_solver,
+            bigM = bigM
+        )
     )
+}
 
-    # Edge Case checks
-    out <- .aa_checks_edge_cases(data, K, verbose)  # edge cases
-    if (!is.null(out)) return(out)  # return early if edge case
-
-    # NNLS specific checks
-    ols_solver <- match.arg(ols_solver)
-    stopifnot("`bigM` must be greater than 0" = bigM > 0)
-
-    # Prepossessing Data  -----------------------------------------------------
-
-    cl <- match.call()
-
-    weight_fun <- if (robust) {
-        function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
-    } else {
-        .aa_unit_weights
-    }
-
-    pre <- .aa_preprocess(data, sd_threshold, weights, verbose, bigM = bigM)
-    X <- pre[["X"]]                    # preprocessed data
-    undo_scale <- pre[["undo_scale"]]  # function to undo preprocessing
-    init <- .aa_preprocess_init(init, data, X)
-    rm(pre)
-
-    # Initialize Variables  ---------------------------------------------------
-
+.aa_fit_nnls <- function(X,
+                         weight_fun,
+                         max_iter,
+                         tol,
+                         tol_r2,
+                         max_kappa,
+                         eps,
+                         verbose,
+                         A,
+                         B,
+                         S,
+                         loss,
+                         ols_solver) {
     # Nomenclature following arXiv:2504.12392v1:
     #   X ~ SA (N x M) Data Matrix
     #   A = BX (K x M) Archetypes
     #   B = (K x N) Archetypes Coefficients (base transform, C in the paper)
     #   S = (N x K) Archetypes Scores (new coordinates)
-
-    init_vars <- .aa_init_vars(X, K, init, init_args, eps, max_iter, verbose)
-    A <- A0 <- init_vars[["A"]]
-    B <- init_vars[["B"]]
-    S <- init_vars[["S"]]
-    loss <- init_vars[["loss"]]
-    rm(init_vars)
+    A0 <- A
     nnls_svd_kappa_threshold <- 500
     loss_terms <- .aa_loss_terms(
         X,
@@ -113,6 +103,7 @@ archetypes_nnls <- function(data,
         return_S_terms = max_kappa > 1
     )
     row_weights <- loss_terms[["row_weights"]]
+    x2 <- loss_terms[["x2"]]  # cache to avoid recomputing in every iteration
     loss[["k_A"]][1L] <- kappa(A, exact = TRUE)
     loss <- .aa_update_loss(
         loss,
@@ -140,7 +131,8 @@ archetypes_nnls <- function(data,
             A,
             S,
             weight_fun = weight_fun,
-            return_S_terms = check_kappa && max_kappa > 1
+            return_S_terms = check_kappa && max_kappa > 1,
+            x2 = x2
         )
         row_weights <- loss_terms[["row_weights"]]
 
@@ -164,22 +156,15 @@ archetypes_nnls <- function(data,
         if (converged) break
     }
 
-    # Prepare Output  ---------------------------------------------------------
-
-    .aa_prepare_output(
-        call = cl,
-        data = data,
+    list(
         A0 = A0,
-        X = X,
         A = A,
         B = B,
         S = S,
+        delta = 0,
         i = i,
         loss = loss,
-        converged = converged,
-        undo_scale = undo_scale,
-        max_iter = max_iter,
-        verbose = verbose
+        converged = converged
     )
 }
 

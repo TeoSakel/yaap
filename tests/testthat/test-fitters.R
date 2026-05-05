@@ -28,6 +28,54 @@ test_that("archetypes_nnls fits toy data with expected invariants", {
     expect_equal(dim(residuals(fit)), dim(X))
 })
 
+test_that("run_aa dispatches to supported fitters", {
+    set.seed(1)
+    X <- toy_matrix()
+    pgd <- run_aa(X, K = 3L, method = "pgd", max_iter = 20L, tol_r2 = 0.95)
+
+    set.seed(1)
+    nnls <- run_aa(X, K = 3L, method = "nnls", max_iter = 5L, tol_r2 = 0.95)
+
+    for (fit in list(pgd, nnls)) {
+        expect_s3_class(fit, "archetypes")
+        expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
+        expect_matrix_dim(fit[["coefficients"]], 3L, 250L)
+        expect_matrix_dim(fit[["compositions"]], 250L, 3L)
+        expect_row_stochastic(fit[["coefficients"]])
+        expect_row_stochastic(fit[["compositions"]])
+    }
+})
+
+test_that("common fitter defaults are synchronized", {
+    pgd_formals <- formals(archetypes_pgd)
+    nnls_formals <- formals(archetypes_nnls)
+
+    expect_identical(pgd_formals[["sd_threshold"]], nnls_formals[["sd_threshold"]])
+    expect_identical(pgd_formals[["max_iter"]], nnls_formals[["max_iter"]])
+    expect_identical(formals(run_aa)[["sd_threshold"]], nnls_formals[["sd_threshold"]])
+    expect_identical(formals(run_aa)[["max_iter"]], nnls_formals[["max_iter"]])
+})
+
+test_that("fitters preserve the user-facing call", {
+    X <- toy_matrix()
+
+    pgd <- suppressWarnings(archetypes_pgd(X, K = 3L, max_iter = 1L))
+    nnls <- suppressWarnings(archetypes_nnls(X, K = 3L, max_iter = 1L))
+    entry <- suppressWarnings(run_aa(X, K = 3L, method = "nnls", max_iter = 1L))
+
+    expect_identical(as.character(pgd[["call"]][[1L]]), "archetypes_pgd")
+    expect_identical(as.character(nnls[["call"]][[1L]]), "archetypes_nnls")
+    expect_identical(as.character(entry[["call"]][[1L]]), "run_aa")
+})
+
+test_that("run_aa validates method and method-specific arguments", {
+    X <- toy_matrix()
+
+    expect_error(run_aa(X, K = 3L, method = "bad"), "should be one of")
+    expect_error(run_aa(X, K = 3L, method = "pgd", step_size = 0), "step_size")
+    expect_error(run_aa(X, K = 3L, method = "nnls", bigM = 0), "bigM")
+})
+
 test_that("sparse preprocessing preserves sparse structure without centering", {
     X_dense <- matrix(
         c(
