@@ -1,3 +1,5 @@
+# Weighting Function for Robust Archetypal Analysis ---------------------------------------------
+
 # Tukey's bisquare row weights from squared row residual norms.
 .aa_bisquare_weights <- function(row_rss, c = 4.685) {
     stopifnot("`c` must be positive" = length(c) == 1L && is.finite(c) && c > 0)
@@ -19,71 +21,12 @@
     invisible(TRUE)
 }
 
-.aa_loss_terms <- function(X, A, S, weight_fun,
-                           return_S_terms = TRUE,
-                           xss = NULL,
-                           rss = NULL,
-                           x2 = NULL,
-                           row_rss = NULL,
-                           row_weights = NULL,
-                           StS = NULL,
-                           StX = NULL,
-                           AAt = NULL,
-                           XAt = NULL) {
-    iM <- attr(X, "bigM")
-    if (!is.null(iM)) {
-        X <- X[, -iM, drop = FALSE]
-        A <- A[, -iM, drop = FALSE]
-    }
-    if (is.null(AAt))
-        AAt <- tcrossprod(A)
-    if (is.null(XAt))
-        XAt <- tcrossprod(X, A)
-    if (is.null(x2))
-        x2 <- matrixStats::rowSums2(X * X)
-    if (is.null(row_rss)) {
-        row_rss <- x2 - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt))
-        row_rss <- pmax(row_rss, 0)
-    }
-
-    if (is.null(row_weights))
-        row_weights <- weight_fun(row_rss)
-    .aa_check_row_weights(row_weights, nrow(X))
-
-    if (is.null(xss))
-        xss <- sum(row_weights * x2)
-    if (is.null(rss))
-        rss <- sum(row_weights * row_rss)
-    if (return_S_terms && (is.null(StX) || is.null(StS))) {
-        S_weighted <- S * row_weights
-        if (is.null(StX))
-            StX <- crossprod(S_weighted, X)
-        if (is.null(StS))
-            StS <- crossprod(S_weighted, S)
-    }
-    if (!return_S_terms) {
-        StX <- NULL
-        StS <- NULL
-    }
-
-    list(
-        rss = rss,
-        xss = xss,
-        x2 = x2,
-        row_rss = row_rss,
-        row_weights = row_weights,
-        StS = StS,
-        StX = StX,
-        AAt = AAt,
-        XAt = XAt,
-        A = A
-    )
-}
+# Mathematical Subroutines -----------------------------------------------------
 
 # Compute squared Euclidean distance of each sample from center
 .dist2 <- function(X, center = FALSE) {
     d <- scale(X, center = center, scale = FALSE)  # shift columns by a
-    matrixStats::rowSums2(d*d)
+    matrixStats::rowSums2(d * d)
 }
 
 
@@ -111,7 +54,7 @@ effic <- function(X, Y) {
     # Try using Cholesky to invert PD matrix
     cx <- tryCatch(chol(Sx), error = function(e) NULL)
     if (is.null(cx))  # FALLBACK to general solution
-        return(sum(diag( solve(Sx, stats::cov(Y)) )))
+        return(sum(diag(solve(Sx, stats::cov(Y)))))
 
 
     # Edge Case: # of samples smaller than the # of features
@@ -123,13 +66,12 @@ effic <- function(X, Y) {
         return(norm(Z, type = "F")^2 / (N - 1))
     }
     # since trace(AB) = sum(A * t(B)) = sum(A * B) when symmetric
-     sum(stats::cov(Y) * chol2inv(cx))
+    sum(stats::cov(Y) * chol2inv(cx))
 }
 
-# Blocks of code for archetypes fitting ---------------------------------------
+# Archetypes Fitting Subroutines -----------------------------------------------------
 
-
-.aa_check_inputs <- function(data, tol, tol_r2, K, max_kappa, eps) {
+.aa_check_inputs <- function(data, tol, tol_r2, K, max_kappa, eps, robust, tukey_c) {
     stopifnot("data contains missing values" = !any(is.na(data)))
     stopifnot("tol must be positive" = tol > 0)
     stopifnot("tol_r2 must be between (0, 1)" = tol_r2 >= 0 && tol_r2 <= 1)
@@ -138,6 +80,10 @@ effic <- function(X, Y) {
     stopifnot("K cannot be greater than number of samples" = K <= nrow(data))
     stopifnot("max_kappa must be >=1" = max_kappa >= 1)
     stopifnot("eps must be non-negative" = eps >= 0)
+    stopifnot("robust must be TRUE or FALSE" =
+                  is.logical(robust) && length(robust) == 1L && !is.na(robust))
+    stopifnot("tukey_c must be positive" =
+                  length(tukey_c) == 1L && is.finite(tukey_c) && tukey_c > 0)
 }
 
 
@@ -152,7 +98,7 @@ effic <- function(X, Y) {
         if (verbose) message("K equals 1, returning mean archetype")
         out <- .mean_archetype(data)
     }
-    return(out)
+    out
 }
 
 # Edge case K == N: each sample is its own archetype
@@ -164,7 +110,7 @@ effic <- function(X, Y) {
     rownames(B) <- colnames(S) <- rownames(A)
     loss <- data.frame(rss = 0, r2 = 1, k_S = 1, k_A = kappa(A))
 
-    out <- archetypes(
+    archetypes(
         call         = NULL,
         data         = X,
         init         = A,
@@ -174,7 +120,6 @@ effic <- function(X, Y) {
         loss         = loss,
         converged    = TRUE
     )
-    return(out)
 }
 
 # Edge case K == 1: single archetype at mean of X
@@ -215,11 +160,11 @@ effic <- function(X, Y) {
     )
 }
 
-# Filter out features (columns of X) with low variance
+# Remove features (columns of X) with low variance
 .filter_low_variance <- function(X, sd_threshold) {
     sd_vals <- attr(X, "scaled:scale")
     if (is.null(sd_vals))
-        sd_vals <- apply(X, 2, stats::sd)
+        sd_vals <- matrixStats::colSds(X)
     mask <- sd_vals >= sd_threshold
     M <- sum(mask)
     if (M < ncol(X)) {
@@ -239,8 +184,15 @@ effic <- function(X, Y) {
 }
 
 
+# Common subroutine to preprocess input data matrix:
+# - scale to 0 mean and unit variance
+# - filter out low-variance features
+# - apply user-provided sample weights (if any)
+# - add bigM intercept term (if bigM > 0) to "force" the simplex constraint during nnls fit
+# Returns a list with:
+# - X: preprocessed data matrix with attributes to undo scaling and filtering
+# - undo_scale: function to undo scaling and filtering of archetype coordinates
 .aa_preprocess <- function(data, sd_threshold, weights, verbose, bigM = 0) {
-
     if (verbose) message("Preprocessing data...")
 
     # Scale input matrix to 0 mean and unit variance
@@ -264,8 +216,6 @@ effic <- function(X, Y) {
         X <- X * weights
         attr(X, "weights") <- weights # store weights in X attributes
     }
-
-    xss <- norm(X, type = "F")^2
 
     if (bigM > 0) {
         # add bigM intercept term to "force" the simplex constraint during nnls fit
@@ -311,11 +261,14 @@ effic <- function(X, Y) {
         out
     }
 
-    list(X = X, undo_scale = undo_scale, xss = xss)
+    list(X = X, undo_scale = undo_scale)
 }
 
+# Common subroutine to preprocess `init` matrix of archetype coordinates (A)
+# maps `init` from original data space to preprocessed space of X
 .aa_preprocess_init <- function(init, data, X) {
-    if (!is.matrix(init))
+    # If `init` is not a matrix, return it as is (it will be processed by the init function)
+    if (!(is.matrix(init) || inherits(init, "data.frame")))
         return(init)
 
     if (ncol(init) != ncol(data)) {
@@ -323,6 +276,7 @@ effic <- function(X, Y) {
         stop(sprintf(fmt, ncol(init), ncol(data)))
     }
 
+    # Scale `init` to match X
     init <- as.matrix(init)
     x_center <- attr(X, "scaled:center")
     x_scale <- attr(X, "scaled:scale")
@@ -331,10 +285,12 @@ effic <- function(X, Y) {
     if (!is.null(x_scale))
         init <- sweep(init, 2L, x_scale, "/")
 
+    # Filter `init` to match filtered features in X
     mask <- attr(X, "mask")
     if (!is.null(mask))
         init <- init[, mask, drop = FALSE]
 
+    # Add bigM column to init
     iM <- attr(X, "bigM")
     if (!is.null(iM)) {
         init <- cbind(
@@ -347,6 +303,8 @@ effic <- function(X, Y) {
     init
 }
 
+# Check that archetype names are valid and return them;
+# if missing, generate default names A1, A2, ..., AK
 .aa_init_names <- function(A) {
     nm <- rownames(A)
     if (is.null(nm))
@@ -358,7 +316,9 @@ effic <- function(X, Y) {
     nm
 }
 
-.aa_matrix_init <- function(X, K, init, eps, delta = 0, tol = 1e-6) {
+# Helper function to .aa_init_vars when `init` is a matrix of archetype coordinates (A)
+.aa_matrix_init <- function(X, K, init, eps, L, delta = 0, tol = 1e-6) {
+    # Check dimensionality of `init` matrix
     if (nrow(init) != K) {
         fmt <- "nrow(init) = %d does not match K (%d)"
         stop(sprintf(fmt, nrow(init), K))
@@ -368,6 +328,7 @@ effic <- function(X, Y) {
         stop(sprintf(fmt, ncol(init), ncol(X)))
     }
 
+    # Check that `init` coordinates are within the data hull (or within `delta` slack)
     nm <- .aa_init_names(init)
     a_lo <- max(1 - delta, ifelse(eps > 0, eps, 1e-8))
     a_hi <- 1 + delta
@@ -391,31 +352,44 @@ effic <- function(X, Y) {
 
     rownames(A) <- rownames(B) <- nm
     colnames(B) <- rownames(X)
-    list(A = A, B = B)
+    list(
+        A = A,
+        B = B,
+        S = .init_S(X, A, eps = eps),
+        loss = list(rss = rep(NA_real_, L),
+                    r2  = rep(NA_real_, L),
+                    k_S = rep(NA_real_, L),
+                    k_A = rep(NA_real_, L))
+    )
 }
 
+# Common subroutine to initialize variables:
+# archetype coordinates (A), coefficients (B), compositions (S) and
+# loss metrics: rss, r2, condition numbers of S and A (k_S, k_A)
 .aa_init_vars <- function(X, K, init, init_args, eps, max_iter, verbose, delta = 0) {
-
     if (verbose) message("Initializing archetypes...")
     L <- max_iter + 1L
-    if (is.character(init)) {
-        stopifnot("`init` must be a single string" = length(init) == 1L)
-        init_args <- c(list(method = init), init_args)
-        init <- aa_init
-    } else if (is.matrix(init)) {
+
+    # `init` is fixed coordinates of archetypes: call .aa_matrix_init
+    if (is.matrix(init) || inherits(init, "data.frame")) {
+        # use provided coordinate matrix as initialization; ignore `init_args`
+        init <- as.matrix(init)
         if (length(init_args) > 0L) {
             warning("`init_args` are ignored when `init` is a matrix")
             init_args <- list()
         }
-        init_vars <- .aa_matrix_init(X, K, init, eps, delta)
-        init_vars[["S"]] <- .init_S(X, init_vars[["A"]], eps = eps)
-        init_vars[["loss"]] <- list(rss = rep(NA_real_, L),
-                                    r2  = rep(NA_real_, L),
-                                    k_S = rep(NA_real_, L),
-                                    k_A = rep(NA_real_, L))
+        init_vars <- .aa_matrix_init(X, K, init, eps, L, delta)
         return(init_vars)
-    } else {
-        stopifnot("`init` must be a function, a single string, or a coordinate matrix" = is.function(init))
+    }
+
+    # init_vars must be generated from data
+    if (is.character(init)) {
+        # use `aa_init` function with method specified by `init` string
+        stopifnot("`init` must be a single string" = length(init) == 1L)
+        init_args <- c(list(method = init), init_args)
+        init <- aa_init
+    } else if (!is.function(init)) {
+        stop("`init` must be a function, a single string, or archetypes coordinate matrix")
     }
     init_vars <- do.call(init, args = c(list(X = X, K = K), init_args))
     rownames(init_vars[["A"]]) <- .aa_init_names(init_vars[["A"]])
@@ -425,27 +399,83 @@ effic <- function(X, Y) {
                                 r2  = rep(NA_real_, L),
                                 k_S = rep(NA_real_, L),
                                 k_A = rep(NA_real_, L))
-    return(init_vars)
+    init_vars
 }
 
+.aa_loss_terms <- function(X, A, S, weight_fun,
+                           return_S_terms = TRUE,
+                           xss = NULL,
+                           rss = NULL,
+                           x2 = NULL,
+                           row_rss = NULL,
+                           row_weights = NULL,
+                           StS = NULL,
+                           StX = NULL,
+                           AAt = NULL,
+                           XAt = NULL) {
+    iM <- attr(X, "bigM")
+    if (!is.null(iM)) {
+        X <- X[, -iM, drop = FALSE]
+        A <- A[, -iM, drop = FALSE]
+    }
+
+    if (is.null(AAt)) AAt <- tcrossprod(A)
+    if (is.null(XAt)) XAt <- tcrossprod(X, A)
+    if (is.null(x2))  x2 <- matrixStats::rowSums2(X * X)
+    if (is.null(row_rss))
+        row_rss <- pmax(x2 - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
+    if (is.null(row_weights)) row_weights <- weight_fun(row_rss)
+    .aa_check_row_weights(row_weights, nrow(X))
+    if (is.null(xss)) xss <- as.numeric(row_weights %*% x2)
+    if (is.null(rss)) rss <- as.numeric(row_weights %*% row_rss)
+
+    if (return_S_terms && (is.null(StX) || is.null(StS))) {
+        S_weighted <- S * row_weights
+        if (is.null(StX)) StX <- crossprod(S_weighted, X)
+        if (is.null(StS)) StS <- crossprod(S_weighted, S)
+    }
+    if (!return_S_terms) {
+        StX <- NULL
+        StS <- NULL
+    }
+
+    list(
+        rss = rss,
+        xss = xss,
+        x2 = x2,
+        row_rss = row_rss,
+        row_weights = row_weights,
+        StS = StS,
+        StX = StX,
+        AAt = AAt,
+        XAt = XAt,
+        A = A
+    )
+}
+
+
 .aa_update_loss <- function(loss, i, loss_terms, verbose, max_kappa = 1) {
+    # Update loss metrics: add row "i" (current iteration) to the loss dataframe
     loss[["rss"]][i] <- loss_terms[["rss"]]
     loss[["r2"]][i]  <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
+
+    # Compute condition numbers
     if (i %% 10 != 0) {
         loss[["k_S"]][i] <- NA_real_
         loss[["k_A"]][i] <- NA_real_
     } else if (max_kappa > 1) {
-        loss[["k_S"]][i] <- sqrt(1/rcond(loss_terms[["StS"]]))
+        loss[["k_S"]][i] <- sqrt(1 / rcond(loss_terms[["StS"]]))
         A <- loss_terms[["A"]]
         Gram <- if (nrow(A) < ncol(A)) loss_terms[["AAt"]] else crossprod(A)
-        loss[["k_A"]][i] <- sqrt(1/rcond(Gram))
+        loss[["k_A"]][i] <- sqrt(1 / rcond(Gram))
     } else {
         loss[["k_S"]][i] <- max_kappa
         loss[["k_A"]][i] <- max_kappa
     }
-    return(loss)
+    loss
 }
 
+# Check convergence based on relative RSS improvement and R2 threshold
 .aa_check_convergence <- function(loss, i, tol, tol_r2, max_kappa, verbose) {
     j <- i + 1L  # save some typing...
     # Main
@@ -467,20 +497,24 @@ effic <- function(X, Y) {
     converged
 }
 
+# Format output of archetypes fitting into "archetypes" S3 object
 .aa_prepare_output <- function(X, A, B, S,
                                i, loss, converged,
                                undo_scale, max_iter, verbose, delta = 0,
                                data = NULL, call = NULL, A0 = NULL) {
 
+    # Format loss dataframe: keep only rows up to iteration "i" and reset row names
     j <- i + 1L
     loss <- as.data.frame(loss)[1:j, , drop = FALSE]
     rownames(loss) <- NULL
 
+    # Undo scaling of archetype coordinates to return them in the original data space
     archetype_names <- if (!is.null(A0)) rownames(A0) else rownames(A)
     A <- undo_scale(A, X)
     if (!is.null(A0))
         A0 <- undo_scale(A0, X)
 
+    # set row and column names for output matrices
     if (is.null(archetype_names))
         archetype_names <- paste0("A", seq_len(nrow(A)))
     rownames(A) <- rownames(B) <- colnames(S) <- archetype_names
@@ -488,6 +522,7 @@ effic <- function(X, Y) {
         rownames(A0) <- archetype_names
     colnames(B) <- rownames(S) <- rownames(X)
 
+    # Warn or message about convergence
     if (!converged) {
         fmt <- "Algorithm did not converge after %d iterations"
         warning(sprintf(fmt, max_iter))
@@ -501,7 +536,7 @@ effic <- function(X, Y) {
         message(sprintf(fmt, i, loss[j, "rss"], loss[j, "r2"]))
     }
 
-    out <- archetypes(
+    archetypes(
         call         = call,
         data         = data,
         init         = A0,
@@ -512,5 +547,4 @@ effic <- function(X, Y) {
         loss         = loss,
         converged    = converged
     )
-    out
 }

@@ -61,19 +61,17 @@ archetypes_pgd <- function(data,
     # Input Check -------------------------------------------------------------
 
     # Generic Checks
-    .aa_check_inputs(
+    .aa_check_inputs( # nolint: object_usage_linter.
         data = data,
         K = K,
         tol = tol,
         tol_r2 = tol_r2,
         max_kappa = max_kappa,
-        eps = eps
+        eps = eps,
+        robust = robust,
+        tukey_c = tukey_c
     )
     # PGD specific checks
-    stopifnot("robust must be TRUE or FALSE" =
-                  is.logical(robust) && length(robust) == 1L && !is.na(robust))
-    stopifnot("tukey_c must be positive" =
-                  length(tukey_c) == 1L && is.finite(tukey_c) && tukey_c > 0)
     stopifnot("step_size must be positive" = step_size > 0)
     stopifnot("step_shrinkage must be between (0, 1)" = step_shrinkage > 0 && step_shrinkage < 1)
     stopifnot("delta must be single non-negative number" = length(delta) == 1 && delta >= 0)
@@ -95,11 +93,15 @@ archetypes_pgd <- function(data,
     cl <- match.call()
     pre <- .aa_preprocess(data, sd_threshold, weights, verbose)
     X <- pre[["X"]]                    # preprocessed data
-    # N <- nrow(X)
     undo_scale <- pre[["undo_scale"]]  # function to undo preprocessing
-    xss <- pre[["xss"]]                # total sum of squares
     init <- .aa_preprocess_init(init, data, X)
     rm(pre)
+
+    weight_fun <- if (robust) {
+        function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
+    } else {
+        .aa_unit_weights
+    }
 
     # PGD specific preparations -----------------------------------------------
 
@@ -113,11 +115,6 @@ archetypes_pgd <- function(data,
         grad_B  <- grad_B_simplex
         project <- proj_simplex
     }
-    weight_fun <- if (robust) {
-        function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
-    } else {
-        .aa_unit_weights
-    }
 
     # Setup alpha updates
     update_alpha <- delta > 0
@@ -128,7 +125,16 @@ archetypes_pgd <- function(data,
 
     # Initialization  ---------------------------------------------------------
 
-    init_vars <- .aa_init_vars(X, K, init, init_args, eps, max_iter, verbose, delta = delta)
+    init_vars <- .aa_init_vars( # nolint: object_usage_linter.
+        X = X,
+        K = K,
+        init = init,
+        init_args = init_args,
+        eps = eps,
+        max_iter = max_iter,
+        verbose = verbose,
+        delta = delta
+    )
     A0 <- init_vars[["A"]]
     B  <- init_vars[["B"]]
     S  <- init_vars[["S"]]
@@ -143,21 +149,15 @@ archetypes_pgd <- function(data,
 
     # Compute auxiliary variables
     A     <- A0                # (K x M) = Archetypes = a*B %*% X
-    XAt   <- tcrossprod(X, A)  # (N x K)
-    XXt   <- tcrossprod(X)     # (N x N)
-    loss_terms <- .aa_loss_terms(
-        X,
-        A,
-        S,
-        weight_fun = weight_fun,
-        return_S_terms = TRUE
-    )
+    loss_terms <- .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE)
     row_weights <- loss_terms[["row_weights"]]
+    XAt   <- loss_terms[["XAt"]] # (N x K)
     AAt   <- loss_terms[["AAt"]] # (K x K)
     StS   <- loss_terms[["StS"]] # (K x K)
     StX   <- loss_terms[["StX"]] # (K x M)
-    xss   <- loss_terms[["xss"]]
-    rss   <- loss_terms[["rss"]]
+    xss   <- loss_terms[["xss"]] # scalar
+    rss   <- loss_terms[["rss"]] # scalar
+    XXt   <- tcrossprod(X)       # (N x N)
     StXXt <- crossprod(S * row_weights, XXt) # (K x N)
 
     # Loss

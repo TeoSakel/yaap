@@ -143,8 +143,6 @@ furthest_first <- function(X, K, ...) {
 
 
 kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"), ...) {
-    # Soft version of furthest first initialization
-    # samples from furthest points instead of always picking the furthest
 
     b <- integer(K)  # indices of archetypes
 
@@ -263,10 +261,10 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
     b
 }
 
+# Compute the distance to the nearest archetype for each sample
+# X is a matrix of samples
+# ind is a vector of indices selecting the archetypes from X
 .dist_to_nearest_archetype <- function(X, ind) {
-    # Compute the distance to the nearest archetype for each sample
-    # X is a matrix of samples
-    # ind is a vector of indices selecting the archetypes from X
     A <- X[ind, , drop = FALSE]  # archetypes
     dists <- .pdist2(A, X)
     matrixStats::colMins(dists)

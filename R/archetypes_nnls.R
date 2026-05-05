@@ -55,41 +55,40 @@ archetypes_nnls <- function(data,
     # Input Checks  -----------------------------------------------------------
 
     # Generic Checks
-    .aa_check_inputs(
+    .aa_check_inputs( # nolint: object_usage_linter.
         data = data,
         K = K,
         tol = tol,
         tol_r2 = tol_r2,
         max_kappa = max_kappa,
-        eps = eps
+        eps = eps,
+        robust = robust,
+        tukey_c = tukey_c
     )
+
+    # Edge Case checks
+    out <- .aa_checks_edge_cases(data, K, verbose)  # edge cases
+    if (!is.null(out)) return(out)  # return early if edge case
+
     # NNLS specific checks
     ols_solver <- match.arg(ols_solver)
-    stopifnot("robust must be TRUE or FALSE" =
-                  is.logical(robust) && length(robust) == 1L && !is.na(robust))
-    stopifnot("tukey_c must be positive" =
-                  length(tukey_c) == 1L && is.finite(tukey_c) && tukey_c > 0)
     stopifnot("`bigM` must be greater than 0" = bigM > 0)
+
+    # Prepossessing Data  -----------------------------------------------------
+
+    cl <- match.call()
+
     weight_fun <- if (robust) {
         function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
     } else {
         .aa_unit_weights
     }
 
-    # Edge Case checks
-    out <- .aa_checks_edge_cases(data, K, verbose)  # edge cases
-    if (!is.null(out)) return(out)  # return early if edge case
-
-    # Prepossessing Data  -----------------------------------------------------
-
-    cl <- match.call()
     pre <- .aa_preprocess(data, sd_threshold, weights, verbose, bigM = bigM)
     X <- pre[["X"]]                    # preprocessed data
-    # N <- nrow(X)
     undo_scale <- pre[["undo_scale"]]  # function to undo preprocessing
     init <- .aa_preprocess_init(init, data, X)
     rm(pre)
-
 
     # Initialize Variables  ---------------------------------------------------
 
