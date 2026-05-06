@@ -9,6 +9,11 @@
 #'   present, are used as archetype names.
 #' @param init_args list of additional arguments for the initialization function
 #' @param weights optional vector of sample weights (default: NULL)
+#' @param scale scaling or metric embedding used before fitting. `TRUE` applies
+#'   the default z-score preprocessing, `FALSE` leaves columns on their original
+#'   scale, a positive numeric vector divides columns by user-supplied scale
+#'   factors, and a symmetric positive-definite matrix applies the corresponding
+#'   feature metric embedding in the original data column space.
 #' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
 #' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
 #' @param sd_threshold threshold for feature standard deviation to filter
@@ -25,6 +30,8 @@
 #' @param step_size initial step size for the gradient descent (default: 1.0)
 #' @param max_iter_optimizer maximum iterations for the line search optimizer (default: 10)
 #' @param step_shrinkage factor to reduce step size if no improvement during line search (default: 0.5)
+#' @param max_no_update maximum consecutive outer iterations with no accepted
+#'   line-search update before PGD stops as stalled (default: 5)
 #'
 #' @returns An object of class \code{\link{archetypes}}
 #'
@@ -43,6 +50,7 @@ archetypes_pgd <- function(data,
                            init = "furthest_sum",
                            init_args = list(),
                            weights = NULL,
+                           scale = TRUE,
                            robust = FALSE,
                            tukey_c = 4.685,
                            sd_threshold = 1e-6,
@@ -57,8 +65,9 @@ archetypes_pgd <- function(data,
                            pseudo_pgd = TRUE,
                            step_size = 1.0,
                            max_iter_optimizer = 10L,
-                           step_shrinkage = 0.5) {
-    .aa_run(
+                           step_shrinkage = 0.5,
+                           max_no_update = 5L) {
+    .aa_run_aa_default(
         call = match.call(),
         data = data,
         K = K,
@@ -66,6 +75,7 @@ archetypes_pgd <- function(data,
         init = init,
         init_args = init_args,
         weights = weights,
+        scale = scale,
         robust = robust,
         tukey_c = tukey_c,
         sd_threshold = sd_threshold,
@@ -75,19 +85,17 @@ archetypes_pgd <- function(data,
         max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
-        method_args = list(
-            delta = delta,
-            pseudo_pgd = pseudo_pgd,
-            step_size = step_size,
-            max_iter_optimizer = max_iter_optimizer,
-            step_shrinkage = step_shrinkage
-        )
+        delta = delta,
+        pseudo_pgd = pseudo_pgd,
+        step_size = step_size,
+        max_iter_optimizer = max_iter_optimizer,
+        step_shrinkage = step_shrinkage,
+        max_no_update = max_no_update
     )
 }
 
 .aa_fit_pgd <- function(X,
                         weight_fun,
-                        robust,
                         max_iter,
                         tol,
                         tol_r2,
@@ -102,7 +110,8 @@ archetypes_pgd <- function(data,
                         pseudo_pgd,
                         step_size,
                         max_iter_optimizer,
-                        step_shrinkage) {
+                        step_shrinkage,
+                        max_no_update) {
     # Nomenclature following www.doi.org/10.1016/j.neucom.2011.06.033:
     #   X ~ SA (N x M) Data Matrix
     #   A = aBX (K x M) Archetypes
@@ -143,17 +152,22 @@ archetypes_pgd <- function(data,
 
     # Compute auxiliary variables
     A     <- A0                # (K x M) = Archetypes = a*B %*% X
-    loss_terms <- .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE)
+    loss_terms <- .aa_loss_terms(
+        X, A, S,
+        weight_fun = weight_fun,
+        return_S_terms = TRUE
+    )
+    XAt <- loss_terms[["XAt"]] # (N x K)
+    AAt <- loss_terms[["AAt"]] # (K x K)
+    StS <- loss_terms[["StS"]] # (K x K)
+    StX <- loss_terms[["StX"]] # (K x M)
+    xss <- loss_terms[["xss"]] # scalar
+    rss <- loss_terms[["rss"]] # scalar
+    XXt <- tcrossprod(X)       # (N x N)
+    row_xss <- loss_terms[["row_xss"]]  # (N x 1) row-wise sum of squares; invariant for fixed X
     row_weights <- loss_terms[["row_weights"]]
-    XAt   <- loss_terms[["XAt"]] # (N x K)
-    AAt   <- loss_terms[["AAt"]] # (K x K)
-    StS   <- loss_terms[["StS"]] # (K x K)
-    StX   <- loss_terms[["StX"]] # (K x M)
-    x2    <- loss_terms[["x2"]]  # (N x 1) row-wise sum of squares; invariant for fixed X
-    xss   <- loss_terms[["xss"]] # scalar
-    rss   <- loss_terms[["rss"]] # scalar
-    XXt   <- tcrossprod(X)       # (N x N)
-    StXXt <- crossprod(S * row_weights, XXt) # (K x N)
+    S_weighted <- loss_terms[["S_weighted"]]
+    StXXt <- crossprod(S_weighted, XXt) # (K x N)
 
     loss <- .aa_update_loss(
         loss,
@@ -168,17 +182,19 @@ archetypes_pgd <- function(data,
     step_S <- step_size # mu_S in the paper
     step_B <- step_size # mu_C in the paper
     step_a <- step_size # mu_a in the paper
+    no_update <- 0L
 
     # Main optimization loop  -------------------------------------------------
 
     if (verbose) message("Starting optimization loop...")
     for (i in seq_len(max_iter)) {
+        accepted_update <- FALSE
+
         ## Update S
-        grad <- grad_S(S, AAt, XAt) # (N x K) - diag(a) is absorbed in A
-        grad <- grad * row_weights
+        grad <- grad_S(S, AAt, XAt, row_weights = row_weights) # (N x K) - diag(a) is absorbed in A
         for (k in seq_len(max_iter_optimizer)) { # line search
             S_new   <- project(S - step_S * grad, eps = eps)
-            S_new_weighted <- S_new * row_weights
+            S_new_weighted <- .aa_weight_rows(S_new, row_weights)
             StS_new <- crossprod(S_new_weighted, S_new)
             StX_new <- crossprod(S_new_weighted, X)
             rss_new <- xss - 2 * sum(A * StX_new) + sum(StS_new * AAt)
@@ -189,6 +205,7 @@ archetypes_pgd <- function(data,
                 rss    <- rss_new
                 StXXt  <- crossprod(S_new_weighted, XXt)
                 step_S <- step_S / step_shrinkage # leave room for shrinkage
+                accepted_update <- TRUE
                 break
             }
             step_S <- step_S * step_shrinkage
@@ -208,6 +225,7 @@ archetypes_pgd <- function(data,
                 AAt <- AAt_new
                 XAt <- tcrossprod(X, A)
                 step_B <- step_B / step_shrinkage
+                accepted_update <- TRUE
                 break
             }
             step_B <- step_B * step_shrinkage
@@ -229,27 +247,25 @@ archetypes_pgd <- function(data,
                     AAt <- AAt_new
                     XAt <- sweep(XAt, 2, a_update, "*")
                     step_a <- step_a / step_shrinkage # leave room for shrinkage
+                    accepted_update <- TRUE
                     break
                 }
                 step_a <- step_a * step_shrinkage
             }
         }
 
-        loss_terms <- if (robust) {
-            .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE,
-                           x2 = x2)
-        } else {
-            .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE,
-                           xss = xss, rss = rss, x2 = x2, row_weights = row_weights,
-                           StS = StS, StX = StX, AAt = AAt, XAt = XAt)
-        }
+        loss_terms <- .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE,
+                                     xss = xss, rss = rss, row_xss = row_xss,
+                                     row_weights = row_weights,
+                                     StS = StS, StX = StX, AAt = AAt, XAt = XAt)
         row_weights <- loss_terms[["row_weights"]]
         AAt   <- loss_terms[["AAt"]]
         StS   <- loss_terms[["StS"]]
         StX   <- loss_terms[["StX"]]
         xss   <- loss_terms[["xss"]]
         rss   <- loss_terms[["rss"]]
-        StXXt <- crossprod(S * row_weights, XXt)
+        S_weighted <- loss_terms[["S_weighted"]]
+        StXXt <- crossprod(S_weighted, XXt)
 
         # Check convergence
         loss <- .aa_update_loss(
@@ -259,6 +275,32 @@ archetypes_pgd <- function(data,
             verbose = verbose,
             max_kappa = max_kappa
         )
+        if (!accepted_update) {
+            no_update <- no_update + 1L
+            step_S <- step_S * step_shrinkage
+            step_B <- step_B * step_shrinkage
+            if (update_alpha)
+                step_a <- step_a * step_shrinkage
+
+            if (verbose) {
+                fmt <- paste(
+                    "Iteration %d: no line-search update accepted;",
+                    "shrinking steps (no-update %d/%d)"
+                )
+                message(sprintf(fmt, i, no_update, max_no_update))
+            }
+            if (no_update >= max_no_update) {
+                fmt <- paste(
+                    "PGD stalled: no line-search update accepted after",
+                    "%d consecutive step shrinkages"
+                )
+                warning(sprintf(fmt, max_no_update), call. = FALSE)
+                break
+            }
+            next
+        }
+
+        no_update <- 0L
         converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
         if (converged) break
     }
@@ -278,9 +320,9 @@ archetypes_pgd <- function(data,
 
 # Gradient functions for RSS-normed archetypes analysis
 # ||X - SBX||^2 = tr(XXt - 2SBXXt + SBXXBtSt)
-grad_S_simplex <- function(S, AAt, XAt) {
+grad_S_simplex <- function(S, AAt, XAt, row_weights = NULL) {
     # 2 * (SBXXtBt - XXtBt) = 2 * (SAAt - XAt)
-    S %*% AAt - XAt
+    .aa_weight_rows(S %*% AAt - XAt, row_weights)
 }
 
 grad_B_simplex <- function(B, A, X, StS, StXXt) {

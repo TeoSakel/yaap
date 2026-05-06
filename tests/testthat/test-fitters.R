@@ -52,8 +52,50 @@ test_that("common fitter defaults are synchronized", {
 
     expect_identical(pgd_formals[["sd_threshold"]], nnls_formals[["sd_threshold"]])
     expect_identical(pgd_formals[["max_iter"]], nnls_formals[["max_iter"]])
-    expect_identical(formals(run_aa)[["sd_threshold"]], nnls_formals[["sd_threshold"]])
-    expect_identical(formals(run_aa)[["max_iter"]], nnls_formals[["max_iter"]])
+    expect_identical(formals(run_aa.default)[["sd_threshold"]], nnls_formals[["sd_threshold"]])
+    expect_identical(formals(run_aa.default)[["max_iter"]], nnls_formals[["max_iter"]])
+})
+
+test_that("run_aa is an S3 generic", {
+    expect_true(isS3stdGeneric(run_aa))
+    expect_true("run_aa.default" %in% methods("run_aa"))
+    expect_true("run_aa.fd" %in% methods("run_aa"))
+})
+
+test_that("run_aa handles fda fd objects through basis coefficients", {
+    testthat::skip_if_not_installed("fda")
+
+    set.seed(1)
+    basis <- fda::create.bspline.basis(rangeval = c(0, 1), nbasis = 5L)
+    coefs <- matrix(
+        seq_len(25L) / 25,
+        nrow = 5L,
+        ncol = 5L,
+        dimnames = list(paste0("b", 1:5), paste0("x", 1:5))
+    )
+    fd <- fda::fd(coefs, basis)
+
+    fit <- suppressWarnings(run_aa(fd, K = 2L, max_iter = 1L, sd_threshold = 0))
+
+    expect_s3_class(fit, "archetypes")
+    expect_matrix_dim(fit[["coordinates"]], 2L, 5L)
+    expect_matrix_dim(fit[["init"]], 2L, 5L)
+    expect_s3_class(fit[["data"]], "fd")
+    expect_matrix_dim(fit[["coefficients"]], 2L, 5L)
+    expect_matrix_dim(fit[["compositions"]], 5L, 2L)
+    expect_equal(names(fit), rownames(fit[["coefficients"]]))
+    expect_s3_class(fitted(fit), "fd")
+    expect_s3_class(residuals(fit), "fd")
+    expect_matrix_dim(predict(fit, fd), 5L, 2L)
+
+    A_fd <- coordinates_fd(fit)
+    expect_s3_class(A_fd, "fd")
+    expect_equal(dim(stats::coef(A_fd)), c(5L, 2L))
+
+    names(fit) <- c("left", "right")
+    expect_equal(names(fit), c("left", "right"))
+    expect_equal(colnames(stats::coef(coordinates_fd(fit))), c("left", "right"))
+    expect_s3_class(coordinates_fd(fit, basis = basis), "fd")
 })
 
 test_that("fitters preserve the user-facing call", {
@@ -73,7 +115,166 @@ test_that("run_aa validates method and method-specific arguments", {
 
     expect_error(run_aa(X, K = 3L, method = "bad"), "should be one of")
     expect_error(run_aa(X, K = 3L, method = "pgd", step_size = 0), "step_size")
+    expect_error(run_aa(X, K = 3L, method = "pgd", max_no_update = 0), "max_no_update")
     expect_error(run_aa(X, K = 3L, method = "nnls", bigM = 0), "bigM")
+    expect_error(run_aa(X, K = 3L, method = "nnls", max_no_update = 0), "max_no_update")
+})
+
+test_that("PGD stalls instead of converging when no updates are accepted", {
+    set.seed(1)
+    X <- toy_matrix()
+
+    expect_warning(
+        withCallingHandlers(
+            fit <- run_aa(
+                X,
+                K = 3L,
+                method = "pgd",
+                max_iter = 10L,
+                step_size = 1e100,
+                max_iter_optimizer = 1L,
+                max_no_update = 2L
+            ),
+            warning = function(w) {
+                if (grepl("Algorithm did not converge", conditionMessage(w)))
+                    invokeRestart("muffleWarning")
+            }
+        ),
+        "PGD stalled"
+    )
+
+    expect_false(fit[["converged"]])
+    expect_equal(nrow(fit[["loss"]]), 3L)
+    expect_equal(diff(fit[["loss"]][["rss"]]), c(0, 0))
+})
+
+test_that("scale preprocessing supports TRUE, FALSE, vector, and matrix transforms", {
+    X <- toy_matrix()
+    pre_default <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE)
+    pre_raw <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE, scale = FALSE)
+    sd <- apply(X, 2L, stats::sd)
+    pre_vector <- .aa_preprocess(
+        X,
+        sd_threshold = 0,
+        weights = NULL,
+        verbose = FALSE,
+        scale = sd
+    )
+    pre_matrix <- .aa_preprocess(
+        X,
+        sd_threshold = 0,
+        weights = NULL,
+        verbose = FALSE,
+        scale = diag(1 / sd^2)
+    )
+
+    expect_equal(unname(colMeans(pre_default[["X"]])), rep(0, ncol(X)), tolerance = 1e-12)
+    expect_equal(unname(apply(pre_default[["X"]], 2L, stats::sd)), rep(1, ncol(X)))
+    expect_equal(pre_raw[["X"]], X, ignore_attr = TRUE)
+    expect_equal(
+        as.matrix(dist(pre_default[["X"]]))^2,
+        as.matrix(dist(pre_matrix[["X"]]))^2,
+        tolerance = 1e-10
+    )
+    expect_equal(pre_vector[["X"]], pre_matrix[["X"]], ignore_attr = TRUE)
+    expect_equal(
+        pre_vector[["undo_scale"]](pre_vector[["X"]][1:2, ], pre_vector[["X"]]),
+        pre_matrix[["undo_scale"]](pre_matrix[["X"]][1:2, ], pre_matrix[["X"]])
+    )
+    expect_equal(pre_raw[["undo_scale"]](pre_raw[["X"]][1:2, ], pre_raw[["X"]]), X[1:2, ])
+})
+
+test_that("automatic bigM preserves old default on z-scored data and scales raw data", {
+    X <- toy_matrix()
+
+    pre_default <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE, bigM = NULL)
+    pre_raw <- .aa_preprocess(
+        10 * X,
+        sd_threshold = 0,
+        weights = NULL,
+        verbose = FALSE,
+        bigM = NULL,
+        scale = FALSE
+    )
+
+    expect_equal(attr(pre_default[["X"]], "bigM.value"), 200)
+    expect_gt(attr(pre_raw[["X"]], "bigM.value"), 200)
+})
+
+test_that("scale validation rejects invalid inputs", {
+    X <- toy_matrix()
+
+    expect_error(archetypes_pgd(X, K = 3L, scale = diag(3)), "one row and column per feature")
+    expect_error(archetypes_pgd(X, K = 3L, scale = matrix(c(1, 2, 0, 1), 2)), "symmetric")
+    bad_scale <- diag(2)
+    bad_scale[1, 1] <- NA_real_
+    expect_error(archetypes_pgd(X, K = 3L, scale = bad_scale), "missing or non-finite")
+    expect_error(archetypes_pgd(X, K = 3L, scale = c(1, 1, 1)), "one value per feature")
+    expect_error(archetypes_pgd(X, K = 3L, scale = c(1, 0)), "positive")
+    expect_error(archetypes_pgd(X, K = 3L, scale = diag(c(1, 0))), "positive definite")
+})
+
+test_that("PGD and NNLS accept matrix scale and return original-unit coordinates", {
+    set.seed(5)
+    X <- toy_matrix()
+    scale <- matrix(c(2, 0.3, 0.3, 1), nrow = 2L)
+
+    pgd <- suppressWarnings(archetypes_pgd(X, K = 3L, scale = scale, max_iter = 2L))
+    nnls <- suppressWarnings(archetypes_nnls(X, K = 3L, scale = scale, max_iter = 2L))
+
+    for (fit in list(pgd, nnls)) {
+        expect_s3_class(fit, "archetypes")
+        expect_matrix_dim(fit[["coordinates"]], 3L, ncol(X))
+        expect_equal(colnames(fit[["coordinates"]]), colnames(X))
+        expect_true(all(is.finite(fit[["coordinates"]])))
+        expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+    }
+})
+
+test_that("NNLS matrix scale keeps bigM outside returned coordinates", {
+    set.seed(6)
+    X <- toy_matrix()
+    scale <- Matrix::Diagonal(n = ncol(X), x = c(2, 1))
+
+    fit <- suppressWarnings(archetypes_nnls(X, K = 3L, scale = scale, max_iter = 1L, bigM = 200))
+
+    expect_matrix_dim(fit[["coordinates"]], 3L, ncol(X))
+    expect_false("bigM" %in% colnames(fit[["coordinates"]]))
+    expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+})
+
+test_that("NNLS keeps previous iterate when candidate RSS does not improve", {
+    set.seed(1)
+    X <- toy_matrix()
+
+    fit <- suppressWarnings(archetypes_nnls(
+        X,
+        K = 3L,
+        max_iter = 20L,
+        bigM = 5,
+        max_no_update = 2L
+    ))
+    loss <- fit[["loss"]]
+
+    expect_false(fit[["converged"]])
+    expect_true(all(diff(loss[["rss"]]) <= 0))
+    expect_equal(tail(diff(loss[["rss"]]), 2L), c(0, 0))
+})
+
+test_that("NNLS warns when raw coefficients are far from simplex", {
+    set.seed(1)
+    X <- toy_matrix()
+
+    expect_warning(
+        withCallingHandlers(
+            archetypes_nnls(X, K = 3L, max_iter = 1L, bigM = 1),
+            warning = function(w) {
+                if (grepl("Algorithm did not converge", conditionMessage(w)))
+                    invokeRestart("muffleWarning")
+            }
+        ),
+        "not close to simplex"
+    )
 })
 
 test_that("sparse preprocessing preserves sparse structure without centering", {

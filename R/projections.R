@@ -107,7 +107,7 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     method <- match.arg(method)
     S <- switch(
         method,
-        nnls = fit_nnls(X, t(A), eps, project),  # TODO: add bigM?
+        nnls = project(fit_nnls(X, t(A)), eps = eps),  # TODO: add bigM?
         QP   = fit_qp(A, X, eps, proj_l1, lambda)
     )
 

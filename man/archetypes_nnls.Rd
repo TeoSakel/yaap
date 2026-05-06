@@ -10,6 +10,7 @@ archetypes_nnls(
   init = "furthest_sum",
   init_args = list(),
   weights = NULL,
+  scale = TRUE,
   robust = FALSE,
   tukey_c = 4.685,
   sd_threshold = 1e-06,
@@ -20,7 +21,8 @@ archetypes_nnls(
   eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
   ols_solver = c("qr", "ginv", "BFGS"),
-  bigM = 200
+  bigM = NULL,
+  max_no_update = 5L
 )
 }
 \arguments{
@@ -37,6 +39,12 @@ archetype names.}
 \item{init_args}{list of additional arguments for the initialization function}
 
 \item{weights}{optional vector of sample weights (default: NULL)}
+
+\item{scale}{scaling or metric embedding used before fitting. \code{TRUE} applies
+the default z-score preprocessing, \code{FALSE} leaves columns on their original
+scale, a positive numeric vector divides columns by user-supplied scale
+factors, and a symmetric positive-definite matrix applies the corresponding
+feature metric embedding in the original data column space.}
 
 \item{robust}{whether to use Tukey bisquare row reweighting (default: FALSE)}
 
@@ -60,13 +68,24 @@ low-variance features (default: 1e-6)}
 
 \item{ols_solver}{method for solving the OLS problem min_A X = SA (default: "qr")}
 
-\item{bigM}{large constant to enforce simplex constraint (default: 200)}
+\item{bigM}{large constant to enforce simplex constraint, or \code{NULL} to set it
+from the dimension-adjusted RMS feature standard deviation after
+preprocessing (default: \code{NULL}).}
+
+\item{max_no_update}{maximum consecutive outer iterations with no RSS
+improvement before NNLS stops as stalled (default: 5)}
 }
 \value{
 An object of class \code{\link{archetypes}}
 }
 \description{
 Perform Archetypal Analysis using NNLS
+}
+\details{
+NNLS uses the \code{bigM} column to make nonnegative least-squares coefficients
+approximately simplex-constrained. If raw NNLS coefficient row sums are far
+from one, a warning is emitted because the defensive simplex projection is
+materially changing the block solution.
 }
 \examples{
 toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))

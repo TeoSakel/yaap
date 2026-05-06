@@ -22,6 +22,7 @@ Imports:
 Suggests:
     archetypes,
     bench,
+    fda,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0

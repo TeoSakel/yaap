@@ -35,7 +35,7 @@ row-sum relaxation.}
 
 \item{call}{The matched function call that created the object.}
 
-\item{data}{Optional original data matrix.}
+\item{data}{Optional original data.}
 
 \item{init}{Optional initial archetype coordinates.}
 }

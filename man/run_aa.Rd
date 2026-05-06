@@ -2,15 +2,20 @@
 % Please edit documentation in R/run_aa.R
 \name{run_aa}
 \alias{run_aa}
+\alias{run_aa.default}
+\alias{run_aa.fd}
 \title{Run Archetypal Analysis}
 \usage{
-run_aa(
+run_aa(data, K, ...)
+
+\method{run_aa}{default}(
   data,
   K,
   method = c("pgd", "nnls"),
   init = "furthest_sum",
   init_args = list(),
   weights = NULL,
+  scale = TRUE,
   robust = FALSE,
   tukey_c = 4.685,
   sd_threshold = 1e-06,
@@ -22,11 +27,19 @@ run_aa(
   verbose = FALSE,
   ...
 )
+
+\method{run_aa}{fd}(data, K, ...)
 }
 \arguments{
-\item{data}{data matrix (rows = samples, columns = dimensions)}
+\item{data}{data matrix (rows = samples, columns = dimensions), or an
+object with a class-specific \code{run_aa()} method.}
 
 \item{K}{number of archetypes}
+
+\item{...}{method-specific arguments. For \code{"pgd"}, these are \code{delta},
+\code{pseudo_pgd}, \code{step_size}, \code{max_iter_optimizer}, \code{step_shrinkage}, and
+\code{max_no_update}. For \code{"nnls"}, these are \code{ols_solver}, \code{bigM}, and
+\code{max_no_update}.}
 
 \item{method}{fitting method. One of \code{"pgd"} or \code{"nnls"} (default: \code{"pgd"}).}
 
@@ -39,6 +52,12 @@ archetype names.}
 \item{init_args}{list of additional arguments for the initialization function}
 
 \item{weights}{optional vector of sample weights (default: NULL)}
+
+\item{scale}{scaling or metric embedding used before fitting. \code{TRUE} applies
+the default z-score preprocessing, \code{FALSE} leaves columns on their original
+scale, a positive numeric vector divides columns by user-supplied scale
+factors, and a symmetric positive-definite matrix applies the corresponding
+feature metric embedding in the original data column space.}
 
 \item{robust}{whether to use Tukey bisquare row reweighting (default: FALSE)}
 
@@ -59,10 +78,6 @@ low-variance features (default: 1e-6)}
 (default: 0 for sparse input 1e-8 for dense)}
 
 \item{verbose}{whether to print progress messages (default: FALSE)}
-
-\item{...}{method-specific arguments. For \code{"pgd"}, these are \code{delta},
-\code{pseudo_pgd}, \code{step_size}, \code{max_iter_optimizer}, and \code{step_shrinkage}.
-For \code{"nnls"}, these are \code{ols_solver} and \code{bigM}.}
 }
 \value{
 An object of class \code{\link{archetypes}}
@@ -72,9 +87,34 @@ An object of class \code{\link{archetypes}}
 It handles shared validation, preprocessing, initialization, and output
 formatting, then delegates the optimization loop to the selected method.
 }
+\details{
+\code{run_aa.fd()} fits archetypal analysis to the coefficient matrix of an
+\code{fda::fd} object. The feature scaling is set to the basis inner-product
+matrix from \code{fda::eval.penalty(data$basis, Lfdobj = 0)}, so
+\code{scale} cannot be supplied to this method. The fitted
+\code{coordinates} remain a coefficient matrix; use \code{\link[=coordinates_fd]{coordinates_fd()}} to convert
+them to an \code{fda::fd} object on demand.
+}
 \examples{
 toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
 run_aa(as.matrix(toy), K = 3)
 run_aa(as.matrix(toy), K = 3, method = "nnls")
+
+\dontrun{
+# Functional data example based on fda::growth
+library(fda)
+data(growth, package = "fda")
+
+hgtm <- t(growth$hgtm)
+basis_fd <- create.bspline.basis(c(1, ncol(hgtm)), 10)
+temp_fd <- Data2fd(
+    argvals = seq_len(ncol(hgtm)),
+    y = growth$hgtm,
+    basisobj = basis_fd
+)
+
+fit_fd <- run_aa(temp_fd, K = 3, max_iter = 20)
+arch_fd <- coordinates_fd(fit_fd)
+}
 
 }

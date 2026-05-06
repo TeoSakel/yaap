@@ -10,6 +10,7 @@ archetypes_pgd(
   init = "furthest_sum",
   init_args = list(),
   weights = NULL,
+  scale = TRUE,
   robust = FALSE,
   tukey_c = 4.685,
   sd_threshold = 1e-06,
@@ -23,7 +24,8 @@ archetypes_pgd(
   pseudo_pgd = TRUE,
   step_size = 1,
   max_iter_optimizer = 10L,
-  step_shrinkage = 0.5
+  step_shrinkage = 0.5,
+  max_no_update = 5L
 )
 }
 \arguments{
@@ -40,6 +42,12 @@ present, are used as archetype names.}
 \item{init_args}{list of additional arguments for the initialization function}
 
 \item{weights}{optional vector of sample weights (default: NULL)}
+
+\item{scale}{scaling or metric embedding used before fitting. \code{TRUE} applies
+the default z-score preprocessing, \code{FALSE} leaves columns on their original
+scale, a positive numeric vector divides columns by user-supplied scale
+factors, and a symmetric positive-definite matrix applies the corresponding
+feature metric embedding in the original data column space.}
 
 \item{robust}{whether to use Tukey bisquare row reweighting (default: FALSE)}
 
@@ -70,6 +78,9 @@ low-variance features (default: 1e-6)}
 \item{max_iter_optimizer}{maximum iterations for the line search optimizer (default: 10)}
 
 \item{step_shrinkage}{factor to reduce step size if no improvement during line search (default: 0.5)}
+
+\item{max_no_update}{maximum consecutive outer iterations with no accepted
+line-search update before PGD stops as stalled (default: 5)}
 }
 \value{
 An object of class \code{\link{archetypes}}

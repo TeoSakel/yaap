@@ -16,9 +16,9 @@
 #'   relaxation of coefficient row sums away from 1.
 #' @param loss Data frame containing per-iteration metrics
 #' @param converged Logical. Whether the optimization converged.
-#' @param data Numeric matrix (N x M) with the original data used for
-#'   fitting. If supplied, residuals are computed against
-#'   `compositions %*% coordinates`.
+#' @param data Original data used for fitting. Usually a numeric matrix (N x M),
+#'   but class-specific entry points may store the original input object. If
+#'   supplied, residuals are computed against fitted values.
 #' @param call The matched function call that created the object (defaults to `match.call()`).
 #' @param init Optional numeric matrix (K x M) with the initial archetype
 #'   coordinates before optimization.
@@ -53,7 +53,7 @@
 #' - `init` - optional initial coordinates.
 #' - `loss` - data frame of per-iteration metrics.
 #' - `converged` - logical convergence flag.
-#' - `data` - optional original data matrix.
+#' - `data` - optional original data.
 #' - `residuals` - `data - compositions %*% coordinates`
 #' - `call` - the matched call.
 #'
@@ -102,7 +102,7 @@ archetypes <- function(coordinates,
 #' @param converged Logical. Whether the optimization converged.
 #' @param AIC Numeric scalar with a precomputed AIC value.
 #' @param call The matched function call that created the object.
-#' @param data Optional original data matrix.
+#' @param data Optional original data.
 #' @param init Optional initial archetype coordinates.
 new_archetypes <- function(coordinates,
                            coefficients,
@@ -265,7 +265,8 @@ names.archetypes <- function(x)
 #' @param ... Ignored.
 #'
 #' @return
-#' A numeric matrix (N x M) of fitted values.
+#' Fitted values. Usually a numeric matrix (N x M); fd-backed fits return an
+#' `fda::fd` object.
 #'
 #' @seealso [archetypes()], [residuals.archetypes()],
 #'   [predict.archetypes()], [coefficients.archetypes()]
@@ -274,18 +275,22 @@ names.archetypes <- function(x)
 #' # Xhat <- fitted(fit)
 #'
 #' @exportS3Method
-fitted.archetypes <- function(object, ...)
-    return(with(object, compositions %*% coordinates))
+fitted.archetypes <- function(object, ...) {
+    X_hat <- with(object, compositions %*% coordinates)
+    if (inherits(object[["data"]], "fd"))
+        return(.aa_fd_from_rows(X_hat, object[["data"]], rownames(X_hat)))
+    X_hat
+}
 
 #' Residuals for archetypes objects
 #'
 #' @param object An object of class `archetypes`.
-#' @param data Numeric matrix (N x M) with the original data. If not provided, the
-#'   function attempts to use `object$data`.
+#' @param data Original data. If not provided, the function attempts to use
+#'   `object$data`.
 #' @param ... Ignored.
 #'
 #' @return
-#' A numeric matrix of residuals.
+#' Residuals in the same representation as `data`.
 #'
 #' @exportS3Method
 residuals.archetypes <- function(object, data = NULL, ...) {
@@ -300,7 +305,10 @@ residuals.archetypes <- function(object, data = NULL, ...) {
     } else {
         data
     }
-    X_hat <- fitted(object)
+    X_hat <- with(object, compositions %*% coordinates)
+    if (inherits(X, "fd"))
+        return(X - .aa_fd_from_rows(X_hat, X, rownames(X_hat)))
+
     stopifnot(all(dim(X) == dim(X_hat)))
     return(X - X_hat)
 }
@@ -312,7 +320,8 @@ residuals.archetypes <- function(object, data = NULL, ...) {
 #' given fixed archetype coordinates.
 #'
 #' @param object An object of class `archetypes`.
-#' @param newdata New data to fit. Must contain the features (columns) used to fit `object`.
+#' @param newdata New data to fit. Must contain the features (columns) used to
+#'   fit `object`; fd-backed fits may pass an `fda::fd` object.
 #' @param ... Passed to \code{\link{fit_simplex}}.
 #'
 #' @return
@@ -323,6 +332,8 @@ residuals.archetypes <- function(object, data = NULL, ...) {
 #' @exportS3Method
 predict.archetypes <- function(object, newdata, ...) {
     A <- object[["coordinates"]]
+    if (inherits(newdata, "fd"))
+        newdata <- .aa_fd_to_matrix(newdata)
     X <- if (!is.null(colnames(A))) {  # extract relevant columns
         if (inherits(newdata, "data.table")) {
             newdata[, colnames(A), with = FALSE]
@@ -464,7 +475,7 @@ plot.archetypes <- function(x,
         stop(msg)
     }
 
-    X <- as.matrix(X)
+    X <- if (inherits(X, "fd")) .aa_fd_to_matrix(X) else as.matrix(X)
     A <- as.matrix(x[["coordinates"]])
     if (ncol(X) != ncol(A)) {
         fmt <- "`data` has %d columns but `x$coordinates` has %d columns"
@@ -571,14 +582,74 @@ AIC.archetypes <- function(object, ...) {
     if (is.null(X))
         stop(paste("AIC was not precomputed because original data `X`",
                    "was not provided when constructing the archetypes object."))
+    X <- if (inherits(X, "fd")) .aa_fd_to_matrix(X) else X
 
     # Compute AIC
     K     <- nrow(object[["coordinates"]])        # Number of Archetypes
     nelem <- prod(dim(X))                         # number of elements in X
     rss   <- object[["loss"]][["rss"]]
-    X_hat <- fitted(object)
+    X_hat <- with(object, compositions %*% coordinates)
     aic   <- log(rss[length(rss)] / nelem) + 2 * (2*K - 1) / effic(X, X_hat)
 
     object[["AIC"]] <- aic  # cache for future calls
     return(aic)
+}
+
+.aa_fd_to_matrix <- function(x) {
+    if (!requireNamespace("fda", quietly = TRUE))
+        stop("Package `fda` is required for fd data.", call. = FALSE)
+    t(stats::coef(x))
+}
+
+.aa_fd_from_rows <- function(X, template, curve_names = NULL) {
+    if (!requireNamespace("fda", quietly = TRUE))
+        stop("Package `fda` is required for fd data.", call. = FALSE)
+
+    fdnames <- template[["fdnames"]]
+    if (is.null(curve_names))
+        curve_names <- rownames(X)
+    if (!is.null(curve_names))
+        fdnames[["reps"]] <- curve_names
+
+    fda::fd(t(X), template[["basis"]], fdnames = fdnames)
+}
+
+#' Convert archetype coordinates to functional data
+#'
+#' Reconstructs the fitted archetype coordinates as an `fda::fd` object. This
+#' is mainly useful for models fitted with [run_aa()] on `fda::fd` input, where
+#' the optimizer stores coordinates as a coefficient matrix.
+#'
+#' @param object An object of class \code{\link{archetypes}}.
+#' @param data Optional `fda::fd` object to use as the source for the basis and
+#'   functional data names. Defaults to `object$data`.
+#' @param basis Optional `fda` basis object. Used when `data` is not available.
+#' @param fdnames Optional `fdnames` list passed to `fda::fd()`. Defaults to
+#'   the names from `data`, with archetype names used as `reps`.
+#' @param ... Ignored.
+#'
+#' @return An `fda::fd` object whose columns are the archetype functions.
+#'
+#' @export
+coordinates_fd <- function(object, data = object[["data"]], basis = NULL, fdnames = NULL, ...) {
+    stopifnot(inherits(object, "archetypes"))
+    if (!requireNamespace("fda", quietly = TRUE))
+        stop("Package `fda` is required for `coordinates_fd()`.", call. = FALSE)
+
+    if (!is.null(data) && !inherits(data, "fd"))
+        stop("`data` must be an `fda::fd` object.", call. = FALSE)
+
+    if (is.null(basis))
+        basis <- data[["basis"]]
+    if (is.null(basis))
+        stop("No fd basis found. Supply `data` or `basis` explicitly.", call. = FALSE)
+
+    A <- object[["coordinates"]]
+    if (is.null(fdnames))
+        fdnames <- data[["fdnames"]]
+    if (is.null(fdnames))
+        fdnames <- list(args = "time", reps = rownames(A), funs = "values")
+    fdnames[["reps"]] <- rownames(A)
+
+    fda::fd(t(A), basis, fdnames = fdnames)
 }

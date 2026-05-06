@@ -12,7 +12,15 @@
     ifelse(u <= c, (1 - (u / c)^2)^2, 0)
 }
 
-.aa_unit_weights <- function(row_rss) rep(1, length(row_rss))
+.aa_trivial_row_weights <- function(row_weights) {
+    is.null(row_weights) || all(row_weights == 1)
+}
+
+.aa_weight_rows <- function(X, row_weights = NULL) {
+    if (.aa_trivial_row_weights(row_weights))
+        return(X)
+    X * row_weights
+}
 
 .aa_check_row_weights <- function(row_weights, n) {
     stopifnot("row_weights must match rows in X" = length(row_weights) == n)
@@ -128,7 +136,7 @@ effic <- function(X, Y) {
 
 # Archetypes Fitting Subroutines -----------------------------------------------------
 
-.aa_check_inputs <- function(data, tol, tol_r2, K, max_kappa, eps, robust, tukey_c) {
+.aa_check_inputs <- function(data, tol, tol_r2, K, max_kappa, eps, robust, tukey_c, scale = TRUE) {
     stopifnot("data contains missing values" = !any(is.na(data)))
     stopifnot("tol must be positive" = tol > 0)
     stopifnot("tol_r2 must be between (0, 1)" = tol_r2 >= 0 && tol_r2 <= 1)
@@ -141,6 +149,44 @@ effic <- function(X, Y) {
                   is.logical(robust) && length(robust) == 1L && !is.na(robust))
     stopifnot("tukey_c must be positive" =
                   length(tukey_c) == 1L && is.finite(tukey_c) && tukey_c > 0)
+    .aa_check_scale(scale, ncol(data))
+}
+
+.aa_check_scale <- function(scale, p) {
+    if (isTRUE(scale) || identical(scale, FALSE))
+        return(invisible(TRUE))
+
+    if (is.numeric(scale) && is.null(dim(scale))) {
+        stopifnot("vector scale must have one value per feature" = length(scale) == p)
+        stopifnot("vector scale contains missing or non-finite values" =
+                      !any(is.na(scale)) && all(is.finite(scale)))
+        stopifnot("vector scale must be positive" = all(scale > 0))
+        return(invisible(TRUE))
+    }
+
+    is_scale_matrix <- is.matrix(scale) || inherits(scale, "Matrix")
+    stopifnot("scale must be TRUE, FALSE, a numeric vector, or a dense or sparse matrix" =
+                  is_scale_matrix)
+    stopifnot("matrix scale must have one row and column per feature" =
+                  identical(dim(scale), c(p, p)))
+
+    values <- if (isS4(scale) && "x" %in% methods::slotNames(scale)) {
+        scale@x
+    } else {
+        as.vector(scale)
+    }
+    stopifnot("matrix scale must be numeric" = is.numeric(values))
+    stopifnot("matrix scale contains missing or non-finite values" =
+                  !any(is.na(values)) && all(is.finite(values)))
+    is_symmetric <- if (inherits(scale, "Matrix")) {
+        Matrix::isSymmetric(scale)
+    } else {
+        isSymmetric(scale)
+    }
+    stopifnot("matrix scale must be symmetric" = is_symmetric)
+    is_pd <- !inherits(try(chol(as.matrix(scale)), silent = TRUE), "try-error")
+    stopifnot("matrix scale must be positive definite" = is_pd)
+    invisible(TRUE)
 }
 
 
@@ -203,7 +249,7 @@ effic <- function(X, Y) {
 
     xss <- norm(X, type = "F")^2
     rss <- xss - nrow(X) * as.numeric(x_mean %*% x_mean)
-    loss <- data.frame(rss = rss, rsq = 1 - rss / xss, k_S = 1, k_A = 1)
+    loss <- data.frame(rss = rss, r2 = 1 - rss / xss, k_S = 1, k_A = 1)
 
     archetypes(
         call         = NULL,
@@ -224,6 +270,7 @@ effic <- function(X, Y) {
         sd_vals <- matrixStats::colSds(X)
     mask <- sd_vals >= sd_threshold
     M <- sum(mask)
+    attr(X, "scaled:scale") <- sd_vals
     if (M < ncol(X)) {
         # Throw Warning
         fmt <- "The following %d features are filtered out due to low variance: %s"
@@ -234,9 +281,11 @@ effic <- function(X, Y) {
         # Filter X
         x_attrs <- attributes(X)
         x_attrs[["mask"]] <- mask
+        x_attrs[["scaled:scale"]] <- sd_vals[mask]
         X <- X[, mask, drop = FALSE]
         if (inherits(X, "sparseMatrix")) {
             attr(X, "mask") <- mask
+            attr(X, "scaled:scale") <- sd_vals[mask]
         } else {
             attributes(X) <- x_attrs
         }
@@ -246,21 +295,79 @@ effic <- function(X, Y) {
 
 
 # Common subroutine to preprocess input data matrix:
-# - scale to 0 mean and unit variance
+# - optionally z-score or apply a matrix metric embedding
 # - filter out low-variance features
 # - apply user-provided sample weights (if any)
 # - add bigM intercept term (if bigM > 0) to "force" the simplex constraint during nnls fit
 # Returns a list with:
 # - X: preprocessed data matrix with attributes to undo scaling and filtering
 # - undo_scale: function to undo scaling and filtering of archetype coordinates
-.aa_preprocess <- function(data, sd_threshold, weights, verbose, bigM = 0) {
+.aa_preprocess <- function(data, sd_threshold, weights, verbose, bigM = 0, scale = TRUE) {
     if (verbose) message("Preprocessing data...")
 
-    X <- scale_safe(data)
+    original_center <- colMeans(data)
+    names(original_center) <- colnames(data)
+    scale_mode <- if (identical(scale, FALSE)) {
+        "none"
+    } else if (isTRUE(scale) || (is.numeric(scale) && is.null(dim(scale)))) {
+        "vector"
+    } else {
+        "matrix"
+    }
+
+    X <- if (inherits(data, "sparseMatrix")) {
+        data
+    } else {
+        as.matrix(data)
+    }
+    if (isTRUE(scale)) {
+        n <- nrow(data)
+        x_mean <- colMeans(data)
+        x2 <- colSums(data * data)
+        x_var <- pmax((x2 - n * x_mean * x_mean) / max(n - 1L, 1L), 0)
+        scale <- sqrt(x_var)
+        names(scale) <- colnames(data)
+
+        if (!inherits(data, "sparseMatrix")) {
+            X <- sweep(X, 2L, x_mean, "-")
+            attr(X, "scaled:center") <- x_mean
+        }
+        attr(X, "scaled:scale") <- scale
+    }
 
     # Filter out low-variance features
     X <- .filter_low_variance(X, sd_threshold)
+    mask <- attr(X, "mask")
+
+    if (identical(scale_mode, "matrix")) {
+        if (!is.null(mask))
+            scale <- scale[mask, mask, drop = FALSE]
+        scale_factor <- t(chol(as.matrix(scale)))
+        X <- as.matrix(X) %*% scale_factor
+        retained_names <- names(original_center)
+        if (!is.null(mask))
+            retained_names <- retained_names[mask]
+        colnames(X) <- retained_names
+        attr(X, "mask") <- mask
+        attr(X, "scale:factor") <- scale_factor
+    } else if (identical(scale_mode, "vector")) {
+        if (!is.null(mask))
+            scale <- scale[mask]
+        scale_factor <- ifelse(scale > 0, scale, 1)
+        x_attrs <- attributes(X)
+        X <- if (inherits(X, "sparseMatrix")) {
+            Matrix::colScale(X, 1 / scale_factor)
+        } else {
+            sweep(X, 2L, scale_factor, "/")
+        }
+        attributes(X) <- utils::modifyList(attributes(X), x_attrs)
+        attr(X, "scale:factor") <- scale_factor
+    }
+    attr(X, "scale:mode") <- scale_mode
+    attr(X, "restore:center") <- original_center
     N <- nrow(X) # number of samples
+    if (is.null(bigM))
+        bigM <- .aa_auto_bigM(X)
 
     # Weight samples by user-provided "importance" weights
     if (!is.null(weights)) {
@@ -273,7 +380,9 @@ effic <- function(X, Y) {
         stopifnot("Weights must be non-negative" = all(weights >= 0))
         # Rescale and apply weights
         weights <- weights / mean(weights) # normalize weights to mean 1
+        x_attrs <- attributes(X)
         X <- X * weights
+        attributes(X) <- utils::modifyList(attributes(X), x_attrs)
         attr(X, "weights") <- weights # store weights in X attributes
     }
 
@@ -287,6 +396,10 @@ effic <- function(X, Y) {
         # Restore attributes
         attr(X, "scaled:center") <- x_attrs[["scaled:center"]]
         attr(X, "scaled:scale")  <- x_attrs[["scaled:scale"]]
+        attr(X, "scale:mode") <- x_attrs[["scale:mode"]]
+        attr(X, "scale:factor") <- x_attrs[["scale:factor"]]
+        attr(X, "restore:center") <- x_attrs[["restore:center"]]
+        attr(X, "mask") <- x_attrs[["mask"]]
         attr(X, "bigM")  <- 1L
         attr(X, "bigM.value") <- bigM
     }
@@ -304,28 +417,68 @@ effic <- function(X, Y) {
             x_names <- x_names[-iM]
         mat <- as.matrix(mat)
 
-        # Undo scaling
-        x_mean <- attr(X, "scaled:center")
-        if (is.null(x_mean)) {
-            x_mean <- rep(0, ncol(mat)) # no centering
-            names(x_mean) <- x_names
+        scale_mode <- attr(X, "scale:mode")
+        if (identical(scale_mode, "matrix")) {
+            scale_factor <- attr(X, "scale:factor")
+            mat <- t(solve(t(scale_factor), t(mat)))
+        } else if (identical(scale_mode, "vector")) {
+            mat <- sweep(mat, 2L, attr(X, "scale:factor"), "*")
         }
-        x_std <- attr(X, "scaled:scale")
-        if (is.null(x_std))
-            x_std <- rep(1, ncol(mat)) # no scaling
+
         mask <- attr(X, "mask")
         if  (is.null(mask))
             mask <- rep(TRUE, ncol(mat))  # no filtering
 
-        M <- length(x_mean)
-        out <- matrix(x_mean, nrow = nrow(mat), ncol = M, byrow = TRUE,
+        x_mean <- attr(X, "restore:center")
+        if (is.null(x_mean)) {
+            x_mean <- rep(0, length(mask))
+            names(x_mean) <- x_names
+        }
+        out <- matrix(x_mean, nrow = nrow(mat), ncol = length(x_mean), byrow = TRUE,
                       dimnames = list(NULL, names(x_mean)))
-        out[, mask] <- out[, mask, drop = FALSE] + mat * x_std
+
+        if (identical(scale_mode, "vector")) {
+            x_center <- attr(X, "scaled:center")
+            if (is.null(x_center)) {
+                x_center <- rep(0, length(mask))
+                names(x_center) <- names(x_mean)
+            }
+            if (!is.null(attr(X, "mask"))) {
+                x_center <- x_center[mask]
+            }
+            out[, mask] <- matrix(x_center, nrow = nrow(mat), ncol = ncol(mat),
+                                  byrow = TRUE) + mat
+        } else {
+            out[, mask] <- mat
+        }
 
         out
     }
 
     list(X = X, undo_scale = undo_scale)
+}
+
+.aa_fit_space_col_sds <- function(X) {
+    scale_mode <- attr(X, "scale:mode")
+    data_scale <- attr(X, "scaled:scale")
+    if (identical(scale_mode, "none") && !is.null(data_scale))
+        return(data_scale)
+
+    if (identical(scale_mode, "vector")) {
+        scale_factor <- attr(X, "scale:factor")
+        if (!is.null(data_scale) && !is.null(scale_factor))
+            return(data_scale / scale_factor)
+    }
+
+    matrixStats::colSds(X)
+}
+
+.aa_auto_bigM <- function(X, multiplier = 200) {
+    feature_sd <- .aa_fit_space_col_sds(X)
+    feature_scale <- sqrt(mean(feature_sd^2))
+    if (!is.finite(feature_scale) || feature_scale <= .Machine$double.eps)
+        feature_scale <- 1
+    multiplier * feature_scale * sqrt(2 / max(ncol(X), 1L))
 }
 
 # Common subroutine to preprocess `init` matrix of archetype coordinates (A);
@@ -350,15 +503,17 @@ effic <- function(X, Y) {
     # Scale `init` to match X
     init <- as.matrix(init)
     x_center <- attr(X, "scaled:center")
-    x_scale <- attr(X, "scaled:scale")
     if (!is.null(x_center))
         init <- sweep(init, 2L, x_center, "-")
-    if (!is.null(x_scale))
-        init <- sweep(init, 2L, x_scale, "/")
 
     # Filter `init` to match filtered features in X
-    if (!is.null(mask))
+    if (!is.null(mask) && ncol(init) == length(mask))
         init <- init[, mask, drop = FALSE]
+
+    if (identical(attr(X, "scale:mode"), "matrix"))
+        init <- init %*% attr(X, "scale:factor")
+    if (identical(attr(X, "scale:mode"), "vector"))
+        init <- sweep(init, 2L, attr(X, "scale:factor"), "/")
 
     # Add bigM column to init
     if (!is.null(iM)) {
@@ -471,35 +626,64 @@ effic <- function(X, Y) {
     init_vars
 }
 
-.aa_loss_terms <- function(X, A, S, weight_fun,
+# Workhorse function to run archetypes fitting with method-specific arguments;
+# Computes the loss metrics per row and for the whole dataset without forming
+# the full residual matrix. Interemediate parts can be cached in the loop for efficiency.
+# return_S_terms can skip computing the expensive StS and StX when not needed for the fit (nnls case)
+# TODO: consider refactoring into: cache, weight, objective, s_terms
+.aa_loss_terms <- function(X, A, S, weight_fun = NULL,
                            return_S_terms = TRUE,
                            xss = NULL,
                            rss = NULL,
-                           x2 = NULL,
+                           row_xss = NULL,
                            row_rss = NULL,
                            row_weights = NULL,
                            StS = NULL,
                            StX = NULL,
                            AAt = NULL,
                            XAt = NULL) {
+    # TODO: instead of creating copies consider correcting the affected terms (used to compute rss, xss)
     iM <- attr(X, "bigM")
     if (!is.null(iM)) {
         X <- X[, -iM, drop = FALSE]
         A <- A[, -iM, drop = FALSE]
     }
+    update_row_weights <- !is.null(weight_fun)
+    if (update_row_weights) {
+        xss <- NULL
+        rss <- NULL
+        row_weights <- NULL
+        StS <- NULL
+        StX <- NULL
+    } else if (!is.null(row_weights)) {
+        .aa_check_row_weights(row_weights, nrow(X))
+        if (all(row_weights == 1))
+            row_weights <- NULL
+    }
 
+    # row_xss does not change between iterations, so compute it once and cache for efficiency
+    if (is.null(row_xss)) row_xss <- rowSums(X * X)
+
+    # A-terms
     if (is.null(AAt)) AAt <- tcrossprod(A)
     if (is.null(XAt)) XAt <- tcrossprod(X, A)
-    if (is.null(x2))  x2 <- rowSums(X * X)  # should only run once per fit, then cached in the loop
-    if (is.null(row_rss))
-        row_rss <- pmax(x2 - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
-    if (is.null(row_weights)) row_weights <- weight_fun(row_rss)
-    .aa_check_row_weights(row_weights, nrow(X))
-    if (is.null(xss)) xss <- as.numeric(row_weights %*% x2)
-    if (is.null(rss)) rss <- as.numeric(row_weights %*% row_rss)
 
-    if (return_S_terms && (is.null(StX) || is.null(StS))) {
-        S_weighted <- S * row_weights
+    # Residual terms
+    if (is.null(row_rss))
+        row_rss <- pmax(row_xss - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
+    if (update_row_weights) {
+        new_row_weights <- weight_fun(row_rss)
+        .aa_check_row_weights(new_row_weights, nrow(X))
+        if (!.aa_trivial_row_weights(new_row_weights)) {
+            row_weights <- new_row_weights
+            xss <- sum(row_weights * row_xss)  # weighted total sum of squares
+        }
+    }
+    if (is.null(xss)) xss <- sum(.aa_weight_rows(row_xss, row_weights))
+    if (is.null(rss)) rss <- sum(.aa_weight_rows(row_rss, row_weights))
+
+    S_weighted <- .aa_weight_rows(S, row_weights)
+    if (return_S_terms) {
         if (is.null(StX)) StX <- crossprod(S_weighted, X)
         if (is.null(StS)) StS <- crossprod(S_weighted, S)
     }
@@ -511,11 +695,12 @@ effic <- function(X, Y) {
     list(
         rss = rss,
         xss = xss,
-        x2 = x2,
+        row_xss = row_xss,
         row_rss = row_rss,
         row_weights = row_weights,
         StS = StS,
         StX = StX,
+        S_weighted = S_weighted,
         AAt = AAt,
         XAt = XAt,
         A = A

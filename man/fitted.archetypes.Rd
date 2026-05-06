@@ -12,7 +12,8 @@
 \item{...}{Ignored.}
 }
 \value{
-A numeric matrix (N x M) of fitted values.
+Fitted values. Usually a numeric matrix (N x M); fd-backed fits return an
+\code{fda::fd} object.
 }
 \description{
 Computes the projection of the data on the convex hull

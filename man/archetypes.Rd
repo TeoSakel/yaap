@@ -37,9 +37,9 @@ relaxation of coefficient row sums away from 1.}
 
 \item{call}{The matched function call that created the object (defaults to \code{match.call()}).}
 
-\item{data}{Numeric matrix (N x M) with the original data used for
-fitting. If supplied, residuals are computed against
-\code{compositions \%*\% coordinates}.}
+\item{data}{Original data used for fitting. Usually a numeric matrix (N x M),
+but class-specific entry points may store the original input object. If
+supplied, residuals are computed against fitted values.}
 
 \item{init}{Optional numeric matrix (K x M) with the initial archetype
 coordinates before optimization.}
@@ -53,7 +53,7 @@ An object of class \code{archetypes}, which is a list with components:
 \item \code{init} - optional initial coordinates.
 \item \code{loss} - data frame of per-iteration metrics.
 \item \code{converged} - logical convergence flag.
-\item \code{data} - optional original data matrix.
+\item \code{data} - optional original data.
 \item \code{residuals} - \code{data - compositions \%*\% coordinates}
 \item \code{call} - the matched call.
 }

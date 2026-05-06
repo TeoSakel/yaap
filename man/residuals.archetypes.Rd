@@ -9,13 +9,13 @@
 \arguments{
 \item{object}{An object of class \code{archetypes}.}
 
-\item{data}{Numeric matrix (N x M) with the original data. If not provided, the
-function attempts to use \code{object$data}.}
+\item{data}{Original data. If not provided, the function attempts to use
+\code{object$data}.}
 
 \item{...}{Ignored.}
 }
 \value{
-A numeric matrix of residuals.
+Residuals in the same representation as \code{data}.
 }
 \description{
 Residuals for archetypes objects

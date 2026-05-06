@@ -34,3 +34,18 @@ test_that("aa_init validates required method arguments", {
     expect_error(aa_init(X, K = 3L, method = "coreset_initfn"), "m")
     suppressWarnings(expect_error(aa_init(X, K = 3L, method = "aa_pp_mc")))
 })
+
+test_that("aa_init uses stable archetype names instead of selected data row names", {
+    X <- scale(toy_matrix())
+    rownames(X) <- paste0("sample_", seq_len(nrow(X)))
+
+    init <- aa_init(X, K = 3L, method = "uniform_archetypes")
+
+    expect_equal(rownames(init[["A"]]), c("A1", "A2", "A3"))
+    expect_equal(rownames(init[["B"]]), c("A1", "A2", "A3"))
+
+    named <- .ind_to_init(X, stats::setNames(c(2L, 4L), c("left", "right")), sparse = FALSE)
+
+    expect_equal(rownames(named[["A"]]), c("left", "right"))
+    expect_equal(rownames(named[["B"]]), c("left", "right"))
+})

@@ -9,7 +9,8 @@
 \arguments{
 \item{object}{An object of class \code{archetypes}.}
 
-\item{newdata}{New data to fit. Must contain the features (columns) used to fit \code{object}.}
+\item{newdata}{New data to fit. Must contain the features (columns) used to
+fit \code{object}; fd-backed fits may pass an \code{fda::fd} object.}
 
 \item{...}{Passed to \code{\link{fit_simplex}}.}
 }

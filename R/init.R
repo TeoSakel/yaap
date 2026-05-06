@@ -215,9 +215,10 @@ aa_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"), ...) {
 
     # 3) compute the first K-2 archetypes by iteratively running AA and sampling
     # from the points distal to the current archetype convex-hull.
+    eps <- ifelse(sparse, 1e-8, 0)
     for (k in 3:K) {
         A <- X[b[1:(k - 1)], , drop = FALSE]  # current archetypes
-        S <- fit_nnls(X, t(A))
+        S <- proj_l1(fit_nnls(X, t(A)), eps = eps)
         res <- X - S %*% A
         dists <- rowSums(res * res)  # squared residuals
         b[k] <- .sample_distal_points(dists, 1L)
@@ -243,11 +244,12 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
     b[2] <- .sample_distal_points(.dist2(X, X[b[1], ]), 1L)
 
     # 3) compute the first K-2 archetypes by iteratively running AA.
+    eps <- ifelse(inherits(X, "sparseMatrix"), 1e-8, 0)
     for (k in 3:K) {
         A <- X[b[1:(k - 1)], , drop = FALSE]  # current archetypes
 
         batch <- sample(nrow(X), batch_size, replace = TRUE)
-        S <- fit_nnls(X[batch, , drop = FALSE], t(A))
+        S <- proj_l1(fit_nnls(X[batch, , drop = FALSE], t(A)), eps = eps)
         res <- X[batch, , drop = FALSE] - S %*% A
         dists <- rowSums(res * res)  # squared residuals
 
@@ -292,13 +294,9 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
     }
 
     ind <- ind[ind > 0]
-    nm <- if (!is.null(names(ind))) {
-        names(ind)
-    } else if (!is.null(rownames(X))) {
-        rownames(X)[ind]
-    } else {
-        paste0("A", seq_along(ind))
-    }
+    nm <- names(ind)
+    if (is.null(nm))
+        nm <- paste0("A", seq_along(ind))
 
     A <- X[ind, , drop = FALSE]  # Archetypes
     B <- onehot(ind, sparse = sparse, nrow(X))  # Row-stochastic matrix
