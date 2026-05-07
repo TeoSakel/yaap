@@ -48,6 +48,64 @@ test_that("aa_init validates required method arguments", {
                  "use_unique_candidates")
 })
 
+test_that("furthest_sum refinement returns valid unique indices", {
+    X <- scale(toy_matrix())[1:12, , drop = FALSE]
+
+    set.seed(1)
+    ind <- furthest_sum(X, K = 4L)
+
+    expect_length(ind, 4L)
+    expect_equal(length(unique(ind)), 4L)
+    expect_true(all(ind >= 1L & ind <= nrow(X)))
+})
+
+test_that("furthest_sum accepts no refinement and caps excess refinement", {
+    X <- scale(toy_matrix())[1:5, , drop = FALSE]
+
+    set.seed(2)
+    no_refinement <- furthest_sum(X, K = 4L, refinement_steps = 0L)
+    set.seed(2)
+    capped_refinement <- furthest_sum(X, K = 4L, refinement_steps = 100L)
+
+    for (ind in list(no_refinement, capped_refinement)) {
+        expect_length(ind, 4L)
+        expect_equal(length(unique(ind)), 4L)
+        expect_true(all(ind >= 1L & ind <= nrow(X)))
+    }
+})
+
+test_that("furthest_sum handles K equal to the number of samples", {
+    X <- scale(toy_matrix())[1:5, , drop = FALSE]
+
+    set.seed(2)
+    ind <- furthest_sum(X, K = nrow(X), refinement_steps = 100L)
+
+    expect_length(ind, nrow(X))
+    expect_equal(sort(ind), seq_len(nrow(X)))
+})
+
+test_that("furthest_sum validates refinement_steps", {
+    X <- scale(toy_matrix())[1:8, , drop = FALSE]
+
+    expect_error(furthest_sum(X, K = 3L, refinement_steps = -1L), "refinement_steps")
+    expect_error(furthest_sum(X, K = 3L, refinement_steps = 1.5), "refinement_steps")
+    expect_error(furthest_sum(X, K = 3L, refinement_steps = NA_integer_), "refinement_steps")
+    expect_error(furthest_sum(X, K = 3L, refinement_steps = c(1L, 2L)), "refinement_steps")
+})
+
+test_that("aa_init passes refinement_steps to furthest_sum", {
+    X <- scale(toy_matrix())[1:20, , drop = FALSE]
+
+    set.seed(3)
+    init <- aa_init(X, K = 4L, method = "furthest_sum", refinement_steps = 100L)
+
+    expect_named(init, c("A", "B"))
+    expect_matrix_dim(init[["A"]], 4L, 2L)
+    expect_matrix_dim(init[["B"]], 4L, 20L)
+    expect_row_stochastic(init[["B"]])
+    expect_equal(init[["A"]], init[["B"]] %*% X, tolerance = 1e-8)
+})
+
 test_that("aa_init uses stable archetype names instead of selected data row names", {
     X <- scale(toy_matrix())
     rownames(X) <- paste0("sample_", seq_len(nrow(X)))

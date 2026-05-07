@@ -68,6 +68,25 @@ test_that("kernel PGD fits an RBF kernel and returns proxy coordinates", {
     expect_equal(fit[["coordinates_proxy"]], fit[["coefficients"]] %*% X)
 })
 
+test_that("kernel PGD passes refinement_steps to furthest_sum initialization", {
+    set.seed(1)
+    X <- toy_matrix()[1:20, , drop = FALSE]
+
+    fit <- suppressWarnings(archetypes_kernel_pgd(
+        data = X,
+        K = 4L,
+        kernel = "linear",
+        init = "furthest_sum",
+        init_args = list(refinement_steps = 100L),
+        max_iter = 1L,
+        tol_r2 = 1
+    ))
+
+    expect_s3_class(fit, "kernel_archetypes")
+    expect_matrix_dim(fit[["init"]], 4L, nrow(X))
+    expect_row_stochastic(fit[["init"]])
+})
+
 test_that("run_aa dispatches to kernel PGD", {
     X <- toy_matrix()[1:20, , drop = FALSE]
 

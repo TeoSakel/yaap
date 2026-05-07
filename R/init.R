@@ -215,37 +215,49 @@ kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"),
     b
 }
 
-furthest_sum <- function(X, K, distances = NULL, ...) {
+furthest_sum <- function(X, K, distances = NULL, refinement_steps = 10L, ...) {
+    stopifnot("`refinement_steps` must be a single non-negative integer" =
+                  length(refinement_steps) == 1L &&
+                      !is.na(refinement_steps) &&
+                      refinement_steps == as.integer(refinement_steps) &&
+                      refinement_steps >= 0L)
 
-    b <- integer(K)  # indices of archetypes
+    N <- nrow(X)
+    refinement_steps <- as.integer(refinement_steps)
+    effective_refinement_steps <- min(refinement_steps, max(N - K, 0L))
+    n_iterations <- K + effective_refinement_steps
 
     # 1) randomly select the first archetype
-    b[1L] <- sample(nrow(X), 1L)
+    ind_t <- sample(N, 1L)
+    b <- ind_t  # queue of active archetype indices
+    sum_dist <- numeric(N)
+    eligible <- rep(TRUE, N)
+    eligible[ind_t] <- FALSE
 
-    # 2) compute initial distances from that first point
-    dists <- if (is.null(distances)) .dist2(X, X[b[1L], ]) else distances[, b[1L]]
-    initial_dists <- dists
-
-    # 3) select k−1 points by adding up distances
-    select_max <- function(dists, archetypes) {
-        dists[archetypes] <- 0  # current archetypes cannot be selected again
-        which.max(dists)
+    get_dists <- function(ind) {
+        if (is.null(distances))
+            return(.dist2(X, X[ind, , drop = FALSE]))
+        distances[, ind]
     }
 
-    for (k in seq_len(K - 1)) {
-        b[k + 1L] <- select_max(dists, b[1:k])
-        new_dists <- if (is.null(distances)) {
-            .dist2(X, X[b[k + 1L], , drop = FALSE])
-        } else {
-            distances[, b[k + 1L]]
+    # 2) greedily add candidates by cumulative distance, then refine by
+    # removing the oldest active candidate before selecting the next one.
+    for (k in seq_len(n_iterations)) {
+        if (length(b) >= K) {
+            drop_ind <- b[1L]
+            sum_dist <- sum_dist - get_dists(drop_ind)
+            eligible[drop_ind] <- TRUE
+            b <- b[-1L]
         }
-        dists <- dists + new_dists
+
+        sum_dist <- sum_dist + get_dists(ind_t)
+        candidate_rows <- which(eligible)
+        ind_t <- candidate_rows[which.max(sum_dist[candidate_rows])]
+
+        b <- c(b, ind_t)
+        eligible[ind_t] <- FALSE
     }
 
-    # 4) “forget” the very first random pick and select new first archetype
-    dists <- dists - initial_dists
-    dists[b[-1]] <- 0  # do not select any archetype from from 2:K
-    b[1] <- which.max(dists)
     b
 }
 

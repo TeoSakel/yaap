@@ -303,7 +303,8 @@ test_that("NNLS keeps previous iterate when candidate RSS does not improve", {
         K = 3L,
         max_iter = 20L,
         bigM = 5,
-        max_no_update = 2L
+        max_no_update = 2L,
+        init_args = list(refinement_steps = 0L)
     ))
     loss <- fit[["loss"]]
 
