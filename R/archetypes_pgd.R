@@ -25,6 +25,9 @@
 #' @param eps small positive number to ensure numerical stability
 #'   (default: 0 for sparse input 1e-8 for dense)
 #' @param verbose whether to print progress messages (default: FALSE)
+#' @param missing whether to fit the missing-data PGD objective. When `TRUE`,
+#'   only observed entries are optimized; dense `NA` values are treated as
+#'   missing and sparse structural zeros are treated as missing.
 #' @param delta maximum allowed relaxation of archetypes convexity constraint (default: 0)
 #' @param pseudo_pgd whether to use pseudo projected gradient descent (default: TRUE)
 #' @param step_size initial step size for the gradient descent (default: 1.0)
@@ -60,6 +63,7 @@ archetypes_pgd <- function(data,
                            max_kappa = 1000,
                            eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
                            verbose = FALSE,
+                           missing = any(is.na(data)),
                            # PGD specific
                            delta = 0,
                            pseudo_pgd = TRUE,
@@ -85,12 +89,211 @@ archetypes_pgd <- function(data,
         max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
+        missing = missing,
         delta = delta,
         pseudo_pgd = pseudo_pgd,
         step_size = step_size,
         max_iter_optimizer = max_iter_optimizer,
         step_shrinkage = step_shrinkage,
         max_no_update = max_no_update
+    )
+}
+
+.aa_fit_pgd_missing <- function(X,
+                                M,
+                                weight_fun,
+                                max_iter,
+                                tol,
+                                tol_r2,
+                                max_kappa,
+                                eps,
+                                verbose,
+                                A,
+                                B,
+                                S,
+                                loss,
+                                delta,
+                                pseudo_pgd,
+                                step_size,
+                                max_iter_optimizer,
+                                step_shrinkage,
+                                max_no_update) {
+    if (!is.null(weight_fun))
+        stop("`robust = TRUE` is not supported with `missing = TRUE`.", call. = FALSE)
+
+    if (pseudo_pgd) {
+        project <- proj_l1
+    } else {
+        project <- proj_simplex
+    }
+
+    update_alpha <- delta > 0
+    a_lo <- max(1 - delta, ifelse(eps > 0, eps, 1e-8))
+    a_hi <- 1 + delta
+    clip <- function(a) pmax(pmin(a, a_hi), a_lo)
+    denom_eps <- ifelse(eps > 0, eps, 1e-8)
+
+    A0 <- A
+    a <- rowSums(B)
+    slack_tol <- 1e-6
+    if (any(a < a_lo - slack_tol) || any(a > a_hi + slack_tol)) {
+        fmt <- "Initialize B marginals are outside the specified delta range [%.3f, %.3f]"
+        stop(sprintf(fmt, a_lo, a_hi))
+    }
+    H <- B
+    B <- B / a
+
+    A <- .aa_pgd_missing_A(H, X, M, denom_eps)
+    R <- .aa_pgd_missing_resid(M, S, A, X)  # residuals matrix
+    xss <- norm(X, "F")^2  # X sum of squares; invariant for fixed X
+    rss <- norm(R, "F")^2  # residual sum of squares -> objective to minimize
+    loss_terms <- list(
+        rss = rss,
+        xss = xss,
+        StS = crossprod(S),
+        A = A
+    )
+    loss <- .aa_update_loss(
+        loss,
+        1L,
+        loss_terms,
+        verbose = verbose,
+        max_kappa = max_kappa
+    )
+    converged <- FALSE
+
+    step_S <- step_size
+    step_B <- step_size
+    step_a <- step_size
+    no_update <- 0L
+
+    if (verbose) message("Starting missing-data optimization loop...")
+    for (i in seq_len(max_iter)) {
+        accepted_update <- FALSE
+
+        # Update S
+        grad <- .aa_pgd_missing_grad_S(S, R, A, pseudo_pgd)
+        for (k in seq_len(max_iter_optimizer)) {
+            S_new <- project(S - step_S * grad, eps = eps)
+            R_new <- .aa_pgd_missing_resid(M, S_new, A, X)
+            rss_new <- norm(R_new, "F")^2
+            if (rss_new < rss) {
+                S <- S_new
+                R <- R_new
+                rss <- rss_new
+                step_S <- step_S / step_shrinkage
+                accepted_update <- TRUE
+                break
+            }
+            step_S <- step_S * step_shrinkage
+        }
+
+        # Update B
+        grad_H <- .aa_pgd_missing_grad_H(H, X, M, S, A, R, denom_eps)
+        grad <- if (pseudo_pgd) {
+            grad_H - rowSums(B * grad_H)
+        } else {
+            grad_H
+        }
+        grad_B_for_alpha <- grad_H
+        grad <- a * grad
+        for (k in seq_len(max_iter_optimizer)) {
+            B_new <- project(B - step_B * grad, eps = eps)
+            H_new <- a * B_new
+            A_new <- .aa_pgd_missing_A(H_new, X, M, denom_eps)
+            R_new <- .aa_pgd_missing_resid(M, S, A_new, X)
+            rss_new <- norm(R_new, "F")^2
+            if (rss_new < rss) {
+                B <- B_new
+                H <- H_new
+                A <- A_new
+                R <- R_new
+                rss <- rss_new
+                step_B <- step_B / step_shrinkage
+                accepted_update <- TRUE
+                break
+            }
+            step_B <- step_B * step_shrinkage
+        }
+
+        # Update a:
+        if (update_alpha) {
+            grad <- grad_alpha(B, grad_B_for_alpha)
+            for (k in seq_len(max_iter_optimizer)) {
+                a_new <- clip(a - step_a * grad)
+                H_new <- a_new * B
+                A_new <- .aa_pgd_missing_A(H_new, X, M, denom_eps)
+                R_new <- .aa_pgd_missing_resid(M, S, A_new, X)
+                rss_new <- norm(R_new, "F")^2
+                if (rss_new < rss) {
+                    a <- a_new
+                    H <- H_new
+                    A <- A_new
+                    R <- R_new
+                    rss <- rss_new
+                    step_a <- step_a / step_shrinkage
+                    accepted_update <- TRUE
+                    break
+                }
+                step_a <- step_a * step_shrinkage
+            }
+        }
+
+        # Update loss terms
+        loss_terms <- list(
+            rss = rss,
+            xss = xss,
+            StS = if (i %% 10 == 0 && max_kappa > 1) crossprod(S) else NULL,
+            A = A
+        )
+        loss <- .aa_update_loss(
+            loss,
+            i + 1L,
+            loss_terms,
+            verbose = verbose,
+            max_kappa = max_kappa
+        )
+
+        # Check update acceptance and convergence
+        if (!accepted_update) {
+            no_update <- no_update + 1L
+            step_S <- step_S * step_shrinkage
+            step_B <- step_B * step_shrinkage
+            if (update_alpha)
+                step_a <- step_a * step_shrinkage
+
+            if (verbose) {
+                fmt <- paste(
+                    "Iteration %d: no line-search update accepted;",
+                    "shrinking steps (no-update %d/%d)"
+                )
+                message(sprintf(fmt, i, no_update, max_no_update))
+            }
+            if (no_update >= max_no_update) {
+                fmt <- paste(
+                    "Missing-data PGD stalled: no line-search update accepted after",
+                    "%d consecutive step shrinkages"
+                )
+                warning(sprintf(fmt, max_no_update), call. = FALSE)
+                break
+            }
+            next
+        }
+
+        no_update <- 0L
+        converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
+        if (converged) break
+    }
+
+    list(
+        A0 = A0,
+        A = A,
+        B = H,
+        S = S,
+        delta = delta,
+        i = i,
+        loss = loss,
+        converged = converged
     )
 }
 
@@ -345,4 +548,43 @@ grad_B_l1 <- function(B, ...) {
 grad_alpha <- function(B, grad_aB) {
     # dR/da = dR/d(aB) * d(aB)/da = dR/d(aB) * B
     rowSums(grad_aB * B)
+}
+
+.aa_pgd_missing_A <- function(H, X, M, eps) {
+    numerator <- H %*% X
+    denominator <- H %*% M + eps
+    as.matrix(numerator / denominator)
+}
+
+.aa_pgd_missing_resid <- function(M, S, A, X) {
+    if (!inherits(M, "sparseMatrix")) {
+        Xhat <- S %*% A
+        Xhat[!M] <- 0
+        return(Xhat - X)
+    }
+
+    entries <- Matrix::summary(M)  # i, j, x for nonzero entries of M
+    if (length(entries[["i"]]) == 0L)
+        return(Matrix::sparseMatrix(dims = dim(M), dimnames = dimnames(M)))
+    vals <- rowSums(S[entries[["i"]], , drop = FALSE] * t(A[, entries[["j"]], drop = FALSE]))
+    Xhat <- Matrix::sparseMatrix(
+        i = entries[["i"]],
+        j = entries[["j"]],
+        x = vals,
+        dims = dim(M),
+        dimnames = dimnames(M)
+    )
+    Xhat - X
+}
+
+.aa_pgd_missing_grad_S <- function(S, R, A, pseudo_pgd) {
+    grad <- R %*% t(A)
+    if (!pseudo_pgd)
+        return(grad)
+    grad - rowSums(S * grad)
+}
+
+.aa_pgd_missing_grad_H <- function(H, X, M, S, A, R, eps) {
+    grad <- crossprod(R, S) / (t(H %*% M) + eps)
+    t(X %*% grad - M %*% (grad * t(A)))
 }

@@ -64,12 +64,15 @@ run_aa <- function(data, K, ...) {
 #' @param eps small positive number to ensure numerical stability
 #'   (default: 0 for sparse input 1e-8 for dense)
 #' @param verbose whether to print progress messages (default: FALSE)
+#' @param missing whether to fit the missing-data PGD objective. When `TRUE`,
+#'   only observed entries are optimized; dense `NA` values are treated as
+#'   missing and sparse structural zeros are treated as missing.
 #' @param ... method-specific arguments. For `"pgd"`, these are `delta`,
-#'   `pseudo_pgd`, `step_size`, `max_iter_optimizer`, `step_shrinkage`, and
-#'   `max_no_update`. For `"nnls"`, these are `ols_solver`, `bigM`, and
-#'   `max_no_update`. For `"kernel"`, these include `gram`, `kernel`,
-#'   `kernel_args`, `delta`, `pseudo_pgd`, `step_size`, `max_iter_optimizer`,
-#'   `step_shrinkage`, and `max_no_update`.
+#'   `missing`, `pseudo_pgd`, `step_size`, `max_iter_optimizer`,
+#'   `step_shrinkage`, and `max_no_update`. For `"nnls"`, these are
+#'   `ols_solver`, `bigM`, and `max_no_update`. For `"kernel"`, these include
+#'   `gram`, `kernel`, `kernel_args`, `delta`, `pseudo_pgd`, `step_size`,
+#'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`.
 #'
 #' @exportS3Method
 run_aa.default <- function(data,
@@ -88,6 +91,7 @@ run_aa.default <- function(data,
                            max_kappa = 1000,
                            eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
                            verbose = FALSE,
+                           missing = any(is.na(data)),
                            ...) {
     call <- match.call()
     call[[1L]] <- quote(run_aa)
@@ -110,6 +114,7 @@ run_aa.default <- function(data,
         max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
+        missing = missing,
         ...
     )
 }
@@ -173,9 +178,14 @@ run_aa.fd <- function(data, K, ...) {
                                max_kappa = 1000,
                                eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
                                verbose = FALSE,
+                               missing = any(is.na(data)),
                                ...) {
     method <- match.arg(method, c("pgd", "nnls", "kernel"))
+    stopifnot("`missing` must be TRUE or FALSE" =
+                  is.logical(missing) && length(missing) == 1L && !is.na(missing))
     if (identical(method, "kernel")) {
+        if (missing)
+            stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
         if (!is.null(weights))
             stop("`weights` are not supported for `method = 'kernel'`.", call. = FALSE)
         if (!isTRUE(scale))
@@ -198,6 +208,14 @@ run_aa.fd <- function(data, K, ...) {
         fit[["call"]] <- call
         return(fit)
     }
+    if (!identical(method, "pgd") && missing)
+        stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
+    if (missing && robust)
+        stop("`robust = TRUE` is not supported with `missing = TRUE`.", call. = FALSE)
+    if (missing && !is.null(weights))
+        stop("`weights` are not supported with `missing = TRUE`.", call. = FALSE)
+    if (missing && (is.matrix(scale) || inherits(scale, "Matrix")))
+        stop("matrix `scale` is not supported with `missing = TRUE`.", call. = FALSE)
 
     .aa_check_inputs( # nolint: object_usage_linter.
         data = data,
@@ -208,7 +226,8 @@ run_aa.fd <- function(data, K, ...) {
         eps = eps,
         robust = robust,
         tukey_c = tukey_c,
-        scale = scale
+        scale = scale,
+        missing = missing
     )
     method_config <- switch(
         method,
@@ -217,7 +236,7 @@ run_aa.fd <- function(data, K, ...) {
             list(
                 bigM = 0,
                 delta = args[["delta"]],
-                fit_fun = .aa_fit_pgd,
+                fit_fun = if (missing) .aa_fit_pgd_missing else .aa_fit_pgd,
                 fit_args = list(
                     delta = args[["delta"]],
                     pseudo_pgd = args[["pseudo_pgd"]],
@@ -254,13 +273,15 @@ run_aa.fd <- function(data, K, ...) {
         weights,
         verbose,
         bigM = method_config[["bigM"]],
-        scale = scale
+        scale = scale,
+        missing = missing
     )
     X <- pre[["X"]]
+    M <- pre[["M"]]
     undo_scale <- pre[["undo_scale"]]
     rm(pre)
 
-    out <- .aa_checks_edge_cases(X, K, verbose)
+    out <- if (missing) NULL else .aa_checks_edge_cases(X, K, verbose)
     if (!is.null(out)) {
         return(.aa_prepare_output(
             call = call,
@@ -290,6 +311,8 @@ run_aa.fd <- function(data, K, ...) {
         eps = eps,
         verbose = verbose
     )
+    if (missing)
+        common_args[["M"]] <- M
     init_vars <- .aa_init_vars( # nolint: object_usage_linter.
         X = X,
         K = K,

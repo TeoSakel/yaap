@@ -25,6 +25,7 @@ run_aa(data, K, ...)
   max_kappa = 1000,
   eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
+  missing = any(is.na(data)),
   ...
 )
 
@@ -37,11 +38,11 @@ object with a class-specific \code{run_aa()} method.}
 \item{K}{number of archetypes}
 
 \item{...}{method-specific arguments. For \code{"pgd"}, these are \code{delta},
-\code{pseudo_pgd}, \code{step_size}, \code{max_iter_optimizer}, \code{step_shrinkage}, and
-\code{max_no_update}. For \code{"nnls"}, these are \code{ols_solver}, \code{bigM}, and
-\code{max_no_update}. For \code{"kernel"}, these include \code{gram}, \code{kernel},
-\code{kernel_args}, \code{delta}, \code{pseudo_pgd}, \code{step_size}, \code{max_iter_optimizer},
-\code{step_shrinkage}, and \code{max_no_update}.}
+\code{missing}, \code{pseudo_pgd}, \code{step_size}, \code{max_iter_optimizer},
+\code{step_shrinkage}, and \code{max_no_update}. For \code{"nnls"}, these are
+\code{ols_solver}, \code{bigM}, and \code{max_no_update}. For \code{"kernel"}, these include
+\code{gram}, \code{kernel}, \code{kernel_args}, \code{delta}, \code{pseudo_pgd}, \code{step_size},
+\code{max_iter_optimizer}, \code{step_shrinkage}, and \code{max_no_update}.}
 
 \item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, or \code{"kernel"}
 (default: \code{"pgd"}).}
@@ -81,6 +82,10 @@ low-variance features (default: 1e-6)}
 (default: 0 for sparse input 1e-8 for dense)}
 
 \item{verbose}{whether to print progress messages (default: FALSE)}
+
+\item{missing}{whether to fit the missing-data PGD objective. When \code{TRUE},
+only observed entries are optimized; dense \code{NA} values are treated as
+missing and sparse structural zeros are treated as missing.}
 }
 \value{
 An object of class \code{\link{archetypes}}

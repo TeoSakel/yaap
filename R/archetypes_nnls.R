@@ -291,7 +291,7 @@ fit_ols <- function(S, X, method, a0 = NULL, row_weights = NULL, ...) {
     fn <- function(a) {
         A <- matrix(a, nrow = K, ncol = M)
         R <- X - S %*% A
-        sum(R * R)
+        norm(R, "F")^2
     }
 
     # d/dA ||X - S %*% A||_F^2 = -2 * t(S) %*% (X - S %*% A)

@@ -20,6 +20,7 @@ archetypes_pgd(
   max_kappa = 1000,
   eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
+  missing = any(is.na(data)),
   delta = 0,
   pseudo_pgd = TRUE,
   step_size = 1,
@@ -68,6 +69,10 @@ low-variance features (default: 1e-6)}
 (default: 0 for sparse input 1e-8 for dense)}
 
 \item{verbose}{whether to print progress messages (default: FALSE)}
+
+\item{missing}{whether to fit the missing-data PGD objective. When \code{TRUE},
+only observed entries are optimized; dense \code{NA} values are treated as
+missing and sparse structural zeros are treated as missing.}
 
 \item{delta}{maximum allowed relaxation of archetypes convexity constraint (default: 0)}
 

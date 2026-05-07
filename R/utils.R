@@ -136,8 +136,10 @@ effic <- function(X, Y) {
 
 # Archetypes Fitting Subroutines -----------------------------------------------------
 
-.aa_check_inputs <- function(data, tol, tol_r2, K, max_kappa, eps, robust, tukey_c, scale = TRUE) {
-    stopifnot("data contains missing values" = !any(is.na(data)))
+.aa_check_inputs <- function(data, tol, tol_r2, K, max_kappa, eps, robust, tukey_c,
+                             scale = TRUE, missing = FALSE) {
+    if (!missing)
+        stopifnot("data contains missing values" = !any(is.na(data)))
     stopifnot("tol must be positive" = tol > 0)
     stopifnot("tol_r2 must be between (0, 1)" = tol_r2 >= 0 && tol_r2 <= 1)
     stopifnot("K must be an integer" = K == as.integer(K))
@@ -309,8 +311,15 @@ effic <- function(X, Y) {
 # Returns a list with:
 # - X: preprocessed data matrix with attributes to undo scaling and filtering
 # - undo_scale: function to undo scaling and filtering of archetype coordinates
-.aa_preprocess <- function(data, sd_threshold, weights, verbose, bigM = 0, scale = TRUE) {
+.aa_preprocess <- function(data, sd_threshold, weights, verbose, bigM = 0,
+                           scale = TRUE, missing = FALSE) {
     if (verbose) message("Preprocessing data...")
+
+    if (missing)
+        return(.aa_preprocess_missing(data, sd_threshold, verbose, scale = scale))
+
+    if (inherits(data, "sparseMatrix"))
+        data <- Matrix::drop0(data)
 
     original_center <- colMeans(data)
     names(original_center) <- colnames(data)
@@ -411,58 +420,167 @@ effic <- function(X, Y) {
         attr(X, "bigM.value") <- bigM
     }
 
-    # To undo scaling when returning archetypes
-    undo_scale <- function(mat, X) {
-        stopifnot(ncol(mat) == ncol(X))
+    list(X = X, undo_scale = .aa_undo_scale)
+}
 
-        # Remove bigM if present
-        iM <- attr(X, "bigM")
-        x_names <- colnames(X)
-        if (!is.null(iM))
-            mat <- mat[, -iM, drop = FALSE]
-        if (!is.null(iM))
-            x_names <- x_names[-iM]
-        mat <- as.matrix(mat)
+.aa_preprocess_missing <- function(data, sd_threshold, verbose, scale = TRUE) {
+    if (is.matrix(scale) || inherits(scale, "Matrix"))
+        stop("matrix `scale` is not supported with `missing = TRUE`.", call. = FALSE)
 
-        scale_mode <- attr(X, "scale:mode")
-        if (identical(scale_mode, "matrix")) {
-            scale_factor <- attr(X, "scale:factor")
-            mat <- t(solve(t(scale_factor), t(mat)))
-        } else if (identical(scale_mode, "vector")) {
-            mat <- sweep(mat, 2L, attr(X, "scale:factor"), "*")
-        }
+    requested_scale_true <- isTRUE(scale)
+    scale_mode <- if (identical(scale, FALSE)) "none" else "vector"
+    sparse <- inherits(data, "sparseMatrix")
 
-        mask <- attr(X, "mask")
-        if  (is.null(mask))
-            mask <- rep(TRUE, ncol(mat))  # no filtering
+    if (sparse) {
+        data <- Matrix::drop0(data)
+        M <- Matrix::drop0(data != 0)
+        stats <- .aa_observed_col_stats(data, M)
+        original_center <- stats[["mean"]]
+        X <- data
+    } else {
+        data <- as.matrix(data)
+        M <- !is.na(data)
+        X <- data
+        X[!M] <- 0
+        stats <- .aa_observed_col_stats(X, M)
+        original_center <- stats[["mean"]]
+    }
+    names(original_center) <- colnames(data)
 
-        x_mean <- attr(X, "restore:center")
-        if (is.null(x_mean)) {
-            x_mean <- rep(0, length(mask))
-            names(x_mean) <- x_names
-        }
-        out <- matrix(x_mean, nrow = nrow(mat), ncol = length(x_mean), byrow = TRUE,
-                      dimnames = list(NULL, names(x_mean)))
-
-        if (identical(scale_mode, "vector")) {
-            x_center <- attr(X, "scaled:center")
-            if (is.null(x_center)) {
-                x_center <- rep(0, length(mask))
-                names(x_center) <- names(x_mean)
-            }
-            if (!is.null(attr(X, "mask"))) {
-                x_center <- x_center[mask]
-            }
-            out[, mask] <- matrix(x_center, nrow = nrow(mat), ncol = ncol(mat),
-                                  byrow = TRUE) + mat
+    attr(X, "scaled:scale") <- stats[["sd"]]
+    if (isTRUE(scale)) {
+        scale <- stats[["sd"]]
+        safe_scale <- ifelse(scale > 0, scale, 1)
+        if (sparse) {
+            X <- .aa_scale_sparse_observed(
+                X,
+                center = stats[["mean"]],
+                scale = safe_scale
+            )
         } else {
-            out[, mask] <- mat
+            X <- sweep(data, 2L, stats[["mean"]], "-")
+            X[!M] <- 0
+            X <- sweep(X, 2L, safe_scale, "/")
         }
-
-        out
+        attr(X, "scaled:center") <- stats[["mean"]]
+        attr(X, "scaled:scale") <- stats[["sd"]]
     }
 
-    list(X = X, undo_scale = undo_scale)
+    if (!sparse && mean(M) < 0.10) {
+        M <- Matrix::Matrix(M, sparse = TRUE)
+        X <- Matrix::drop0(Matrix::Matrix(X, sparse = TRUE))
+        attr(X, "scaled:scale") <- stats[["sd"]]
+        if (isTRUE(scale))
+            attr(X, "scaled:center") <- stats[["mean"]]
+    }
+
+    X <- .filter_low_variance(X, sd_threshold)
+    mask <- attr(X, "mask")
+    if (!is.null(mask))
+        M <- M[, mask, drop = FALSE]
+
+    if (!requested_scale_true && is.numeric(scale) && is.null(dim(scale))) {
+        if (!is.null(mask))
+            scale <- scale[mask]
+        scale_factor <- ifelse(scale > 0, scale, 1)
+        x_attrs <- attributes(X)
+        X <- if (inherits(X, "sparseMatrix")) {
+            Matrix::colScale(X, 1 / scale_factor)
+        } else {
+            sweep(X, 2L, scale_factor, "/")
+        }
+        attributes(X) <- utils::modifyList(attributes(X), x_attrs)
+        attr(X, "scale:factor") <- scale_factor
+    } else if (requested_scale_true) {
+        if (!is.null(mask))
+            scale <- scale[mask]
+        attr(X, "scale:factor") <- ifelse(scale > 0, scale, 1)
+    }
+
+    attr(X, "scale:mode") <- scale_mode
+    attr(X, "restore:center") <- original_center
+    attr(X, "missing") <- TRUE
+    if (inherits(M, "sparseMatrix"))
+        M <- Matrix::drop0(M)
+
+    list(X = X, M = M, undo_scale = .aa_undo_scale)
+}
+
+.aa_undo_scale <- function(mat, X) {
+    stopifnot(ncol(mat) == ncol(X))
+
+    # Remove bigM if present
+    iM <- attr(X, "bigM")
+    x_names <- colnames(X)
+    if (!is.null(iM))
+        mat <- mat[, -iM, drop = FALSE]
+    if (!is.null(iM))
+        x_names <- x_names[-iM]
+    mat <- as.matrix(mat)
+
+    scale_mode <- attr(X, "scale:mode")
+    if (identical(scale_mode, "matrix")) {
+        scale_factor <- attr(X, "scale:factor")
+        mat <- t(solve(t(scale_factor), t(mat)))
+    } else if (identical(scale_mode, "vector")) {
+        mat <- sweep(mat, 2L, attr(X, "scale:factor"), "*")
+    }
+
+    mask <- attr(X, "mask")
+    if  (is.null(mask))
+        mask <- rep(TRUE, ncol(mat))  # no filtering
+
+    x_mean <- attr(X, "restore:center")
+    if (is.null(x_mean)) {
+        x_mean <- rep(0, length(mask))
+        names(x_mean) <- x_names
+    }
+    out <- matrix(x_mean, nrow = nrow(mat), ncol = length(x_mean), byrow = TRUE,
+                  dimnames = list(NULL, names(x_mean)))
+
+    if (identical(scale_mode, "vector")) {
+        x_center <- attr(X, "scaled:center")
+        if (is.null(x_center)) {
+            x_center <- rep(0, length(mask))
+            names(x_center) <- names(x_mean)
+        }
+        if (!is.null(attr(X, "mask"))) {
+            x_center <- x_center[mask]
+        }
+        out[, mask] <- matrix(x_center, nrow = nrow(mat), ncol = ncol(mat),
+                              byrow = TRUE) + mat
+    } else {
+        out[, mask] <- mat
+    }
+
+    out
+}
+
+.aa_observed_col_stats <- function(X, M) {
+    n <- colSums(M)
+    x_sum <- colSums(X)
+    x_mean <- x_sum / n
+    x_mean[!is.finite(x_mean)] <- 0
+    x2 <- colSums(X * X)
+    x_var <- (x2 - n * x_mean * x_mean) / pmax(n - 1L, 1L)
+    x_var[n <= 1L] <- 0
+    x_sd <- sqrt(pmax(x_var, 0))
+    names(x_mean) <- names(x_sd) <- colnames(X)
+    list(mean = x_mean, sd = x_sd, n = n)
+}
+
+.aa_scale_sparse_observed <- function(X, center, scale) {
+    entries <- Matrix::summary(X)
+    if (length(entries[["i"]]) == 0L)
+        return(X)
+    vals <- (entries[["x"]] - center[entries[["j"]]]) / scale[entries[["j"]]]
+    Matrix::drop0(Matrix::sparseMatrix(
+        i = entries[["i"]],
+        j = entries[["j"]],
+        x = vals,
+        dims = dim(X),
+        dimnames = dimnames(X)
+    ))
 }
 
 .aa_fit_space_col_sds <- function(X) {

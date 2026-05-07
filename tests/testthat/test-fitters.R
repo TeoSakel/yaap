@@ -412,6 +412,143 @@ test_that("archetypes fitters accept sparse input with expected invariants", {
     }
 })
 
+test_that("missing-data PGD defaults on for dense NA input", {
+    X <- matrix(
+        c(
+            1, NA, 2, 0,
+            0, 3, NA, 1,
+            4, 0, 0, NA,
+            NA, 5, 1, 0,
+            2, NA, 0, 3,
+            0, 1, NA, 0
+        ),
+        nrow = 6L,
+        byrow = TRUE,
+        dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
+    )
+
+    set.seed(3)
+    fit <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 2L,
+        init = "uniform_archetypes",
+        sd_threshold = 0,
+        max_iter = 3L
+    ))
+
+    expect_s3_class(fit, "archetypes")
+    expect_matrix_dim(fit[["coordinates"]], 2L, 4L)
+    expect_equal(dim(fit[["coefficients"]]), c(2L, 6L))
+    expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
+    expect_row_stochastic(fit[["coefficients"]])
+    expect_row_stochastic(fit[["compositions"]])
+    expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+    expect_true(all(diff(fit[["loss"]][["rss"]]) <= 1e-8))
+})
+
+test_that("missing-data PGD treats sparse structural zeros as missing", {
+    X_dense <- matrix(
+        c(
+            1, 0, 2, 0,
+            0, 3, 0, 1,
+            4, 0, 0, 0,
+            0, 5, 1, 0,
+            2, 0, 0, 3,
+            0, 1, 0, 0
+        ),
+        nrow = 6L,
+        byrow = TRUE,
+        dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
+    )
+    X <- Matrix::Matrix(X_dense, sparse = TRUE)
+
+    set.seed(4)
+    fit <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 2L,
+        init = "uniform_archetypes",
+        missing = TRUE,
+        sd_threshold = 0,
+        max_iter = 3L
+    ))
+
+    expect_s3_class(fit, "archetypes")
+    expect_matrix_dim(fit[["coordinates"]], 2L, 4L)
+    expect_equal(dim(fit[["coefficients"]]), c(2L, 6L))
+    expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
+    expect_row_stochastic(fit[["coefficients"]])
+    expect_row_stochastic(fit[["compositions"]])
+    expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+    expect_true(all(diff(fit[["loss"]][["rss"]]) <= 1e-8))
+})
+
+test_that("missing preprocessing scales observed entries", {
+    X <- matrix(
+        c(
+            1, NA,
+            2, 10,
+            NA, 20,
+            4, 30
+        ),
+        nrow = 4L,
+        byrow = TRUE,
+        dimnames = list(NULL, c("a", "b"))
+    )
+    pre <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE, missing = TRUE)
+    M <- pre[["M"]]
+
+    expect_equal(unname(colMeans(pre[["X"]][M[, 1L], 1L, drop = FALSE])), 0, tolerance = 1e-12)
+    expect_equal(stats::sd(pre[["X"]][M[, 1L], 1L]), 1)
+    expect_equal(unname(colMeans(pre[["X"]][M[, 2L], 2L, drop = FALSE])), 0, tolerance = 1e-12)
+    expect_equal(stats::sd(pre[["X"]][M[, 2L], 2L]), 1)
+
+    X_sparse <- Matrix::Matrix(
+        matrix(c(1, 0, 2, 10, 0, 20, 4, 30), nrow = 4L, byrow = TRUE),
+        sparse = TRUE
+    )
+    pre_sparse <- .aa_preprocess(
+        X_sparse,
+        sd_threshold = 0,
+        weights = NULL,
+        verbose = FALSE,
+        missing = TRUE
+    )
+    entries <- Matrix::summary(pre_sparse[["M"]])
+    observed <- pre_sparse[["X"]][pre_sparse[["M"]]]
+
+    expect_s4_class(pre_sparse[["M"]], "sparseMatrix")
+    expect_equal(length(observed), length(entries[["i"]]))
+    expect_true(all(is.finite(observed)))
+})
+
+test_that("missing preprocessing sparsifies very sparse dense masks", {
+    X <- matrix(NA_real_, nrow = 10L, ncol = 10L)
+    X[cbind(seq_len(9L), seq_len(9L))] <- seq_len(9L)
+
+    pre <- .aa_preprocess(
+        X,
+        sd_threshold = 0,
+        weights = NULL,
+        verbose = FALSE,
+        scale = FALSE,
+        missing = TRUE
+    )
+
+    expect_s4_class(pre[["X"]], "sparseMatrix")
+    expect_s4_class(pre[["M"]], "sparseMatrix")
+    expect_equal(length(Matrix::summary(pre[["M"]])[["i"]]), 9L)
+})
+
+test_that("missing-data PGD validates unsupported combinations", {
+    X <- toy_matrix()
+    X[1, 1] <- NA_real_
+
+    expect_error(archetypes_pgd(X, K = 3L, robust = TRUE), "robust")
+    expect_error(archetypes_pgd(X, K = 3L, weights = rep(1, nrow(X))), "weights")
+    expect_error(archetypes_pgd(X, K = 3L, scale = diag(ncol(X))), "matrix `scale`")
+    expect_error(run_aa(X, K = 3L, method = "nnls"), "missing = TRUE")
+})
+
 test_that("Tukey row weights downweight large row residuals", {
     weights <- .aa_bisquare_weights(c(0, 1, 4, 1e6))
 
