@@ -11,6 +11,11 @@ aa_init(
   sparse = inherits(X, "sparseMatrix"),
   m = NULL,
   batch_size = NULL,
+  hull_method = c("full", "projected", "partitioned"),
+  projected_dim = 2L,
+  n_partitions = 10L,
+  n_projection_max = NULL,
+  use_unique_candidates = FALSE,
   ...
 )
 }
@@ -28,6 +33,22 @@ aa_init(
 \item{m}{optional batch size for coreset initialization}
 
 \item{batch_size}{optional batch size for MCMC approximation of the AA++ initialization}
+
+\item{hull_method}{strategy used by \code{"hull_outmost"}. One of \code{"full"},
+\code{"projected"}, or \code{"partitioned"} (default: \code{"full"}).}
+
+\item{projected_dim}{projection dimension used by \code{"hull_outmost"} when
+\code{hull_method = "projected"} (default: \code{2L}).}
+
+\item{n_partitions}{number of row partitions used by \code{"hull_outmost"} when
+\code{hull_method = "partitioned"} (default: \code{10L}).}
+
+\item{n_projection_max}{optional maximum number of random projections used by
+\code{"hull_outmost"} for \code{hull_method = "projected"}. If \code{NULL}, all
+feature projections are evaluated.}
+
+\item{use_unique_candidates}{whether \code{"hull_outmost"} should de-duplicate
+hull candidates before vote tallying (default: \code{FALSE}).}
 
 \item{...}{additional arguments (used for compatibility with user-defined functions)}
 }

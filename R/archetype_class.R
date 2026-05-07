@@ -557,6 +557,216 @@ plot.archetypes <- function(x,
     invisible(x)
 }
 
+# Kernel Archetypes Class -----------------------------------------------------
+
+#' Kernel archetype analysis result object
+#'
+#' @param coefficients Numeric matrix (`K x N`) giving each Hilbert-space
+#'   archetype as a weighted combination of training samples.
+#' @param compositions Numeric matrix (`N x K`) giving each sample as a weighted
+#'   combination of kernel archetypes.
+#' @param gram Training Gram matrix.
+#' @param coordinates_proxy Optional input-space proxy coordinates
+#'   `coefficients %*% data`.
+#' @param slack Non-negative coefficient row-sum relaxation.
+#' @param loss Data frame containing per-iteration metrics.
+#' @param converged Logical convergence flag.
+#' @param call Matched call.
+#' @param data Optional original data matrix.
+#' @param init Optional initial coefficient matrix.
+#' @param kernel Kernel specification.
+#' @param kernel_args Kernel arguments.
+#'
+#' @export
+kernel_archetypes <- function(coefficients,
+                              compositions,
+                              gram,
+                              coordinates_proxy = NULL,
+                              slack = 0,
+                              loss = NULL,
+                              converged = TRUE,
+                              call = NULL,
+                              data = NULL,
+                              init = NULL,
+                              kernel = NULL,
+                              kernel_args = list()) {
+    if (is.null(call))
+        call <- match.call()
+    if (is.null(loss))
+        loss <- data.frame(rss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
+    K <- nrow(coefficients)
+    N <- ncol(coefficients)
+    stopifnot("nrow(compositions) must match number of samples" = nrow(compositions) == N)
+    stopifnot("ncol(compositions) must match number of archetypes" = ncol(compositions) == K)
+    stopifnot("Gram matrix dimensions must match number of samples" =
+                  identical(dim(gram), c(N, N)))
+    stopifnot("All slack values must be non-negative" = all(slack >= 0))
+    if (any(slack > 0)) {
+        a <- rowSums(coefficients)
+        stopifnot("Some rowSums(coefficients) are above allowed slack" = all(a <= 1 + slack))
+        stopifnot("Some rowSums(coefficients) are below allowed slack" = all(a >= 1 - slack))
+    } else if (!isTRUE(all.equal(rowSums(coefficients), rep(1, K), check.attributes = FALSE))) {
+        stop("Coefficients must be row-stochastic (each row sums to 1) when slack = 0")
+    }
+    if (!isTRUE(all.equal(rowSums(compositions), rep(1, N), check.attributes = FALSE)))
+        stop("Compositions must be row-stochastic (each row sums to 1)")
+    if (!is.null(coordinates_proxy)) {
+        stopifnot("coordinates_proxy must have one row per archetype" =
+                      nrow(coordinates_proxy) == K)
+    }
+
+    structure(
+        list(
+            coefficients = coefficients,
+            compositions = compositions,
+            gram = gram,
+            coordinates_proxy = coordinates_proxy,
+            slack = slack,
+            init = init,
+            loss = loss,
+            converged = converged,
+            data = data,
+            kernel = kernel,
+            kernel_args = kernel_args,
+            call = call
+        ),
+        class = "kernel_archetypes"
+    )
+}
+
+#' @exportS3Method
+coefficients.kernel_archetypes <- function(object, ...)
+    object[["coefficients"]]
+
+#' @exportS3Method
+names.kernel_archetypes <- function(x)
+    rownames(x[["coefficients"]])
+
+#' @method names<- kernel_archetypes
+#' @export
+`names<-.kernel_archetypes` <- function(x, value) {
+    K <- nrow(x[["coefficients"]])
+    if (length(value) != K) {
+        fmt <- "Expected %d archetype names, got %d"
+        stop(sprintf(fmt, K, length(value)))
+    }
+    stopifnot("Archetype names must not be missing" = !any(is.na(value)))
+    stopifnot("Archetype names must not be empty" = all(nzchar(value)))
+    stopifnot("Archetype names must be unique" = !anyDuplicated(value))
+
+    rownames(x[["coefficients"]]) <- value
+    colnames(x[["compositions"]]) <- value
+    if (!is.null(x[["coordinates_proxy"]]))
+        rownames(x[["coordinates_proxy"]]) <- value
+    if (!is.null(x[["init"]]))
+        rownames(x[["init"]]) <- value
+    x
+}
+
+#' @exportS3Method
+fitted.kernel_archetypes <- function(object, ...) {
+    stop(
+        "`fitted()` is not defined for nonlinear kernel archetypes; use ",
+        "`residuals()` for Hilbert-space residual norms or `coordinates_proxy` ",
+        "for input-space visualization.",
+        call. = FALSE
+    )
+}
+
+#' @exportS3Method
+residuals.kernel_archetypes <- function(object, ...) {
+    G <- object[["gram"]]
+    H <- object[["coefficients"]]
+    S <- object[["compositions"]]
+    AAt <- H %*% G %*% t(H)
+    XAt <- G %*% t(H)
+    out <- pmax(diag(G) - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
+    names(out) <- rownames(S)
+    out
+}
+
+#' @exportS3Method
+print.kernel_archetypes <- function(x, ...) {
+    call_str <- paste(deparse(x[["call"]]), sep = "\n", collapse = "\n")
+    cat("\nCall:\n", call_str, "\n\n", sep = "")
+    cat("Kernel Archetypes Summary:\n")
+    cat("Number of Archetypes:", nrow(x[["coefficients"]]), "\n")
+    cat("Number of Samples:", ncol(x[["coefficients"]]), "\n")
+    if (!is.null(x[["coordinates_proxy"]]))
+        cat("Input-space proxy coordinates: available\n")
+    loss <- x[["loss"]]
+    conv_info <- sprintf(
+        "%s after %d iterations.\n",
+        ifelse(x[["converged"]], "Converged", "DID NOT CONVERGE"),
+        nrow(loss) - 1L
+    )
+    cat(conv_info)
+    cat("Final Loss Metrics:\n")
+    print(loss[nrow(loss), ], row.names = FALSE)
+    cat("\n")
+    invisible(x)
+}
+
+#' @exportS3Method
+plot.kernel_archetypes <- function(x,
+                                   what = c("compositions", "loss", "coordinates"),
+                                   data = NULL,
+                                   projection = c("none", "pca"),
+                                   ...) {
+    what <- match.arg(
+        tolower(what[1L]),
+        c("compositions", "composition", "composision", "composisions", "loss", "coordinates")
+    )
+    if (what %in% c("composition", "composision", "composisions"))
+        what <- "compositions"
+    if (what == "compositions") {
+        S <- as.matrix(x[["compositions"]])
+        if (is.null(colnames(S)))
+            colnames(S) <- paste0("A", seq_len(ncol(S)))
+        graphics::plot(compositions::acomp(S), axes = TRUE, ...)
+        return(invisible(x))
+    }
+    if (what == "loss") {
+        loss <- x[["loss"]]
+        graphics::plot(
+            seq_len(nrow(loss)) - 1L,
+            loss[["rss"]],
+            type = "l",
+            xlab = "Iteration",
+            ylab = "RSS",
+            ...
+        )
+        return(invisible(x))
+    }
+
+    X <- if (is.null(data)) x[["data"]] else data
+    A <- x[["coordinates_proxy"]]
+    if (is.null(X) || is.null(A)) {
+        stop(
+            "Coordinate plots for kernel archetypes require original `data` ",
+            "and available `coordinates_proxy`.",
+            call. = FALSE
+        )
+    }
+    proxy <- archetypes(
+        coordinates = A,
+        coefficients = x[["coefficients"]],
+        compositions = x[["compositions"]],
+        slack = x[["slack"]],
+        loss = x[["loss"]],
+        converged = x[["converged"]],
+        call = x[["call"]],
+        data = X,
+        init = if (!is.null(x[["init"]]) && !is.null(x[["data"]])) {
+            x[["init"]] %*% as.matrix(x[["data"]])
+        } else {
+            NULL
+        }
+    )
+    plot(proxy, what = "coordinates", data = X, projection = projection, ...)
+    invisible(x)
+}
+
 #' AIC for archetypes objects
 #'
 #' Computes the Akaike Information Criterion (AIC) for an `archetypes` object

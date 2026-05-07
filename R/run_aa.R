@@ -39,7 +39,8 @@ run_aa <- function(data, K, ...) {
 }
 
 #' @rdname run_aa
-#' @param method fitting method. One of `"pgd"` or `"nnls"` (default: `"pgd"`).
+#' @param method fitting method. One of `"pgd"`, `"nnls"`, or `"kernel"`
+#'   (default: `"pgd"`).
 #' @param init function, method string, or numeric coordinate matrix to initialize
 #'   archetypes (default: `"furthest_sum"`). When a matrix is supplied it must
 #'   have dimension `K x ncol(data)`. Rows outside the allowed data hull are
@@ -66,12 +67,14 @@ run_aa <- function(data, K, ...) {
 #' @param ... method-specific arguments. For `"pgd"`, these are `delta`,
 #'   `pseudo_pgd`, `step_size`, `max_iter_optimizer`, `step_shrinkage`, and
 #'   `max_no_update`. For `"nnls"`, these are `ols_solver`, `bigM`, and
-#'   `max_no_update`.
+#'   `max_no_update`. For `"kernel"`, these include `gram`, `kernel`,
+#'   `kernel_args`, `delta`, `pseudo_pgd`, `step_size`, `max_iter_optimizer`,
+#'   `step_shrinkage`, and `max_no_update`.
 #'
 #' @exportS3Method
 run_aa.default <- function(data,
                            K,
-                           method = c("pgd", "nnls"),
+                           method = c("pgd", "nnls", "kernel"),
                            init = "furthest_sum",
                            init_args = list(),
                            weights = NULL,
@@ -156,7 +159,7 @@ run_aa.fd <- function(data, K, ...) {
 .aa_run_aa_default <- function(call,
                                data,
                                K,
-                               method = c("pgd", "nnls"),
+                               method = c("pgd", "nnls", "kernel"),
                                init = "furthest_sum",
                                init_args = list(),
                                weights = NULL,
@@ -171,6 +174,31 @@ run_aa.fd <- function(data, K, ...) {
                                eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
                                verbose = FALSE,
                                ...) {
+    method <- match.arg(method, c("pgd", "nnls", "kernel"))
+    if (identical(method, "kernel")) {
+        if (!is.null(weights))
+            stop("`weights` are not supported for `method = 'kernel'`.", call. = FALSE)
+        if (!isTRUE(scale))
+            stop("`scale` is not supported for `method = 'kernel'`.", call. = FALSE)
+        fit <- archetypes_kernel_pgd(
+            data = data,
+            K = K,
+            init = init,
+            init_args = init_args,
+            robust = robust,
+            tukey_c = tukey_c,
+            max_iter = max_iter,
+            tol = tol,
+            tol_r2 = tol_r2,
+            max_kappa = max_kappa,
+            eps = eps,
+            verbose = verbose,
+            ...
+        )
+        fit[["call"]] <- call
+        return(fit)
+    }
+
     .aa_check_inputs( # nolint: object_usage_linter.
         data = data,
         K = K,
@@ -182,8 +210,6 @@ run_aa.fd <- function(data, K, ...) {
         tukey_c = tukey_c,
         scale = scale
     )
-    method <- match.arg(method, c("pgd", "nnls"))
-
     method_config <- switch(
         method,
         pgd = {

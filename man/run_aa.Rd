@@ -11,7 +11,7 @@ run_aa(data, K, ...)
 \method{run_aa}{default}(
   data,
   K,
-  method = c("pgd", "nnls"),
+  method = c("pgd", "nnls", "kernel"),
   init = "furthest_sum",
   init_args = list(),
   weights = NULL,
@@ -39,9 +39,12 @@ object with a class-specific \code{run_aa()} method.}
 \item{...}{method-specific arguments. For \code{"pgd"}, these are \code{delta},
 \code{pseudo_pgd}, \code{step_size}, \code{max_iter_optimizer}, \code{step_shrinkage}, and
 \code{max_no_update}. For \code{"nnls"}, these are \code{ols_solver}, \code{bigM}, and
-\code{max_no_update}.}
+\code{max_no_update}. For \code{"kernel"}, these include \code{gram}, \code{kernel},
+\code{kernel_args}, \code{delta}, \code{pseudo_pgd}, \code{step_size}, \code{max_iter_optimizer},
+\code{step_shrinkage}, and \code{max_no_update}.}
 
-\item{method}{fitting method. One of \code{"pgd"} or \code{"nnls"} (default: \code{"pgd"}).}
+\item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, or \code{"kernel"}
+(default: \code{"pgd"}).}
 
 \item{init}{function, method string, or numeric coordinate matrix to initialize
 archetypes (default: \code{"furthest_sum"}). When a matrix is supplied it must

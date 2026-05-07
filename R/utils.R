@@ -152,6 +152,13 @@ effic <- function(X, Y) {
     .aa_check_scale(scale, ncol(data))
 }
 
+.aa_new_loss <- function(L) {
+    list(rss = rep(NA_real_, L),
+         r2  = rep(NA_real_, L),
+         k_S = rep(NA_real_, L),
+         k_A = rep(NA_real_, L))
+}
+
 .aa_check_scale <- function(scale, p) {
     if (isTRUE(scale) || identical(scale, FALSE))
         return(invisible(TRUE))
@@ -580,10 +587,7 @@ effic <- function(X, Y) {
         A = A,
         B = B,
         S = .init_S(X, A, eps = eps),
-        loss = list(rss = rep(NA_real_, L),
-                    r2  = rep(NA_real_, L),
-                    k_S = rep(NA_real_, L),
-                    k_A = rep(NA_real_, L))
+        loss = .aa_new_loss(L)
     )
 }
 
@@ -619,10 +623,7 @@ effic <- function(X, Y) {
     rownames(init_vars[["A"]]) <- .aa_init_names(init_vars[["A"]])
     rownames(init_vars[["B"]]) <- rownames(init_vars[["A"]])
     init_vars[["S"]] <- .init_S(X, init_vars[["A"]], eps = eps)
-    init_vars[["loss"]] <- list(rss = rep(NA_real_, L),
-                                r2  = rep(NA_real_, L),
-                                k_S = rep(NA_real_, L),
-                                k_A = rep(NA_real_, L))
+    init_vars[["loss"]] <- .aa_new_loss(L)
     init_vars
 }
 
@@ -708,7 +709,9 @@ effic <- function(X, Y) {
 }
 
 
-.aa_update_loss <- function(loss, i, loss_terms, verbose, max_kappa = 1) {
+.aa_update_loss <- function(loss, i, loss_terms, verbose, max_kappa = 1,
+                            k_A = c("exact", "gram")) {
+    k_A <- match.arg(k_A)
     # Update loss metrics: add row "i" (current iteration) to the loss dataframe
     loss[["rss"]][i] <- loss_terms[["rss"]]
     loss[["r2"]][i]  <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
@@ -721,8 +724,11 @@ effic <- function(X, Y) {
         # S tends to be long and skinny (N >> K), so use rcond for better stability
         # A tends to be roughly square (K ~ M), so use kappa directly
         loss[["k_S"]][i] <- sqrt(1 / rcond(loss_terms[["StS"]]))
-        if (is.na(loss[["k_A"]][i]))
+        if (identical(k_A, "gram")) {
+            loss[["k_A"]][i] <- sqrt(1 / rcond(loss_terms[["AAt"]]))
+        } else if (is.na(loss[["k_A"]][i])) {
             loss[["k_A"]][i] <- kappa(loss_terms[["A"]], exact = TRUE)
+        }
     } else {
         loss[["k_S"]][i] <- max_kappa
         if (is.na(loss[["k_A"]][i])) loss[["k_A"]][i] <- max_kappa

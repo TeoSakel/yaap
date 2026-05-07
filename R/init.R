@@ -179,17 +179,17 @@ aa_init <- function(X,
 
 uniform_archetypes <- function(X, K, ...) sample(nrow(X), K, replace = FALSE)
 
-furthest_first <- function(X, K, ...) {
+furthest_first <- function(X, K, distances = NULL, center_dists = NULL, ...) {
 
     b <- integer(K)  # indices of archetypes
 
     # 1) randomly select the first archetype
-    dists <- .dist2(X, center = TRUE)  # distances from the mean
+    dists <- if (is.null(center_dists)) .dist2(X, center = TRUE) else center_dists
     b[1L] <- .sample_distal_points(dists, 1L)
 
     # 2) compute next K-1 archetypes by selecting the furthest from current set
     for (k in seq_len(K - 1L)) {
-        dists <- .dist_to_nearest_archetype(X, b[1:k])
+        dists <- .dist_to_nearest_archetype(X, b[1:k], distances = distances)
         b[k + 1L] <- which.max(dists)
     }
 
@@ -197,24 +197,25 @@ furthest_first <- function(X, K, ...) {
 }
 
 
-kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"), ...) {
+kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"),
+                      distances = NULL, center_dists = NULL, ...) {
 
     b <- integer(K)  # indices of archetypes
 
     # 1) randomly select the first archetype
-    dists <- .dist2(X, center = TRUE)  # distances from the mean
+    dists <- if (is.null(center_dists)) .dist2(X, center = TRUE) else center_dists
     b[1L] <- .sample_distal_points(dists, 1L)
 
     # 2) compute next K-1 archetypes by sampling from the points furthest from the current set
     for (k in seq_len(K - 1)) {
-        dists <- .dist_to_nearest_archetype(X, b[1:k])
+        dists <- .dist_to_nearest_archetype(X, b[1:k], distances = distances)
         b[k + 1L] <- .sample_distal_points(dists, 1L)
     }
 
     b
 }
 
-furthest_sum <- function(X, K, ...) {
+furthest_sum <- function(X, K, distances = NULL, ...) {
 
     b <- integer(K)  # indices of archetypes
 
@@ -222,7 +223,7 @@ furthest_sum <- function(X, K, ...) {
     b[1L] <- sample(nrow(X), 1L)
 
     # 2) compute initial distances from that first point
-    dists <- .dist2(X, X[b[1L], ])
+    dists <- if (is.null(distances)) .dist2(X, X[b[1L], ]) else distances[, b[1L]]
     initial_dists <- dists
 
     # 3) select k−1 points by adding up distances
@@ -233,7 +234,12 @@ furthest_sum <- function(X, K, ...) {
 
     for (k in seq_len(K - 1)) {
         b[k + 1L] <- select_max(dists, b[1:k])
-        dists <- dists + .dist2(X, X[b[k + 1L], , drop = FALSE])
+        new_dists <- if (is.null(distances)) {
+            .dist2(X, X[b[k + 1L], , drop = FALSE])
+        } else {
+            distances[, b[k + 1L]]
+        }
+        dists <- dists + new_dists
     }
 
     # 4) “forget” the very first random pick and select new first archetype
@@ -477,16 +483,16 @@ hull_outmost <- function(X,
 
 .aa_select_from_votes <- function(vote_order, K, fallback_pool, N) {
     # Select the K most frequently voted rows, breaking ties by row index order.
-    out <- as.integer(head(unique(vote_order), K))
+    out <- as.integer(utils::head(unique(vote_order), K))
     # pad with rows from the fallback pool (also ordered by row index)
     if (length(out) < K) {
         pad <- setdiff(as.integer(fallback_pool), out)
-        out <- c(out, head(pad, K - length(out)))
+        out <- c(out, utils::head(pad, K - length(out)))
     }
     # pad with any remaining rows in order of row index.
     if (length(out) < K) {
         pad <- setdiff(seq_len(N), out)
-        out <- c(out, head(pad, K - length(out)))
+        out <- c(out, utils::head(pad, K - length(out)))
     }
     as.integer(out)
 }
@@ -494,7 +500,9 @@ hull_outmost <- function(X,
 # Compute the distance to the nearest archetype for each sample
 # X is a matrix of samples
 # ind is a vector of indices selecting the archetypes from X
-.dist_to_nearest_archetype <- function(X, ind) {
+.dist_to_nearest_archetype <- function(X, ind, distances = NULL) {
+    if (!is.null(distances))
+        return(matrixStats::rowMins(distances[, ind, drop = FALSE]))
     A <- X[ind, , drop = FALSE]  # archetypes
     dists <- .pdist2(A, X)
     matrixStats::colMins(dists)
@@ -512,23 +520,26 @@ hull_outmost <- function(X,
     sample(N, size = size, replace = TRUE, prob = p)
 }
 
+.aa_normalize_row_indices <- function(ind, n, row_names = NULL) {
+    stopifnot(mode(ind) %in% c("numeric", "logical", "character"))
+    if (mode(ind) == "logical") {
+        stopifnot("Logical indices length must be equal to number of rows" = length(ind) == n)
+        ind <- which(ind)
+    } else if (mode(ind) == "character") {
+        ind <- match(ind, row_names, nomatch = 0L)
+        stopifnot("Some row names do not match" = all(ind > 0L))
+    } else if (all(ind <= 0)) {
+        ind <- setdiff(seq_len(n), -ind)
+    }
+    ind <- ind[ind > 0]
+    stopifnot("indices must be valid sample rows" = all(ind <= n))
+    ind
+}
+
 # Initialize variables for Archetypal Analysis
 .ind_to_init <- function(X, ind, sparse) {
     # make sure ind is positive indices selecting rows
-    stopifnot(mode(ind) %in% c("numeric", "logical", "character"))
-    if (mode(ind) == "logical") {
-        stopifnot(
-            "Logical indices length must be equal to number of rows in X" = length(ind) == nrow(X)
-        )
-        ind <- which(ind)  # convert logical to indices
-    } else if (mode(ind) == "character") {
-        ind <- match(ind, rownames(X), nomatch = 0L)
-        stopifnot("Some archetype names do not match rows in X" = all(ind > 0L))
-    } else if (all(ind <= 0)) {
-        ind <- setdiff(seq_len(nrow(X)), -ind)
-    }
-
-    ind <- ind[ind > 0]
+    ind <- .aa_normalize_row_indices(ind, nrow(X), rownames(X))
     nm <- names(ind)
     if (is.null(nm))
         nm <- paste0("A", seq_along(ind))
