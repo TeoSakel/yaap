@@ -46,6 +46,57 @@ test_that("run_aa dispatches to supported fitters", {
     }
 })
 
+test_that("fitters integrate with hull_outmost initialization", {
+    set.seed(1)
+    X <- toy_matrix()
+
+    fits <- list(
+        suppressWarnings(run_aa(
+            X,
+            K = 3L,
+            method = "pgd",
+            init = "hull_outmost",
+            init_args = list(hull_method = "projected", projected_dim = 2L),
+            max_iter = 5L,
+            tol_r2 = 0.9
+        )),
+        suppressWarnings(run_aa(
+            X,
+            K = 3L,
+            method = "nnls",
+            init = "hull_outmost",
+            init_args = list(hull_method = "partitioned", n_partitions = 5L),
+            max_iter = 3L,
+            tol_r2 = 0.9
+        )),
+        suppressWarnings(archetypes_pgd(
+            X,
+            K = 3L,
+            init = "hull_outmost",
+            init_args = list(hull_method = "full"),
+            max_iter = 5L,
+            tol_r2 = 0.9
+        )),
+        suppressWarnings(archetypes_nnls(
+            X,
+            K = 3L,
+            init = "hull_outmost",
+            init_args = list(hull_method = "projected", projected_dim = 1L),
+            max_iter = 3L,
+            tol_r2 = 0.9
+        ))
+    )
+
+    for (fit in fits) {
+        expect_s3_class(fit, "archetypes")
+        expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
+        expect_matrix_dim(fit[["coefficients"]], 3L, nrow(X))
+        expect_matrix_dim(fit[["compositions"]], nrow(X), 3L)
+        expect_row_stochastic(fit[["coefficients"]])
+        expect_row_stochastic(fit[["compositions"]])
+    }
+})
+
 test_that("common fitter defaults are synchronized", {
     pgd_formals <- formals(archetypes_pgd)
     nnls_formals <- formals(archetypes_nnls)

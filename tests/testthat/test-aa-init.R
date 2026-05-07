@@ -7,7 +7,8 @@ test_that("aa_init covers every initialization method", {
         "furthest_sum",
         "coreset_initfn",
         "aa_pp",
-        "aa_pp_mc"
+        "aa_pp_mc",
+        "hull_outmost"
     )
 
     for (method in methods) {
@@ -17,6 +18,8 @@ test_that("aa_init covers every initialization method", {
             args[["m"]] <- 25L
         if (method == "aa_pp_mc")
             args[["batch_size"]] <- 25L
+        if (method == "hull_outmost")
+            args[["hull_method"]] <- "projected"
 
         init <- do.call(aa_init, args)
 
@@ -33,6 +36,16 @@ test_that("aa_init validates required method arguments", {
 
     expect_error(aa_init(X, K = 3L, method = "coreset_initfn"), "m")
     suppressWarnings(expect_error(aa_init(X, K = 3L, method = "aa_pp_mc")))
+    expect_error(aa_init(X, K = 3L, method = "hull_outmost", hull_method = "bad"),
+                 "should be one of")
+    expect_error(aa_init(X, K = 3L, method = "hull_outmost", projected_dim = 0),
+                 "projected_dim")
+    expect_error(aa_init(X, K = 3L, method = "hull_outmost", n_partitions = 0),
+                 "n_partitions")
+    expect_error(aa_init(X, K = 3L, method = "hull_outmost", n_projection_max = 0),
+                 "n_projection_max")
+    expect_error(aa_init(X, K = 3L, method = "hull_outmost", use_unique_candidates = NA),
+                 "use_unique_candidates")
 })
 
 test_that("aa_init uses stable archetype names instead of selected data row names", {

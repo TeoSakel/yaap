@@ -6,10 +6,21 @@
 #' @param K number of archetypes to be initialized
 #' @param method initialization method. One of `"uniform_archetypes"`,
 #'   `"furthest_first"`, `"kmeans_pp"`, `"furthest_sum"`, `"coreset_initfn"`,
-#'   `"aa_pp"`, or `"aa_pp_mc"` (default: `"furthest_sum"`).
+#'   `"aa_pp"`, `"aa_pp_mc"`, or `"hull_outmost"` (default: `"furthest_sum"`).
 #' @param sparse whether `B` should be a sparse matrix (default: same as X)
 #' @param m optional batch size for coreset initialization
 #' @param batch_size optional batch size for MCMC approximation of the AA++ initialization
+#' @param hull_method strategy used by `"hull_outmost"`. One of `"full"`,
+#'   `"projected"`, or `"partitioned"` (default: `"full"`).
+#' @param projected_dim projection dimension used by `"hull_outmost"` when
+#'   `hull_method = "projected"` (default: `2L`).
+#' @param n_partitions number of row partitions used by `"hull_outmost"` when
+#'   `hull_method = "partitioned"` (default: `10L`).
+#' @param n_projection_max optional maximum number of random projections used by
+#'   `"hull_outmost"` for `hull_method = "projected"`. If `NULL`, all
+#'   feature projections are evaluated.
+#' @param use_unique_candidates whether `"hull_outmost"` should de-duplicate
+#'   hull candidates before vote tallying (default: `FALSE`).
 #' @param ... additional arguments (used for compatibility with user-defined functions)
 #'
 #' @return a named list containing two matrices: the archetype coordinates `A`
@@ -42,6 +53,11 @@
 #' - `"aa_pp_mc"`: MCMC approximation of AA++ initialization. Each archetype is
 #'   sampled by performing AA++ on a sub-sample of size `batch_size` from the
 #'   data matrix `X` (see Mair & Sjölund 2023).
+#' - `"hull_outmost"`: computes hull candidates using one of the
+#'   `hull_method` strategies (`"full"`, `"projected"`, or `"partitioned"`)
+#'   and then selects `K` archetypes via an outmost-vote ranking. This family of
+#'   hull-based initializations is adapted from the \\pkg{archetypal} package
+#'   (Mouselimis et al., 2025).
 #'
 #' @references
 #' Mørup, M., & Hansen, L. K. (2012).
@@ -58,6 +74,11 @@
 #' Advances in Neural Information Processing Systems, 32.
 #' \url{https://proceedings.neurips.cc/paper_files/paper/2019/file/7f278ad602c7f47aa76d1bfc90f20263-Paper.pdf}
 #'
+#' Mouselimis, L., et al. (2025).
+#' \\pkg{archetypal}: Archetypal Analysis with Principal Convex Hull Analysis.
+#' R package version 1.3.1.
+#' \url{https://cran.r-project.org/package=archetypal}
+#'
 #' @export
 aa_init <- function(X,
                     K,
@@ -65,6 +86,11 @@ aa_init <- function(X,
                     sparse = inherits(X, "sparseMatrix"),
                     m = NULL,
                     batch_size = NULL,
+                    hull_method = c("full", "projected", "partitioned"),
+                    projected_dim = 2L,
+                    n_partitions = 10L,
+                    n_projection_max = NULL,
+                    use_unique_candidates = FALSE,
                     ...) {
 
     # Input checks -----------------------------------------------------------
@@ -83,7 +109,8 @@ aa_init <- function(X,
             "furthest_sum",
             "coreset_initfn",
             "aa_pp",
-            "aa_pp_mc"
+            "aa_pp_mc",
+            "hull_outmost"
         )
     )
 
@@ -98,6 +125,25 @@ aa_init <- function(X,
         stopifnot("`batch_size` must be an integer" = batch_size == as.integer(batch_size))
         stopifnot("`batch_size` must be at least K" = batch_size >= K)
         stopifnot("Number of samples must be at least `batch_size`" = nrow(X) >= batch_size)
+    } else if (method == "hull_outmost") {
+        hull_method <- match.arg(hull_method, c("full", "projected", "partitioned"))
+
+        stopifnot("`projected_dim` must be an integer" = projected_dim == as.integer(projected_dim))
+        stopifnot("`projected_dim` must be in [1, ncol(X)]" =
+                      projected_dim >= 1L && projected_dim <= ncol(X))
+
+        stopifnot("`n_partitions` must be an integer" = n_partitions == as.integer(n_partitions))
+        stopifnot("`n_partitions` must be greater than zero" = n_partitions >= 1L)
+
+        stopifnot("`use_unique_candidates` must be a single logical" =
+                      is.logical(use_unique_candidates) && length(use_unique_candidates) == 1L)
+        stopifnot("`use_unique_candidates` must not be NA" = !is.na(use_unique_candidates))
+
+        if (!is.null(n_projection_max)) {
+            stopifnot("`n_projection_max` must be an integer" =
+                          n_projection_max == as.integer(n_projection_max))
+            stopifnot("`n_projection_max` must be greater than zero" = n_projection_max >= 1L)
+        }
     }
 
     # Main code ----------------------------------------------------------------
@@ -116,6 +162,16 @@ aa_init <- function(X,
         furthest_sum       = furthest_sum(X, K, ...),
         aa_pp              = aa_pp(X, K, ...),
         aa_pp_mc           = aa_pp_mc(X, K, batch_size = batch_size, ...),
+        hull_outmost       = hull_outmost(
+            X,
+            K,
+            hull_method = hull_method,
+            projected_dim = projected_dim,
+            n_partitions = n_partitions,
+            n_projection_max = n_projection_max,
+            use_unique_candidates = use_unique_candidates,
+            ...
+        ),
         coreset_initfn     = coreset_initfn(X, K, m = m, ...)
     )
     .ind_to_init(X, ind, sparse = sparse)
@@ -252,6 +308,7 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
         S <- proj_l1(fit_nnls(X[batch, , drop = FALSE], t(A)), eps = eps)
         res <- X[batch, , drop = FALSE] - S %*% A
         dists <- rowSums(res * res)  # squared residuals
+        dists[!is.finite(dists)] <- 0
 
         ib <- 1L
         for (j in seq_along(dists))
@@ -260,6 +317,178 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
         b[k] <- batch[ib]
     }
     b
+}
+
+hull_outmost <- function(X,
+                         K,
+                         hull_method = c("full", "projected", "partitioned"),
+                         projected_dim = 2L,
+                         n_partitions = 10L,
+                         n_projection_max = NULL,
+                         use_unique_candidates = FALSE,
+                         ...) {
+    hull_method <- match.arg(hull_method)
+
+    # Choose how to construct the candidate hull set; selection logic is shared below.
+    # Returns a vector of row indices of X that are candidates for selection as archetypes.
+    candidate_rows <- switch(
+        hull_method,
+        full = .aa_build_hull_candidates_full(X),
+        projected = .aa_build_hull_candidates_projected(
+            X,
+            projected_dim = projected_dim,
+            n_projection_max = n_projection_max
+        ),
+        partitioned = .aa_build_hull_candidates_partitioned(X, n_partitions = n_partitions)
+    )
+
+    tallies <- .aa_tally_outmost_votes(
+        X,
+        candidate_rows,
+        use_unique_candidates = use_unique_candidates
+    )
+    .aa_select_from_votes(
+        vote_order = tallies[["ranking"]],
+        K = K,
+        fallback_pool = tallies[["fallback_pool"]],
+        N = nrow(X)
+    )
+}
+
+.aa_build_hull_candidates_full <- function(X) {
+    N <- nrow(X)
+    D <- ncol(X)
+    X_dense <- as.matrix(X)
+
+    # Full-hull strategy: use the geometric envelope in the original feature space.
+    if (D == 1L) {
+        return(as.integer(unique(c(which.min(X_dense[, 1L]), which.max(X_dense[, 1L])))))
+    }
+
+    if (D == 2L) {
+        return(as.integer(unique(grDevices::chull(X_dense))))
+    }
+
+    if (!requireNamespace("geometry", quietly = TRUE)) {
+        stop(
+            "`hull_outmost` with dimensions > 2 requires package `geometry`. ",
+            "Install `geometry` or use `hull_method = 'projected'` with `projected_dim <= 2`."
+        )
+    }
+
+    # facet: a simplex of D vertices that defines a face of the convex hull.
+    # The vertices are returned as row indices of X.
+    facets <- tryCatch(
+        geometry::convhulln(X_dense, options = "Fx"),
+        error = function(e) NULL
+    )
+    if (is.null(facets))
+        return(seq_len(N))
+
+    if (is.null(dim(facets))) {
+        idx <- as.integer(facets)
+    } else {
+        idx <- as.integer(unique(as.vector(facets)))
+    }
+    idx <- idx[idx >= 1L & idx <= N]
+    as.integer(unique(idx))
+}
+
+.aa_build_hull_candidates_projected <- function(X,
+                                                projected_dim = 2L,
+                                                n_projection_max = NULL) {
+    D <- ncol(X)
+    projected_dim <- as.integer(projected_dim)
+    stopifnot("`projected_dim` must be in [1, ncol(X)]" = projected_dim >= 1L && projected_dim <= D)
+
+    if (projected_dim == D)
+        return(.aa_build_hull_candidates_full(X))
+
+    # Projected-hull strategy: aggregate envelope points across low-dimensional views.
+    # Views are constructed by projecting (selecting) on random subsets of features.
+    combs <- utils::combn(D, projected_dim)
+    n_combs <- ncol(combs)
+    selected <- seq_len(n_combs)
+    if (!is.null(n_projection_max) && n_projection_max < n_combs)
+        selected <- sample.int(n_combs, size = n_projection_max, replace = FALSE)
+
+    rows <- integer(0)
+    for (j in selected) {
+        cols <- combs[, j]
+        local <- .aa_build_hull_candidates_full(X[, cols, drop = FALSE])
+        rows <- c(rows, local)
+    }
+    rows
+}
+
+.aa_build_hull_candidates_partitioned <- function(X, n_partitions = 10L) {
+    N <- nrow(X)
+    n_partitions <- min(as.integer(n_partitions), N)
+
+    # Partitioned-hull strategy: approximate global extremes from local hull champions.
+    part_id <- rep(seq_len(n_partitions), length.out = N) # 1, 2, ..., n_partitions, 1, 2, ...
+    shuffled_rows <- sample.int(N, N, replace = FALSE)
+    rows <- integer(0)
+
+    for (p in seq_len(n_partitions)) {
+        grp <- shuffled_rows[part_id == p]
+        if (length(grp) == 0L)
+            next
+        if (length(grp) <= 2L) {
+            rows <- c(rows, grp)
+            next
+        }
+
+        local <- .aa_build_hull_candidates_full(X[grp, , drop = FALSE])
+        rows <- c(rows, grp[local])
+    }
+
+    rows
+}
+
+.aa_tally_outmost_votes <- function(X,
+                                    candidate_rows,
+                                    use_unique_candidates = FALSE) {
+    N <- nrow(X)
+    candidate_rows <- as.integer(candidate_rows)
+    candidate_rows <- candidate_rows[candidate_rows >= 1L & candidate_rows <= N]
+    if (length(candidate_rows) == 0L)
+        stop("No hull candidates available for `hull_outmost`.")
+
+    if (use_unique_candidates)
+        candidate_rows <- unique(candidate_rows)
+
+    Xc <- as.matrix(X[candidate_rows, , drop = FALSE])
+    if (nrow(Xc) == 1L) {
+        ranking <- candidate_rows
+        return(list(ranking = ranking, fallback_pool = unique(candidate_rows)))
+    }
+
+    dm <- as.matrix(stats::dist(Xc, method = "euclidean", diag = FALSE, upper = FALSE))
+    voted_rows <- candidate_rows[max.col(dm, ties.method = "first")]
+
+    fallback_pool <- sort(unique(candidate_rows))
+    freq_table <- table(factor(voted_rows, levels = fallback_pool))
+    freq <- as.integer(freq_table)
+
+    ranking <- fallback_pool[order(-freq, fallback_pool)]
+    list(ranking = ranking, fallback_pool = fallback_pool)
+}
+
+.aa_select_from_votes <- function(vote_order, K, fallback_pool, N) {
+    # Select the K most frequently voted rows, breaking ties by row index order.
+    out <- as.integer(head(unique(vote_order), K))
+    # pad with rows from the fallback pool (also ordered by row index)
+    if (length(out) < K) {
+        pad <- setdiff(as.integer(fallback_pool), out)
+        out <- c(out, head(pad, K - length(out)))
+    }
+    # pad with any remaining rows in order of row index.
+    if (length(out) < K) {
+        pad <- setdiff(seq_len(N), out)
+        out <- c(out, head(pad, K - length(out)))
+    }
+    as.integer(out)
 }
 
 # Compute the distance to the nearest archetype for each sample
@@ -274,7 +503,13 @@ aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
 # Sample points proportionally to their distance from a reference point
 .sample_distal_points <- function(dists, size = 1) {
     N <- length(dists)
-    sample(N, size = size, replace = TRUE, prob = dists)
+    p <- as.numeric(dists)
+    p[!is.finite(p)] <- 0
+    p[p < 0] <- 0
+    if (sum(p) <= 0)
+        return(sample(N, size = size, replace = TRUE))
+
+    sample(N, size = size, replace = TRUE, prob = p)
 }
 
 # Initialize variables for Archetypal Analysis
