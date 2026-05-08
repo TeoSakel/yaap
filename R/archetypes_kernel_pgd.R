@@ -369,26 +369,49 @@ archetypes_kernel_pgd <- function(data = NULL,
                                gamma = NULL,
                                degree = 3,
                                coef0 = 1) {
+    # Catch any mis-specification of kernel arguments that would be ignored by the kernel function
+    if (!is.null(gamma) && kernel != "polynomial") {
+        warning(
+            "`gamma` is only used for the polynomial kernel; ignoring for other kernels",
+             call. = FALSE
+        )
+    } else if (!is.null(sigma) && !(kernel %in% c("rbf", "laplace"))) {
+        warning(
+            "`sigma` is only used for RBF and Laplace kernels; ignoring for other kernels",
+            call. = FALSE
+        )
+    }
+
     switch(
         kernel,
         linear = tcrossprod(X),
-        rbf = rbf_kernel(X, sigma, laplace = FALSE),
-        laplace = rbf_kernel(X, sigma, laplace = TRUE),
+        rbf = rbf_kernel(X, sigma = sigma),
+        laplace = laplace_kernel(X, sigma = sigma),
         polynomial = polynomial_kernel(X, gamma, degree, coef0)
     )
 }
 
-rbf_kernel <- function(X, sigma, laplace = FALSE) {
-    D2 <- .pdist2(X, X)
-    if (is.null(sigma)) {
-        sigma <- stats::median(sqrt(D2[upper.tri(D2)]))
-        if (!is.finite(sigma) || sigma <= 0)
-            sigma <- 1
-    }
-    if (laplace)
-        return(exp(-sqrt(D2) / sigma))
+.auto_rbf_sigma <- function(D) {
+    d_upper <- if (is.matrix(D)) D[upper.tri(D)] else as.vector(D)
+    d_90    <- d_upper[d_upper <= stats::quantile(d_upper, 0.9)]
+    sigma   <- .otsu_threshold(d_90)
+    if (!is.finite(sigma) || sigma <= 0) 1 else sigma
+}
 
-    exp(-D2 / sigma^2 * 0.5)
+rbf_kernel <- function(X, sigma = NULL) {
+    D <- stats::dist(X)
+    if (is.null(sigma)) sigma <- .auto_rbf_sigma(D)
+    stopifnot("`sigma` must be a positive finite number" =
+                  length(sigma) == 1L && is.finite(sigma) && sigma > 0)
+    exp(-as.matrix(D^2) / sigma^2 * 0.5)
+}
+
+laplace_kernel <- function(X, sigma = NULL) {
+    D <- stats::dist(X, method = "manhattan")
+    if (is.null(sigma)) sigma <- .auto_rbf_sigma(D)
+    stopifnot("`sigma` must be a positive finite number" =
+                  length(sigma) == 1L && is.finite(sigma) && sigma > 0)
+    exp(-as.matrix(D) / sigma)
 }
 
 polynomial_kernel <- function(X, gamma, degree, coef0) {

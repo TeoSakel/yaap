@@ -49,7 +49,7 @@ scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
     if (!isFALSE(center)) {
         X <- sweep(as.matrix(X), 2L, center, "-")
         if (is_sparse)
-            warning("Centering matrices breaks sparsity; consider using `center = FALSE`")
+            warning("Centering matrices breaks sparsity; consider using `center = FALSE`", call. = FALSE)
         is_sparse <- FALSE
     }
 
@@ -106,6 +106,27 @@ scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
     # squared distances from cosine law ||x||^2 + ||y||^2 − 2<x,y>
     D2 <- outer(rowSums(X * X), rowSums(Y * Y), "+") - 2*tcrossprod(X, Y)
     pmax(D2, 0)     # ensure non-negative distances
+}
+
+# Otsu's method for 1-D data: finds the threshold maximising between-class
+# variance.  Returns NA when the input is empty or has a single unique value.
+.otsu_threshold <- function(x, n_bins = 256L) {
+    x <- x[is.finite(x)]
+    if (length(x) == 0L) return(NA_real_)
+    rng <- range(x)
+    if (rng[1L] == rng[2L]) return(NA_real_)
+    breaks <- seq(rng[1L], rng[2L], length.out = n_bins + 1L)
+    h <- graphics::hist(x, breaks = breaks, plot = FALSE)
+    p <- h$counts / sum(h$counts)
+    mids <- h$mids
+    omega <- cumsum(p)
+    mu    <- cumsum(p * mids)
+    mu_T  <- mu[length(mu)]
+    valid <- omega > 0 & omega < 1
+    sigma_b2 <- rep(-Inf, length(mids))
+    sigma_b2[valid] <- (mu_T * omega[valid] - mu[valid])^2 /
+        (omega[valid] * (1 - omega[valid]))
+    mids[which.max(sigma_b2)]
 }
 
 # Clustering efficiency between original matrix X and reconstructed matrix Y
@@ -285,7 +306,7 @@ effic <- function(X, Y) {
         fmt <- "The following %d features are filtered out due to low variance: %s"
         dropped_features <- if (is.null(colnames(X))) which(!mask) else colnames(X)[!mask]
         dropped_features <- paste(dropped_features, collapse = ", ")
-        warning(sprintf(fmt, ncol(X) - M, dropped_features))
+        warning(sprintf(fmt, ncol(X) - M, dropped_features), call. = FALSE)
 
         # Filter X
         x_attrs <- attributes(X)
@@ -696,7 +717,7 @@ effic <- function(X, Y) {
             "Initial archetype coordinates outside the allowed data hull were",
             "projected; affected rows: %s"
         )
-        warning(sprintf(fmt, paste(utils::head(ix, 10L), collapse = ", ")))
+        warning(sprintf(fmt, paste(utils::head(ix, 10L), collapse = ", ")), call. = FALSE)
     }
 
     rownames(A) <- rownames(B) <- nm
@@ -721,7 +742,7 @@ effic <- function(X, Y) {
         # use provided coordinate matrix as initialization; ignore `init_args`
         init <- .aa_preprocess_init(init, X)
         if (length(init_args) > 0L) {
-            warning("`init_args` are ignored when `init` is a matrix")
+            warning("`init_args` are ignored when `init` is a matrix", call. = FALSE)
             init_args <- list()
         }
         init_vars <- .aa_matrix_init(X, K, init, eps, L, delta)
@@ -871,7 +892,7 @@ effic <- function(X, Y) {
     k_A <- loss[["k_A"]][j]
     if ((!is.na(k_S) && k_S > max_kappa) || (!is.na(k_A) && k_A > max_kappa)) {
         fmt <- "Warning: Condition number exceeded max_kappa (k_S=%.1f, k_A=%.1f)"
-        warning(sprintf(fmt, k_S, k_A))
+        warning(sprintf(fmt, k_S, k_A), call. = FALSE)
     }
     converged
 }
@@ -904,7 +925,7 @@ effic <- function(X, Y) {
     # Warn or message about convergence
     if (!converged) {
         fmt <- "Algorithm did not converge after %d iterations"
-        warning(sprintf(fmt, max_iter))
+        warning(sprintf(fmt, max_iter), call. = FALSE)
     }
 
     if (verbose) {

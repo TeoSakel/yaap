@@ -53,7 +53,7 @@ test_that("kernel PGD fits an RBF kernel and returns proxy coordinates", {
         data = X,
         K = 3L,
         kernel = "rbf",
-        kernel_args = list(gamma = 5),
+        kernel_args = list(sigma = 0.5),
         max_iter = 5L,
         tol_r2 = 0.95
     ))
@@ -66,6 +66,24 @@ test_that("kernel PGD fits an RBF kernel and returns proxy coordinates", {
     expect_true(all(is.finite(fit[["loss"]][["rss"]])))
     expect_true(all(diff(fit[["loss"]][["rss"]]) <= 1e-8))
     expect_equal(fit[["coordinates_proxy"]], fit[["coefficients"]] %*% X)
+    expect_error(
+        archetypes_kernel_pgd(
+            data = X,
+            K = 3L,
+            kernel = "rbf",
+            kernel_args = list(gamma = 5)
+        ),
+        "RBF kernels use `sigma`"
+    )
+    expect_error(
+        archetypes_kernel_pgd(
+            data = X,
+            K = 3L,
+            kernel = "laplace",
+            kernel_args = list(gamma = 5)
+        ),
+        "Laplace kernels use `sigma`"
+    )
 })
 
 test_that("kernel PGD passes refinement_steps to furthest_sum initialization", {
