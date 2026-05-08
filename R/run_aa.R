@@ -39,12 +39,13 @@ run_aa <- function(data, K, ...) {
 }
 
 #' @rdname run_aa
-#' @param method fitting method. One of `"pgd"`, `"nnls"`, or `"kernel"`
-#'   (default: `"pgd"`).
+#' @param method fitting method. One of `"pgd"`, `"nnls"`, `"kernel"`, or
+#'   `"directional"` (default: `"pgd"`).
 #' @param init function, method string, or numeric coordinate matrix to initialize
-#'   archetypes (default: `"furthest_sum"`). When a matrix is supplied it must
-#'   have dimension `K x ncol(data)`. Rows outside the allowed data hull are
-#'   projected into it with a warning; row names, when present, are used as
+#'   archetypes. `NULL` uses `"furthest_sum"` except for `method =
+#'   "directional"`, where it uses `"random"`. When a matrix is supplied it
+#'   must have dimension `K x ncol(data)`. Rows outside the allowed data hull
+#'   are projected into it with a warning; row names, when present, are used as
 #'   archetype names.
 #' @param init_args list of additional arguments for the initialization function
 #' @param weights optional vector of sample weights (default: NULL)
@@ -72,13 +73,15 @@ run_aa <- function(data, K, ...) {
 #'   `step_shrinkage`, and `max_no_update`. For `"nnls"`, these are
 #'   `ols_solver`, `bigM`, and `max_no_update`. For `"kernel"`, these include
 #'   `gram`, `kernel`, `kernel_args`, `delta`, `pseudo_pgd`, `step_size`,
+#'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`. For
+#'   `"directional"`, these include `hemisphere`, `precision`, `step_size`,
 #'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`.
 #'
 #' @exportS3Method
 run_aa.default <- function(data,
                            K,
-                           method = c("pgd", "nnls", "kernel"),
-                           init = "furthest_sum",
+                           method = c("pgd", "nnls", "kernel", "directional"),
+                           init = NULL,
                            init_args = list(),
                            weights = NULL,
                            scale = TRUE,
@@ -164,8 +167,8 @@ run_aa.fd <- function(data, K, ...) {
 .aa_run_aa_default <- function(call,
                                data,
                                K,
-                               method = c("pgd", "nnls", "kernel"),
-                               init = "furthest_sum",
+                               method = c("pgd", "nnls", "kernel", "directional"),
+                               init = NULL,
                                init_args = list(),
                                weights = NULL,
                                scale = TRUE,
@@ -180,9 +183,37 @@ run_aa.fd <- function(data, K, ...) {
                                verbose = FALSE,
                                missing = any(is.na(data)),
                                ...) {
-    method <- match.arg(method, c("pgd", "nnls", "kernel"))
+    method <- match.arg(method, c("pgd", "nnls", "kernel", "directional"))
+    if (is.null(init))
+        init <- if (identical(method, "directional")) "random" else "furthest_sum"
     stopifnot("`missing` must be TRUE or FALSE" =
                   is.logical(missing) && length(missing) == 1L && !is.na(missing))
+    if (identical(method, "directional")) {
+        if (missing)
+            stop("`missing = TRUE` is not supported for `method = 'directional'`.",
+                 call. = FALSE)
+        if (robust)
+            stop("`robust = TRUE` is not supported for `method = 'directional'`.",
+                 call. = FALSE)
+        if (!isTRUE(scale))
+            stop("`scale` is not supported for `method = 'directional'`.", call. = FALSE)
+        fit <- archetypes_directional(
+            data = data,
+            K = K,
+            init = init,
+            init_args = init_args,
+            weights = weights,
+            max_iter = max_iter,
+            tol = tol,
+            tol_r2 = tol_r2,
+            max_kappa = max_kappa,
+            eps = eps,
+            verbose = verbose,
+            ...
+        )
+        fit[["call"]] <- call
+        return(fit)
+    }
     if (identical(method, "kernel")) {
         if (missing)
             stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)

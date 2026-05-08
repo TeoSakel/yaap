@@ -61,3 +61,11 @@ manual_fit <- function() {
         data = X
     )
 }
+
+directional_matrix <- function(n = 90L) {
+    theta <- seq(0.05, pi / 2 - 0.05, length.out = n)
+    X <- cbind(cos(theta), sin(theta), 0.35 * sin(2 * theta))
+    X <- X / sqrt(rowSums(X * X))
+    scale <- 0.5 + seq_len(n) / n
+    X * scale
+}

@@ -567,3 +567,28 @@ hull_outmost <- function(X,
     S[is.nan(S)] <- 1 # NaNs = Inf/Inf for the archetypes
     S
 }
+
+# Internal random initialization for directional AA.
+#
+# This mirrors the reference directional AA MATLAB code, which initializes both
+# the archetype generator C and the composition matrix S with exponential random
+# entries and then L1-normalizes them. It is intentionally not exposed as an
+# `aa_init()` method yet: Euclidean AA initializers usually select or construct
+# concrete data-space archetypes, while this helper initializes the directional
+# generator coefficients directly.
+.aa_directional_random_init <- function(X_flip, K, eps = 0) {
+    N <- nrow(X_flip)
+
+    # B is paper C^T in YAAAP's row-oriented convention. Each row is a convex
+    # combination over samples and therefore generates one directional archetype.
+    B <- matrix(stats::rexp(K * N), nrow = K, ncol = N)
+    B <- proj_l1(B, eps = eps)
+
+    # S is paper S^T. Each row is the composition of one sample in the
+    # directional archetype hull.
+    S <- matrix(stats::rexp(N * K), nrow = N, ncol = K)
+    S <- proj_l1(S, eps = eps)
+
+    A <- B %*% X_flip
+    list(A0 = A, B = B, S = S)
+}

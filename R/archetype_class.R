@@ -557,6 +557,121 @@ plot.archetypes <- function(x,
     invisible(x)
 }
 
+# Directional Archetypes Class -----------------------------------------------
+
+#' Directional archetype analysis result object
+#'
+#' @param coordinates Raw directional archetype coordinates.
+#' @param coefficients Archetype generator coefficients.
+#' @param compositions Sample compositions.
+#' @param loss Per-iteration directional loss metrics.
+#' @param converged Logical convergence flag.
+#' @param call Matched call.
+#' @param data Original data matrix.
+#' @param init Initial archetype coordinates.
+#' @param generator_data Row-normalized and possibly hemisphere-flipped data
+#'   used to generate archetypes.
+#' @param hemisphere_direction Dominant hemisphere direction, or `NULL`.
+#' @param row_norms Original data row norms.
+#' @param precision Precision mode used for the Watson loss.
+#'
+#' @export
+directional_archetypes <- function(coordinates,
+                                   coefficients,
+                                   compositions,
+                                   loss = NULL,
+                                   converged = TRUE,
+                                   call = NULL,
+                                   data = NULL,
+                                   init = NULL,
+                                   generator_data = NULL,
+                                   hemisphere_direction = NULL,
+                                   row_norms = NULL,
+                                   precision = NULL) {
+    out <- archetypes(
+        coordinates = coordinates,
+        coefficients = coefficients,
+        compositions = compositions,
+        slack = 0,
+        loss = loss,
+        converged = converged,
+        call = call,
+        data = data,
+        init = init
+    )
+    out[["generator_data"]] <- generator_data
+    out[["hemisphere_direction"]] <- hemisphere_direction
+    out[["row_norms"]] <- row_norms
+    out[["precision"]] <- precision
+    out[["directions"]] <- .aa_unit_rows(coordinates)
+    class(out) <- c("directional_archetypes", class(out))
+    out
+}
+
+#' @exportS3Method
+fitted.directional_archetypes <- function(object, ...) {
+    Y <- object[["compositions"]] %*% object[["coordinates"]]
+    Y <- .aa_unit_rows(Y)
+    X <- object[["data"]]
+    if (!is.null(X)) {
+        X <- .aa_unit_rows(as.matrix(X))
+        Y <- .aa_align_rows(Y, X)
+    }
+    Y
+}
+
+#' @exportS3Method
+residuals.directional_archetypes <- function(object, data = NULL, ...) {
+    X <- if (is.null(data)) object[["data"]] else data
+    if (is.null(X)) {
+        msg <- paste("Original data must be provided either when constructing",
+                     "the directional archetypes object or as an argument",
+                     "to `residuals.directional_archetypes()`")
+        stop(msg)
+    }
+    X <- .aa_unit_rows(as.matrix(X))
+    Y <- .aa_unit_rows(object[["compositions"]] %*% object[["coordinates"]])
+    Y <- .aa_align_rows(Y, X)
+    X - Y
+}
+
+#' @exportS3Method
+predict.directional_archetypes <- function(object,
+                                           newdata,
+                                           max_iter = 100L,
+                                           eps = 1e-8,
+                                           step_size = 1.0,
+                                           max_iter_optimizer = 10L,
+                                           step_shrinkage = 0.5,
+                                           ...) {
+    # Prediction fixes the learned directional archetypes A and solves only for
+    # S, the simplex composition of each new row in that archetype hull. This is
+    # the same S subproblem used in the alternating training loop, but without
+    # the B/C update because new data must not change the fitted archetypes.
+    A <- object[["coordinates"]]
+    X <- as.matrix(newdata)
+    if (ncol(X) != ncol(A)) {
+        fmt <- "`newdata` has %d columns but `object$coordinates` has %d columns"
+        stop(sprintf(fmt, ncol(X), ncol(A)))
+    }
+    .aa_check_no_zero_rows(X)
+    X_loss <- if (identical(object[["precision"]], "unit")) .aa_unit_rows(X) else X
+    .aa_directional_fit_S(
+        X_loss = X_loss,
+        A = A,
+        max_iter = max_iter,
+        eps = eps,
+        step_size = step_size,
+        max_iter_optimizer = max_iter_optimizer,
+        step_shrinkage = step_shrinkage
+    )
+}
+
+#' @exportS3Method
+AIC.directional_archetypes <- function(object, ...) {
+    stop("AIC is not defined for Watson-loss directional archetypes.", call. = FALSE)
+}
+
 # Kernel Archetypes Class -----------------------------------------------------
 
 #' Kernel archetype analysis result object
