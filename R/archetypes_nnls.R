@@ -101,7 +101,9 @@ archetypes_nnls <- function(data,
     #   A = BX (K x M) Archetypes
     #   B = (K x N) Archetypes Coefficients (base transform, C in the paper)
     #   S = (N x K) Archetypes Scores (new coordinates)
+    #   rss = ||X - SA||^2 = ||X||^2 - 2*tr(SAXt) + tr(StS AAt) Residual Sum of Squares
     A0 <- A
+    Xt <- t(X)  # compute Xt once to reuse for B update
     nnls_svd_kappa_threshold <- 500
     loss_terms <- .aa_loss_terms(
         X,
@@ -111,7 +113,7 @@ archetypes_nnls <- function(data,
         return_S_terms = max_kappa > 1
     )
     row_weights <- loss_terms[["row_weights"]]
-    row_xss <- loss_terms[["row_xss"]]  # cache to avoid recomputing in every iteration
+    row_xss <- loss_terms[["row_xss"]]  # rowSums(X*X); cache to avoid recomputing in every iteration
     loss[["k_A"]][1L] <- kappa(A, exact = TRUE)
     loss <- .aa_update_loss(
         loss,
@@ -142,7 +144,7 @@ archetypes_nnls <- function(data,
         # A update
         A_new <- fit_ols(S_new, X, method = ols_solver, row_weights = row_weights)
         # B update
-        B_raw <- fit_nnls(A_new, t(X), use_svd = FALSE) # Project A to X-simplex
+        B_raw <- fit_nnls(A_new, Xt, use_svd = FALSE) # Project A to X-simplex
         max_simplex_error <- max(max_simplex_error, max(abs(rowSums(B_raw) - 1)))
         B_new <- project(B_raw, eps = eps)
         # Final A update to ensure A = BX

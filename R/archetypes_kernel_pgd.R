@@ -158,7 +158,7 @@ archetypes_kernel_pgd <- function(data = NULL,
         grad_kernel_B <- grad_kernel_B_l1
         project       <- proj_l1
     } else {
-        grad_S        <- grad_S_simplex
+        grad_S        <- grad_S_trace
         grad_kernel_B <- function(B, grad) grad
         project       <- proj_simplex
     }
@@ -168,19 +168,18 @@ archetypes_kernel_pgd <- function(data = NULL,
     a_hi <- 1 + delta
     clip <- function(a) pmax(pmin(a, a_hi), a_lo)
 
-    init <- B
-    a <- rowSums(B)
+    init <- aB <- B  # actual archetype coefficients used for loss and gradient computations
+    a <- rowSums(aB)
+    B <- aB / a  # projected archetype coefficients used for updates
     slack_tol <- 1e-6
     if (any(a < a_lo - slack_tol) || any(a > a_hi + slack_tol)) {
         fmt <- "Initialize B marginals are outside the specified delta range [%.3f, %.3f]"
         stop(sprintf(fmt, a_lo, a_hi))
     }
-    H <- B  # actual archetype coefficients used for loss and gradient computations
-    B <- B / a  # projected archetype coefficients used for updates
 
     diagG <- diag(G)
-    AAt <- H %*% G %*% t(H)
-    XAt <- G %*% t(H)
+    AAt <- aB %*% G %*% t(aB)
+    XAt <- G %*% t(aB)
     row_rss <- pmax(diagG - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
     row_weights <- if (is.null(weight_fun)) NULL else weight_fun(row_rss)
     if (!is.null(row_weights)) {
@@ -229,17 +228,17 @@ archetypes_kernel_pgd <- function(data = NULL,
             step_S <- step_S * step_shrinkage
         }
 
-        grad_H <- StS %*% H %*% G - StG
-        grad <- a * grad_kernel_B(B, grad_H)
+        grad_aB <- StS %*% aB %*% G - StG
+        grad <- a * grad_kernel_B(B, grad_aB)  # grad_B
         for (k in seq_len(max_iter_optimizer)) {
             B_new <- project(B - step_B * grad, eps = eps)
-            H_new <- a * B_new
-            XAt_new <- G %*% t(H_new)
-            AAt_new <- H_new %*% G %*% t(H_new)
+            aB_new <- a * B_new
+            XAt_new <- G %*% t(aB_new)
+            AAt_new <- aB_new %*% G %*% t(aB_new)
             rss_new <- xss - 2 * sum(S_weighted * XAt_new) + sum(StS * AAt_new)
             if (rss_new < rss) {
                 B <- B_new
-                H <- H_new
+                aB <- aB_new
                 XAt <- XAt_new
                 AAt <- AAt_new
                 rss <- rss_new
@@ -251,17 +250,17 @@ archetypes_kernel_pgd <- function(data = NULL,
         }
 
         if (update_alpha) {
-            grad <- rowSums(grad_H * B)
+            grad <- grad_alpha(B, grad_aB)
             for (k in seq_len(max_iter_optimizer)) {
                 a_new <- clip(a - step_a * grad)
                 a_update <- a_new / a
-                H_new <- a_update * H
+                aB_new <- a_update * aB
                 XAt_new <- sweep(XAt, 2L, a_update, "*")
                 AAt_new <- AAt * tcrossprod(a_update)
                 rss_new <- xss - 2 * sum(S_weighted * XAt_new) + sum(StS * AAt_new)
                 if (rss_new < rss) {
                     a <- a_new
-                    H <- H_new
+                    aB <- aB_new
                     XAt <- XAt_new
                     AAt <- AAt_new
                     rss <- rss_new
@@ -324,7 +323,7 @@ archetypes_kernel_pgd <- function(data = NULL,
 
     list(
         init = init,
-        B = H,
+        B = aB,
         S = S,
         delta = delta,
         i = i,

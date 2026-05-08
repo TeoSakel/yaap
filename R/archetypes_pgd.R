@@ -123,8 +123,12 @@ archetypes_pgd <- function(data,
 
     if (pseudo_pgd) {
         project <- proj_l1
+        grad_S <- grad_S_matrix_l1
+        grad_B <- grad_B_matrix_l1
     } else {
         project <- proj_simplex
+        grad_S <- grad_S_matrix
+        grad_B <- grad_B_matrix
     }
 
     update_alpha <- delta > 0
@@ -134,16 +138,16 @@ archetypes_pgd <- function(data,
     denom_eps <- ifelse(eps > 0, eps, 1e-8)
 
     A0 <- A
-    a <- rowSums(B)
+    aB <- B
+    a <- rowSums(aB)
     slack_tol <- 1e-6
     if (any(a < a_lo - slack_tol) || any(a > a_hi + slack_tol)) {
         fmt <- "Initialize B marginals are outside the specified delta range [%.3f, %.3f]"
         stop(sprintf(fmt, a_lo, a_hi))
     }
-    H <- B
-    B <- B / a
+    B <- aB / a
 
-    A <- .aa_pgd_missing_A(H, X, M, denom_eps)
+    A <- .aa_pgd_missing_A(aB, X, M, denom_eps)
     R <- .aa_pgd_missing_resid(M, S, A, X)  # residuals matrix
     xss <- norm(X, "F")^2  # X sum of squares; invariant for fixed X
     rss <- norm(R, "F")^2  # residual sum of squares -> objective to minimize
@@ -172,7 +176,7 @@ archetypes_pgd <- function(data,
         accepted_update <- FALSE
 
         # Update S
-        grad <- .aa_pgd_missing_grad_S(S, R, A, pseudo_pgd)
+        grad <- grad_S(S, R, A)
         for (k in seq_len(max_iter_optimizer)) {
             S_new <- project(S - step_S * grad, eps = eps)
             R_new <- .aa_pgd_missing_resid(M, S_new, A, X)
@@ -189,23 +193,17 @@ archetypes_pgd <- function(data,
         }
 
         # Update B
-        grad_H <- .aa_pgd_missing_grad_H(H, X, M, S, A, R, denom_eps)
-        grad <- if (pseudo_pgd) {
-            grad_H - rowSums(B * grad_H)
-        } else {
-            grad_H
-        }
-        grad_B_for_alpha <- grad_H
-        grad <- a * grad
+        grad_aB <- grad_aB_matrix(aB, X, M, S, A, R, denom_eps)
+        grad <- grad_B(grad_aB, a, B)
         for (k in seq_len(max_iter_optimizer)) {
             B_new <- project(B - step_B * grad, eps = eps)
-            H_new <- a * B_new
-            A_new <- .aa_pgd_missing_A(H_new, X, M, denom_eps)
+            aB_new <- a * B_new
+            A_new <- .aa_pgd_missing_A(aB_new, X, M, denom_eps)
             R_new <- .aa_pgd_missing_resid(M, S, A_new, X)
             rss_new <- norm(R_new, "F")^2
             if (rss_new < rss) {
                 B <- B_new
-                H <- H_new
+                aB <- aB_new
                 A <- A_new
                 R <- R_new
                 rss <- rss_new
@@ -218,16 +216,16 @@ archetypes_pgd <- function(data,
 
         # Update a:
         if (update_alpha) {
-            grad <- grad_alpha(B, grad_B_for_alpha)
+            grad <- grad_alpha(B, grad_aB)
             for (k in seq_len(max_iter_optimizer)) {
                 a_new <- clip(a - step_a * grad)
-                H_new <- a_new * B
-                A_new <- .aa_pgd_missing_A(H_new, X, M, denom_eps)
+                aB_new <- a_new * B
+                A_new <- .aa_pgd_missing_A(aB_new, X, M, denom_eps)
                 R_new <- .aa_pgd_missing_resid(M, S, A_new, X)
                 rss_new <- norm(R_new, "F")^2
                 if (rss_new < rss) {
                     a <- a_new
-                    H <- H_new
+                    aB <- aB_new
                     A <- A_new
                     R <- R_new
                     rss <- rss_new
@@ -288,7 +286,7 @@ archetypes_pgd <- function(data,
     list(
         A0 = A0,
         A = A,
-        B = H,
+        B = aB,
         S = S,
         delta = delta,
         i = i,
@@ -322,17 +320,18 @@ archetypes_pgd <- function(data,
     #   a = (K x 1) Archetypes scaling (allows them to lay outside convex hull)
     #               In theory they are stored in diagonal matrix.
     #   S = (N x K) Archetypes Scores (new coordinates)
+    #   rss = ||X - SA||^2 = ||X||^2 - 2*tr(SAXt) + tr(StS AAt) Residual Sum of Squares
 
     # PGD specific preparations -----------------------------------------------
 
     # define gradient & projection functions
     if (pseudo_pgd) {
         grad_S  <- grad_S_l1
-        grad_B  <- grad_B_l1
+        grad_aB <- grad_aB_l1
         project <- proj_l1
     } else {
-        grad_S  <- grad_S_simplex
-        grad_B  <- grad_B_simplex
+        grad_S  <- grad_S_trace
+        grad_aB <- grad_aB_trace
         project <- proj_simplex
     }
 
@@ -364,8 +363,8 @@ archetypes_pgd <- function(data,
     AAt <- loss_terms[["AAt"]] # (K x K)
     StS <- loss_terms[["StS"]] # (K x K)
     StX <- loss_terms[["StX"]] # (K x M)
-    xss <- loss_terms[["xss"]] # scalar
-    rss <- loss_terms[["rss"]] # scalar
+    xss <- loss_terms[["xss"]] # scalar = ||X||^2; invariant for fixed X
+    rss <- loss_terms[["rss"]] # scalar = ||X - SA||^2
     XXt <- tcrossprod(X)       # (N x N)
     row_xss <- loss_terms[["row_xss"]]  # (N x 1) row-wise sum of squares; invariant for fixed X
     row_weights <- loss_terms[["row_weights"]]
@@ -415,7 +414,8 @@ archetypes_pgd <- function(data,
         }
 
         ## Update B
-        grad <- a * grad_B(B, A, X, StS, StXXt) # (K x N)
+        grad_aB_step <- grad_aB(B, A, X, StS, StXXt) # (K x N)
+        grad <- a * grad_aB_step  # grad_B
         for (k in seq_len(max_iter_optimizer)) { # line search
             B_new <- project(B - step_B * grad, eps = eps)
             A_new <- (a * B_new) %*% X
@@ -436,7 +436,7 @@ archetypes_pgd <- function(data,
 
         ## Update a:
         if (update_alpha) {
-            grad <- grad_alpha(B, grad / a)
+            grad <- grad_alpha(B, grad_aB_step)  # grad_a
             for (k in seq_len(max_iter_optimizer)) {
                 a_new    <- clip(a - step_a * grad)
                 a_update <- a_new / a # to undo aA multiplication
@@ -523,26 +523,14 @@ archetypes_pgd <- function(data,
 
 # Gradient functions for RSS-normed archetypes analysis
 # ||X - SBX||^2 = tr(XXt - 2SBXXt + SBXXBtSt)
-grad_S_simplex <- function(S, AAt, XAt, row_weights = NULL) {
+grad_S_trace <- function(S, AAt, XAt, row_weights = NULL) {
     # 2 * (SBXXtBt - XXtBt) = 2 * (SAAt - XAt)
     .aa_weight_rows(S %*% AAt - XAt, row_weights)
 }
 
-grad_B_simplex <- function(B, A, X, StS, StXXt) {
+grad_aB_trace <- function(B, A, X, StS, StXXt) {
     # 2 * (StSBXXt - StXXt) = 2 * (StSAXt - StXXt)
     tcrossprod(StS %*% A, X) - StXXt
-}
-
-grad_S_l1 <- function(S, ...) {
-    grad <- grad_S_simplex(S, ...) # (N x K)
-    row_dot <- rowSums(S * grad)
-    grad - row_dot
-}
-
-grad_B_l1 <- function(B, ...) {
-    grad <- grad_B_simplex(B, ...) # (K x N)
-    row_dot <- rowSums(B * grad)
-    grad - row_dot
 }
 
 grad_alpha <- function(B, grad_aB) {
@@ -550,9 +538,57 @@ grad_alpha <- function(B, grad_aB) {
     rowSums(grad_aB * B)
 }
 
-.aa_pgd_missing_A <- function(H, X, M, eps) {
-    numerator <- H %*% X
-    denominator <- H %*% M + eps
+# L1 gradients remove the radial component of the grad (the increase of the norm
+# induced by the grad itself) using the chain rule
+grad_S_l1 <- function(S, ...) {
+    grad <- grad_S_trace(S, ...) # (N x K)
+    row_dot <- rowSums(S * grad)
+    grad - row_dot
+}
+
+grad_aB_l1 <- function(B, ...) {
+    grad <- grad_aB_trace(B, ...) # (K x N)
+    row_dot <- rowSums(B * grad)
+    grad - row_dot
+}
+
+# Gradient of functions using the whole residual matrix R = X - SA
+grad_S_matrix <- function(S, R, A) {
+    # d(R^2)/dS = 2 * R * dR/dS = -2RAt
+    grad <- R %*% t(A)  # the factor of 2 is absorbed in step size
+    grad
+}
+
+grad_S_matrix_l1 <- function(S, R, A) {
+    grad <- grad_S_matrix(S, R, A)
+    grad - rowSums(S * grad)
+}
+
+grad_aB_matrix <- function(aB, X, M, S, A, R, eps) {
+    # 1) Base case (aB = B, M = 1): with R = SBX - X => dR = S dB X = dR/dB = S (.) X
+    #    d(R^2)/dB = d(R^2)/dR * dR/dB = 2 St R Xt
+    # 2) For a != 1 we optimize normalized archetypes A(aB) = (aBX) / (aB1 + eps),
+    #    so the denominator adds a quotient-rule correction (not just a scaling by a).
+    # 3) With missingness, replace aB1 by aBM and R by M o (SA - X),
+    #    which masks unobserved entries and yields grad_aB = (XG - M(G o At))t,
+    #    where G = Rt S / ((aBM)t + eps).
+    grad <- crossprod(R, S) / (t(aB %*% M) + eps)
+    t(X %*% grad - M %*% (grad * t(A)))
+}
+
+grad_B_matrix <- function(grad_aB, a, B) {
+    # d(R^2)/d(B) = d(R^2)/d(aB) * daB/dB = grad_aB * a
+    a * grad_aB
+}
+
+grad_B_matrix_l1 <- function(grad_aB, a, B) {
+    # Remove radial component before simplex projection in the pseudo/L1 variant.
+    a * (grad_aB - rowSums(B * grad_aB))
+}
+
+.aa_pgd_missing_A <- function(aB, X, M, eps) {
+    numerator <- aB %*% X
+    denominator <- aB %*% M + eps
     as.matrix(numerator / denominator)
 }
 
@@ -575,16 +611,4 @@ grad_alpha <- function(B, grad_aB) {
         dimnames = dimnames(M)
     )
     Xhat - X
-}
-
-.aa_pgd_missing_grad_S <- function(S, R, A, pseudo_pgd) {
-    grad <- R %*% t(A)
-    if (!pseudo_pgd)
-        return(grad)
-    grad - rowSums(S * grad)
-}
-
-.aa_pgd_missing_grad_H <- function(H, X, M, S, A, R, eps) {
-    grad <- crossprod(R, S) / (t(H %*% M) + eps)
-    t(X %*% grad - M %*% (grad * t(A)))
 }
