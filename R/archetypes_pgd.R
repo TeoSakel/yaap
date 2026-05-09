@@ -521,7 +521,7 @@ archetypes_pgd <- function(data,
     )
 }
 
-# Gradient functions for RSS-normed archetypes analysis
+# Gradient functions for squared-loss archetypes analysis
 # ||X - SBX||^2 = tr(XXt - 2SBXXt + SBXXBtSt)
 grad_S_trace <- function(S, AAt, XAt, row_weights = NULL) {
     # 2 * (SBXXtBt - XXtBt) = 2 * (SAAt - XAt)

@@ -40,11 +40,9 @@ archetype names.}
 
 \item{weights}{optional vector of sample weights (default: NULL)}
 
-\item{scale}{scaling or metric embedding used before fitting. \code{TRUE} applies
-the default z-score preprocessing, \code{FALSE} leaves columns on their original
-scale, a positive numeric vector divides columns by user-supplied scale
-factors, and a symmetric positive-definite matrix applies the corresponding
-feature metric embedding in the original data column space.}
+\item{scale}{behaves like the \code{scale.} argument in base R \code{scale} function.
+with the additional option to specify a custom positive-semidefine matrix
+for metric embedding (default: TRUE, i.e. column-wise unit variance)}
 
 \item{robust}{whether to use Tukey bisquare row reweighting (default: FALSE)}
 
@@ -68,24 +66,16 @@ low-variance features (default: 1e-6)}
 
 \item{ols_solver}{method for solving the OLS problem min_A X = SA (default: "qr")}
 
-\item{bigM}{large constant to enforce simplex constraint, or \code{NULL} to set it
-from the dimension-adjusted RMS feature standard deviation after
-preprocessing (default: \code{NULL}).}
+\item{bigM}{large constant to enforce simplex constraint, or \code{NULL} to set it automatically.}
 
-\item{max_no_update}{maximum consecutive outer iterations with no RSS
-improvement before NNLS stops as stalled (default: 5)}
+\item{max_no_update}{maximum consecutive iterations without improvement before
+considering NNLS stalled (default: 5)}
 }
 \value{
 An object of class \code{\link{archetypes}}
 }
 \description{
 Perform Archetypal Analysis using NNLS
-}
-\details{
-NNLS uses the \code{bigM} column to make nonnegative least-squares coefficients
-approximately simplex-constrained. If raw NNLS coefficient row sums are far
-from one, a warning is emitted because the defensive simplex projection is
-materially changing the block solution.
 }
 \examples{
 toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))

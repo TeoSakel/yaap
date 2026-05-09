@@ -370,7 +370,13 @@ archetypes_kernel_pgd <- function(data = NULL,
                                degree = 3,
                                coef0 = 1) {
     # Catch any mis-specification of kernel arguments that would be ignored by the kernel function
-    if (!is.null(gamma) && kernel != "polynomial") {
+    if (!is.null(gamma) && kernel %in% c("rbf", "laplace")) {
+        stop(
+            sprintf("%s kernels use `sigma`; `gamma` is only used for polynomial kernels",
+                    ifelse(kernel == "rbf", "RBF", "Laplace")),
+            call. = FALSE
+        )
+    } else if (!is.null(gamma) && kernel != "polynomial") {
         warning(
             "`gamma` is only used for the polynomial kernel; ignoring for other kernels",
              call. = FALSE
@@ -394,24 +400,34 @@ archetypes_kernel_pgd <- function(data = NULL,
 .auto_rbf_sigma <- function(D) {
     d_upper <- if (is.matrix(D)) D[upper.tri(D)] else as.vector(D)
     d_90    <- d_upper[d_upper <= stats::quantile(d_upper, 0.9)]
-    sigma   <- .otsu_threshold(d_90)
+    sigma   <- .otsu_threshold(d_90) * 0.75
     if (!is.finite(sigma) || sigma <= 0) 1 else sigma
 }
 
 rbf_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X)
-    if (is.null(sigma)) sigma <- .auto_rbf_sigma(D)
+    if (is.null(sigma))
+        sigma <- .auto_rbf_sigma(D)
     stopifnot("`sigma` must be a positive finite number" =
                   length(sigma) == 1L && is.finite(sigma) && sigma > 0)
-    exp(-as.matrix(D^2) / sigma^2 * 0.5)
+    G <- exp(-0.5 * (D / sigma)^2)
+    # convert to full symmetric matrix at the end to avoid redundant computations
+    G <- as.matrix(G)
+    diag(G) <- 1
+    G
 }
 
 laplace_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X, method = "manhattan")
-    if (is.null(sigma)) sigma <- .auto_rbf_sigma(D)
+    if (is.null(sigma))
+        sigma <- .auto_rbf_sigma(D)
     stopifnot("`sigma` must be a positive finite number" =
                   length(sigma) == 1L && is.finite(sigma) && sigma > 0)
-    exp(-as.matrix(D) / sigma)
+    G <- exp(-D / sigma)
+    # convert to full symmetric matrix at the end to avoid redundant computations
+    G <- as.matrix(G)
+    diag(G) <- 1
+    G
 }
 
 polynomial_kernel <- function(X, gamma, degree, coef0) {
@@ -582,7 +598,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
     if (verbose) {
         fmt <- ifelse(converged, "Converged after %d iterations:", "Final iteration %d:")
         fmt <- paste(fmt, "loss = %.4g, R2 = %.3f")
-        message(sprintf(fmt, i, loss[j, "rss"], loss[j, "r2"]))
+        message(sprintf(fmt, i, loss[j, "loss"], loss[j, "r2"]))
     }
 
     kernel_archetypes(

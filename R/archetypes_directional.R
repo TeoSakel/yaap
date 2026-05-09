@@ -350,14 +350,14 @@ archetypes_directional <- function(data,
                 loss[[nm]][j] <- loss[[nm]][i]
             if (verbose) {
                 fmt <- paste(
-                    "Iteration %d: directional candidate did not improve RSS;",
+                    "Iteration %d: directional candidate did not improve loss;",
                     "keeping previous iterate (no-update %d/%d)"
                 )
                 message(sprintf(fmt, i, no_update, max_no_update))
             }
             if (no_update >= max_no_update) {
                 warning(sprintf(
-                    "Directional AA stalled: no RSS improvement after %d consecutive updates",
+                    "Directional AA stalled: no loss improvement after %d consecutive updates",
                     max_no_update
                 ), call. = FALSE)
                 break
@@ -403,7 +403,7 @@ archetypes_directional <- function(data,
 }
 
 .aa_directional_update_loss <- function(loss, i, terms) {
-    loss[["rss"]][i] <- terms[["rss"]]
+    loss[["loss"]][i] <- terms[["rss"]]
     loss[["r2"]][i] <- 1 - terms[["rss"]] / terms[["xss"]]
     loss
 }

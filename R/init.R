@@ -56,7 +56,7 @@
 #' - `"hull_outmost"`: computes hull candidates using one of the
 #'   `hull_method` strategies (`"full"`, `"projected"`, or `"partitioned"`)
 #'   and then selects `K` archetypes via an outmost-vote ranking. This family of
-#'   hull-based initializations is adapted from the \\pkg{archetypal} package
+#'   hull-based initializations is adapted from the \pkg{archetypal} package
 #'   (Mouselimis et al., 2025).
 #'
 #' @references
@@ -75,7 +75,7 @@
 #' \url{https://proceedings.neurips.cc/paper_files/paper/2019/file/7f278ad602c7f47aa76d1bfc90f20263-Paper.pdf}
 #'
 #' Mouselimis, L., et al. (2025).
-#' \\pkg{archetypal}: Archetypal Analysis with Principal Convex Hull Analysis.
+#' \pkg{archetypal}: Archetypal Analysis with Principal Convex Hull Analysis.
 #' R package version 1.3.1.
 #' \url{https://cran.r-project.org/package=archetypal}
 #'

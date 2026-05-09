@@ -38,7 +38,7 @@ test_that("kernel PGD matches Euclidean PGD for the linear kernel", {
     ))
 
     expect_s3_class(kernel, "kernel_archetypes")
-    expect_equal(kernel[["loss"]][["rss"]], pgd[["loss"]][["rss"]], tolerance = 1e-6)
+    expect_equal(kernel[["loss"]][["loss"]], pgd[["loss"]][["loss"]], tolerance = 1e-6)
     expect_equal(kernel[["loss"]][["r2"]], pgd[["loss"]][["r2"]], tolerance = 1e-7)
     expect_equal(unname(kernel[["coefficients"]]), unname(pgd[["coefficients"]]), tolerance = 1e-7)
     expect_equal(unname(kernel[["compositions"]]), unname(pgd[["compositions"]]), tolerance = 1e-7)
@@ -63,8 +63,8 @@ test_that("kernel PGD fits an RBF kernel and returns proxy coordinates", {
     expect_matrix_dim(fit[["compositions"]], nrow(X), 3L)
     expect_row_stochastic(fit[["coefficients"]])
     expect_row_stochastic(fit[["compositions"]])
-    expect_true(all(is.finite(fit[["loss"]][["rss"]])))
-    expect_true(all(diff(fit[["loss"]][["rss"]]) <= 1e-8))
+    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+    expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
     expect_equal(fit[["coordinates_proxy"]], fit[["coefficients"]] %*% X)
     expect_error(
         archetypes_kernel_pgd(

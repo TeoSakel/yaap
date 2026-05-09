@@ -196,7 +196,7 @@ test_that("PGD stalls instead of converging when no updates are accepted", {
 
     expect_false(fit[["converged"]])
     expect_equal(nrow(fit[["loss"]]), 3L)
-    expect_equal(diff(fit[["loss"]][["rss"]]), c(0, 0))
+    expect_equal(diff(fit[["loss"]][["loss"]]), c(0, 0))
 })
 
 test_that("scale preprocessing supports TRUE, FALSE, vector, and matrix transforms", {
@@ -278,7 +278,7 @@ test_that("PGD and NNLS accept matrix scale and return original-unit coordinates
         expect_matrix_dim(fit[["coordinates"]], 3L, ncol(X))
         expect_equal(colnames(fit[["coordinates"]]), colnames(X))
         expect_true(all(is.finite(fit[["coordinates"]])))
-        expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+        expect_true(all(is.finite(fit[["loss"]][["loss"]])))
     }
 })
 
@@ -291,10 +291,10 @@ test_that("NNLS matrix scale keeps bigM outside returned coordinates", {
 
     expect_matrix_dim(fit[["coordinates"]], 3L, ncol(X))
     expect_false("bigM" %in% colnames(fit[["coordinates"]]))
-    expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
 })
 
-test_that("NNLS keeps previous iterate when candidate RSS does not improve", {
+test_that("NNLS keeps previous iterate when candidate loss does not improve", {
     set.seed(1)
     X <- toy_matrix()
 
@@ -309,8 +309,8 @@ test_that("NNLS keeps previous iterate when candidate RSS does not improve", {
     loss <- fit[["loss"]]
 
     expect_false(fit[["converged"]])
-    expect_true(all(diff(loss[["rss"]]) <= 0))
-    expect_equal(tail(diff(loss[["rss"]]), 2L), c(0, 0))
+    expect_true(all(diff(loss[["loss"]]) <= 0))
+    expect_equal(tail(diff(loss[["loss"]]), 2L), c(0, 0))
 })
 
 test_that("NNLS warns when raw coefficients are far from simplex", {
@@ -408,7 +408,7 @@ test_that("archetypes fitters accept sparse input with expected invariants", {
         expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
         expect_row_stochastic(fit[["coefficients"]])
         expect_row_stochastic(fit[["compositions"]])
-        expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+        expect_true(all(is.finite(fit[["loss"]][["loss"]])))
     }
 })
 
@@ -442,8 +442,8 @@ test_that("missing-data PGD defaults on for dense NA input", {
     expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
     expect_row_stochastic(fit[["coefficients"]])
     expect_row_stochastic(fit[["compositions"]])
-    expect_true(all(is.finite(fit[["loss"]][["rss"]])))
-    expect_true(all(diff(fit[["loss"]][["rss"]]) <= 1e-8))
+    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+    expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
 })
 
 test_that("missing-data PGD treats sparse structural zeros as missing", {
@@ -478,8 +478,8 @@ test_that("missing-data PGD treats sparse structural zeros as missing", {
     expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
     expect_row_stochastic(fit[["coefficients"]])
     expect_row_stochastic(fit[["compositions"]])
-    expect_true(all(is.finite(fit[["loss"]][["rss"]])))
-    expect_true(all(diff(fit[["loss"]][["rss"]]) <= 1e-8))
+    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+    expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
 })
 
 test_that("missing preprocessing scales observed entries", {
@@ -584,7 +584,7 @@ test_that("robust archetypes fitters keep expected invariants", {
         expect_matrix_dim(fit[["compositions"]], 250L, 3L)
         expect_row_stochastic(fit[["coefficients"]])
         expect_row_stochastic(fit[["compositions"]])
-        expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+        expect_true(all(is.finite(fit[["loss"]][["loss"]])))
     }
 })
 

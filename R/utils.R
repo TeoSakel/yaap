@@ -176,10 +176,10 @@ effic <- function(X, Y) {
 }
 
 .aa_new_loss <- function(L) {
-    list(rss = rep(NA_real_, L),
-         r2  = rep(NA_real_, L),
-         k_S = rep(NA_real_, L),
-         k_A = rep(NA_real_, L))
+    list(loss = rep(NA_real_, L),
+         r2   = rep(NA_real_, L),
+         k_S  = rep(NA_real_, L),
+         k_A  = rep(NA_real_, L))
 }
 
 .aa_check_scale <- function(scale, p) {
@@ -241,7 +241,7 @@ effic <- function(X, Y) {
     S <- B <- diag(nrow(X))
     colnames(B) <- rownames(S) <- rownames(X)
     rownames(B) <- colnames(S) <- rownames(A)
-    loss <- data.frame(rss = 0, r2 = 1, k_S = 1, k_A = kappa(A))
+    loss <- data.frame(loss = 0, r2 = 1, k_S = 1, k_A = kappa(A))
 
     archetypes(
         call         = NULL,
@@ -279,7 +279,7 @@ effic <- function(X, Y) {
 
     xss <- norm(X, type = "F")^2
     rss <- xss - nrow(X) * as.numeric(x_mean %*% x_mean)
-    loss <- data.frame(rss = rss, r2 = 1 - rss / xss, k_S = 1, k_A = 1)
+    loss <- data.frame(loss = rss, r2 = 1 - rss / xss, k_S = 1, k_A = 1)
 
     archetypes(
         call         = NULL,
@@ -732,7 +732,7 @@ effic <- function(X, Y) {
 
 # Common subroutine to initialize variables:
 # archetype coordinates (A), coefficients (B), compositions (S) and
-# loss metrics: rss, r2, condition numbers of S and A (k_S, k_A)
+# loss metrics: loss, r2, condition numbers of S and A (k_S, k_A)
 .aa_init_vars <- function(X, K, init, init_args, eps, max_iter, verbose, delta = 0) {
     if (verbose) message("Initializing archetypes...")
     L <- max_iter + 1L
@@ -852,7 +852,7 @@ effic <- function(X, Y) {
                             k_A = c("exact", "gram")) {
     k_A <- match.arg(k_A)
     # Update loss metrics: add row "i" (current iteration) to the loss dataframe
-    loss[["rss"]][i] <- loss_terms[["rss"]]
+    loss[["loss"]][i] <- loss_terms[["rss"]]
     loss[["r2"]][i]  <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
 
     # Compute condition numbers
@@ -875,18 +875,18 @@ effic <- function(X, Y) {
     loss
 }
 
-# Check convergence based on relative RSS improvement and R2 threshold
+# Check convergence based on relative loss improvement and R2 threshold
 .aa_check_convergence <- function(loss, i, tol, tol_r2, max_kappa, verbose) {
     j <- i + 1L  # save some typing...
     # Main
     converged <- with(
         loss,
-        abs(rss[j] - rss[i]) < tol * rss[i] || r2[j] > tol_r2
+        abs(loss[j] - loss[i]) < tol * loss[i] || r2[j] > tol_r2
     )
     # Warnings/Messages
     if (verbose && i %% 10 == 0) {
-        fmt <- "Iteration %d: RSS = %.4f, R2 = %.3f"
-        message(sprintf(fmt, i, loss[["rss"]][j], loss[["r2"]][j]))
+        fmt <- "Iteration %d: loss = %.4f, R2 = %.3f"
+        message(sprintf(fmt, i, loss[["loss"]][j], loss[["r2"]][j]))
     }
     k_S <- loss[["k_S"]][j]
     k_A <- loss[["k_A"]][j]
@@ -933,7 +933,7 @@ effic <- function(X, Y) {
                       "Converged after %d iterations:",
                       "Final iteration %d:")
         fmt <- paste(fmt, "loss = %.4g, R2 = %.3f")
-        message(sprintf(fmt, i, loss[j, "rss"], loss[j, "r2"]))
+        message(sprintf(fmt, i, loss[j, "loss"], loss[j, "r2"]))
     }
 
     archetypes(

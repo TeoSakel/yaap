@@ -12,7 +12,7 @@ test_that("archetypes_directional fits spherical data with expected invariants",
     expect_matrix_dim(fit[["generator_data"]], nrow(X), ncol(X))
     expect_row_stochastic(fit[["coefficients"]])
     expect_row_stochastic(fit[["compositions"]])
-    expect_true(all(is.finite(fit[["loss"]][["rss"]])))
+    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
     expect_true(all(is.finite(fitted(fit))))
     expect_true(all(is.finite(residuals(fit))))
     expect_matrix_dim(predict(fit, X[1:5, ], max_iter = 3L), 5L, 3L)
@@ -28,7 +28,7 @@ test_that("directional loss is monotone non-increasing", {
         tol_r2 = 1,
         max_kappa = Inf
     )
-    expect_true(all(diff(fit[["loss"]][["rss"]]) <= 1e-8))
+    expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
 })
 
 test_that("directional AA is stable to polarity flips", {

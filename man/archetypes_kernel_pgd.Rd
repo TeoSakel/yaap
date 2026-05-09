@@ -33,14 +33,14 @@ archetypes_kernel_pgd(
 
 \item{K}{Number of archetypes.}
 
-\item{gram}{Optional precomputed \code{N x N} Gram matrix.}
+\item{gram}{Optional precomputed \verb{N x N} Gram matrix.}
 
 \item{kernel}{Optional kernel specification. One of \code{"linear"}, \code{"rbf"},
-\code{"polynomial"}, or a function returning an \code{N x N} Gram matrix.}
+\code{"polynomial"}, or a function returning an \verb{N x N} Gram matrix.}
 
 \item{kernel_args}{List of arguments passed to the kernel.}
 
-\item{init}{Initialization method, row indices/names, or a \code{K x N}
+\item{init}{Initialization method, row indices/names, or a \verb{K x N}
 coefficient matrix.}
 
 \item{init_args}{List of additional arguments for the initialization method.}

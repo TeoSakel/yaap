@@ -161,21 +161,21 @@ archetypes_nnls <- function(data,
         )
 
         # Check if candidate improved objective
-        if (loss_terms_new[["rss"]] >= loss[["rss"]][i]) {
+        if (loss_terms_new[["rss"]] >= loss[["loss"]][i]) {
             no_update <- no_update + 1L
             for (nm in names(loss))
                 loss[[nm]][j] <- loss[[nm]][i]
 
             if (verbose) {
                 fmt <- paste(
-                    "Iteration %d: NNLS candidate did not improve RSS;",
+                    "Iteration %d: NNLS candidate did not improve loss;",
                     "keeping previous iterate (no-update %d/%d)"
                 )
                 message(sprintf(fmt, i, no_update, max_no_update))
             }
             if (no_update >= max_no_update) {
                 fmt <- paste(
-                    "NNLS stalled: no RSS improvement after",
+                    "NNLS stalled: no loss improvement after",
                     "%d consecutive candidate updates"
                 )
                 warning(sprintf(fmt, max_no_update), call. = FALSE)

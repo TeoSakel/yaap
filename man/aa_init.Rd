@@ -26,7 +26,7 @@ aa_init(
 
 \item{method}{initialization method. One of \code{"uniform_archetypes"},
 \code{"furthest_first"}, \code{"kmeans_pp"}, \code{"furthest_sum"}, \code{"coreset_initfn"},
-\code{"aa_pp"}, or \code{"aa_pp_mc"} (default: \code{"furthest_sum"}).}
+\code{"aa_pp"}, \code{"aa_pp_mc"}, or \code{"hull_outmost"} (default: \code{"furthest_sum"}).}
 
 \item{sparse}{whether \code{B} should be a sparse matrix (default: same as X)}
 
@@ -85,6 +85,11 @@ distances to their convex hull (see Mair & Sjölund 2023).
 \item \code{"aa_pp_mc"}: MCMC approximation of AA++ initialization. Each archetype is
 sampled by performing AA++ on a sub-sample of size \code{batch_size} from the
 data matrix \code{X} (see Mair & Sjölund 2023).
+\item \code{"hull_outmost"}: computes hull candidates using one of the
+\code{hull_method} strategies (\code{"full"}, \code{"projected"}, or \code{"partitioned"})
+and then selects \code{K} archetypes via an outmost-vote ranking. This family of
+hull-based initializations is adapted from the \pkg{archetypal} package
+(Mouselimis et al., 2025).
 }
 }
 \references{
@@ -101,4 +106,9 @@ Mair, S., & Brefeld, U. (2019).
 Coresets for archetypal analysis.
 Advances in Neural Information Processing Systems, 32.
 \url{https://proceedings.neurips.cc/paper_files/paper/2019/file/7f278ad602c7f47aa76d1bfc90f20263-Paper.pdf}
+
+Mouselimis, L., et al. (2025).
+\pkg{archetypal}: Archetypal Analysis with Principal Convex Hull Analysis.
+R package version 1.3.1.
+\url{https://cran.r-project.org/package=archetypal}
 }

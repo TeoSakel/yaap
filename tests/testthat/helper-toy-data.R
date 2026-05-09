@@ -51,7 +51,7 @@ manual_fit <- function() {
         ncol = 3,
         byrow = TRUE
     )
-    loss <- data.frame(rss = c(2, 1, 0.5), r2 = c(0, 0.5, 0.75), k_S = 1, k_A = 1)
+    loss <- data.frame(loss = c(2, 1, 0.5), r2 = c(0, 0.5, 0.75), k_S = 1, k_A = 1)
 
     archetypes(
         coordinates = A,

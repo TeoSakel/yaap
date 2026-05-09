@@ -2,7 +2,6 @@
 % Please edit documentation in R/archetypes_directional.R
 \name{archetypes_directional}
 \alias{archetypes_directional}
-\alias{directional_archetypes}
 \title{Directional Archetypal Analysis}
 \usage{
 archetypes_directional(
@@ -24,21 +23,6 @@ archetypes_directional(
   step_shrinkage = 0.5,
   max_no_update = 5L
 )
-
-directional_archetypes(
-  coordinates,
-  coefficients,
-  compositions,
-  loss = NULL,
-  converged = TRUE,
-  call = NULL,
-  data = NULL,
-  init = NULL,
-  generator_data = NULL,
-  hemisphere_direction = NULL,
-  row_norms = NULL,
-  precision = NULL
-)
 }
 \arguments{
 \item{data}{Dense numeric data matrix (rows = samples, columns = dimensions).}
@@ -47,7 +31,7 @@ directional_archetypes(
 
 \item{init}{Initialization method. \code{"random"} samples exponential generator
 weights as in the reference implementation; any method accepted by
-\code{\link[=aa_init]{aa_init()}} is also supported. A numeric \code{K x ncol(data)} matrix may be
+\code{\link[=aa_init]{aa_init()}} is also supported. A numeric \verb{K x ncol(data)} matrix may be
 supplied as initial archetype directions.}
 
 \item{init_args}{List of additional arguments for the initialization method.}
@@ -82,29 +66,10 @@ precision.}
 
 \item{max_no_update}{Maximum consecutive outer iterations with no accepted
 line-search update before stopping as stalled.}
-
-\item{coordinates}{Raw directional archetype coordinates.}
-
-\item{coefficients}{Archetype generator coefficients.}
-
-\item{compositions}{Sample compositions.}
-
-\item{loss}{Per-iteration directional loss metrics.}
-
-\item{converged}{Logical convergence flag.}
-
-\item{call}{Matched call.}
-
-\item{generator_data}{Row-normalized and possibly hemisphere-flipped data
-used to generate archetypes.}
-
-\item{hemisphere_direction}{Dominant hemisphere direction, or \code{NULL}.}
-
-\item{row_norms}{Original data row norms.}
 }
 \value{
 An object of class \code{directional_archetypes}, extending
-\code{\link[=archetypes]{archetypes}}.
+\code{\link{archetypes}}.
 }
 \description{
 Fits a matrix-first directional archetypal analysis model. Directional AA
