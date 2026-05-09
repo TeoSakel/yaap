@@ -39,8 +39,10 @@ run_aa <- function(data, K, ...) {
 }
 
 #' @rdname run_aa
-#' @param method fitting method. One of `"pgd"`, `"nnls"`, `"kernel"`, or
-#'   `"directional"` (default: `"pgd"`).
+#' @param method fitting method. One of `"pgd"`, `"nnls"`, `"kernel"`,
+#'   `"directional"`, or `"paa"` (default: `"pgd"`).
+#' @param family observation family for `method = "paa"`. Defaults to
+#'   `"gaussian"`.
 #' @param init function, method string, or numeric coordinate matrix to initialize
 #'   archetypes. `NULL` uses `"furthest_sum"` except for `method =
 #'   "directional"`, where it uses `"random"`. When a matrix is supplied it
@@ -75,12 +77,15 @@ run_aa <- function(data, K, ...) {
 #'   `gram`, `kernel`, `kernel_args`, `delta`, `pseudo_pgd`, `step_size`,
 #'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`. For
 #'   `"directional"`, these include `hemisphere`, `precision`, `step_size`,
-#'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`.
+#'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`. For `"paa"`,
+#'   these include `step_size`, `max_iter_optimizer`, `step_shrinkage`, and
+#'   `max_no_update`.
 #'
 #' @exportS3Method
 run_aa.default <- function(data,
                            K,
-                           method = c("pgd", "nnls", "kernel", "directional"),
+                           method = c("pgd", "nnls", "kernel", "directional", "paa"),
+                           family = "gaussian",
                            init = NULL,
                            init_args = list(),
                            weights = NULL,
@@ -104,6 +109,7 @@ run_aa.default <- function(data,
         data = data,
         K = K,
         method = method,
+        family = family,
         init = init,
         init_args = init_args,
         weights = weights,
@@ -167,7 +173,8 @@ run_aa.fd <- function(data, K, ...) {
 .aa_run_aa_default <- function(call,
                                data,
                                K,
-                               method = c("pgd", "nnls", "kernel", "directional"),
+                               method = c("pgd", "nnls", "kernel", "directional", "paa"),
+                               family = "gaussian",
                                init = NULL,
                                init_args = list(),
                                weights = NULL,
@@ -183,7 +190,7 @@ run_aa.fd <- function(data, K, ...) {
                                verbose = FALSE,
                                missing = any(is.na(data)),
                                ...) {
-    method <- match.arg(method, c("pgd", "nnls", "kernel", "directional"))
+    method <- match.arg(method, c("pgd", "nnls", "kernel", "directional", "paa"))
     if (is.null(init))
         init <- if (identical(method, "directional")) "random" else "furthest_sum"
     stopifnot("`missing` must be TRUE or FALSE" =
@@ -228,6 +235,30 @@ run_aa.fd <- function(data, K, ...) {
             init_args = init_args,
             robust = robust,
             tukey_c = tukey_c,
+            max_iter = max_iter,
+            tol = tol,
+            tol_r2 = tol_r2,
+            max_kappa = max_kappa,
+            eps = eps,
+            verbose = verbose,
+            ...
+        )
+        fit[["call"]] <- call
+        return(fit)
+    }
+    if (identical(method, "paa")) {
+        if (missing)
+            stop("`missing = TRUE` is not supported for `method = 'paa'`.", call. = FALSE)
+        if (robust)
+            stop("`robust = TRUE` is not supported for `method = 'paa'`.", call. = FALSE)
+        if (!is.null(weights))
+            stop("`weights` are not supported for `method = 'paa'`.", call. = FALSE)
+        fit <- archetypes_paa(
+            data = data,
+            K = K,
+            family = family,
+            init = init,
+            init_args = init_args,
             max_iter = max_iter,
             tol = tol,
             tol_r2 = tol_r2,

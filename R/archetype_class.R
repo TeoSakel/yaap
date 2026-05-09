@@ -22,6 +22,7 @@
 #' @param call The matched function call that created the object (defaults to `match.call()`).
 #' @param init Optional numeric matrix (K x M) with the initial archetype
 #'   coordinates before optimization.
+#' @param family Observation family. Defaults to `"gaussian"`.
 #'
 #' @details
 #' Let `X` be the original data matrix (N x M).
@@ -69,11 +70,12 @@ archetypes <- function(coordinates,
                        converged = TRUE,
                        call = NULL,
                        data = NULL,
-                       init = NULL) {
+                       init = NULL,
+                       family = "gaussian") {
     if (is.null(call))
         call <- match.call()
     if (is.null(loss))
-        loss <- data.frame(rss = NA_real_, r2  = NA_real_, k_S = NA_real_, k_A = NA_real_)
+        loss <- data.frame(loss = NA_real_, r2  = NA_real_, k_S = NA_real_, k_A = NA_real_)
 
     return(
         new_archetypes(
@@ -86,7 +88,8 @@ archetypes <- function(coordinates,
             converged    = converged,
             call         = call,
             data         = data,
-            init         = init
+            init         = init,
+            family       = family
         )
     )
 }
@@ -104,6 +107,7 @@ archetypes <- function(coordinates,
 #' @param call The matched function call that created the object.
 #' @param data Optional original data.
 #' @param init Optional initial archetype coordinates.
+#' @param family Observation family.
 new_archetypes <- function(coordinates,
                            coefficients,
                            compositions,
@@ -113,7 +117,8 @@ new_archetypes <- function(coordinates,
                            AIC = NA_real_,
                            call = NULL,
                            data = NULL,
-                           init = NULL) {
+                           init = NULL,
+                           family = "gaussian") {
 
 
     # Dimension checks
@@ -173,6 +178,10 @@ new_archetypes <- function(coordinates,
 
     # Check loss
     if(!inherits(loss, "data.frame")) stop("loss must be compatible with data.frame")
+    if (is.null(family))
+        family <- "gaussian"
+    stopifnot("family must be a single non-empty string" =
+                  is.character(family) && length(family) == 1L && nzchar(family))
 
     structure(
         list(
@@ -185,7 +194,8 @@ new_archetypes <- function(coordinates,
             AIC          = AIC,
             converged    = converged,
             data         = data,
-            call         = call
+            call         = call,
+            family       = family
         ),
         class = "archetypes"
     )
@@ -277,6 +287,13 @@ names.archetypes <- function(x)
 #' @exportS3Method
 fitted.archetypes <- function(object, ...) {
     X_hat <- with(object, compositions %*% coordinates)
+    family <- object[["family"]]
+    if (is.null(family))
+        family <- "gaussian"
+    if (identical(family, "multinomial") && !is.null(object[["data"]])) {
+        totals <- rowSums(as.matrix(object[["data"]]))
+        X_hat <- totals * X_hat
+    }
     if (inherits(object[["data"]], "fd"))
         return(.aa_fd_from_rows(X_hat, object[["data"]], rownames(X_hat)))
     X_hat
@@ -305,9 +322,9 @@ residuals.archetypes <- function(object, data = NULL, ...) {
     } else {
         data
     }
-    X_hat <- with(object, compositions %*% coordinates)
+    X_hat <- fitted(object)
     if (inherits(X, "fd"))
-        return(X - .aa_fd_from_rows(X_hat, X, rownames(X_hat)))
+        return(X - X_hat)
 
     stopifnot(all(dim(X) == dim(X_hat)))
     return(X - X_hat)
@@ -343,6 +360,11 @@ predict.archetypes <- function(object, newdata, ...) {
     } else {
         newdata
     }
+    family <- object[["family"]]
+    if (is.null(family))
+        family <- "gaussian"
+    if (!identical(family, "gaussian"))
+        return(.aa_paa_predict_S(object, X, ...))
     S <- fit_simplex(A, X, ...)
     return(S)
 }
@@ -377,10 +399,12 @@ print.archetypes <- function(x, ...) {
 #'   archetypes this is a ternary plot: points near a corner are dominated by
 #'   one archetype, points near an edge mix two archetypes, and points near the
 #'   center mix all three.
-#' * `"loss"` plots the residual sum of squares stored in `x$loss$rss` across
+#' * `"loss"` plots the objective value stored in `x$loss$loss` across
 #'   optimization iterations. This is useful for checking whether the fitting
-#'   algorithm reduced reconstruction error and whether the loss curve has
-#'   plateaued.
+#'   algorithm reduced the fitted objective and whether the loss curve has plateaued.
+#' * `"profiles"` plots the fitted archetypes in their natural representation:
+#'   coefficient functions for `fd` fits, and archetype profiles for matrix and
+#'   probabilistic fits.
 #' * `"coordinates"` plots the original observations together with the fitted
 #'   archetype coordinates in feature space. In two dimensions the archetypes
 #'   are connected as a closed polygon. In more than two dimensions the method
@@ -390,7 +414,7 @@ print.archetypes <- function(x, ...) {
 #'
 #' @param x An object of class `archetypes`
 #' @param what Character string naming the plot to draw. Supported values are
-#'   `"compositions"`, `"loss"`, and `"coordinates"`. `"composition"` and
+#'   `"compositions"`, `"loss"`, `"profiles"`, and `"coordinates"`. `"composition"` and
 #'   `"composision"` are accepted as aliases for `"compositions"`.
 #' @param data Optional numeric matrix with the original data. Required for
 #'   `what = "coordinates"` if the object does not store its original data.
@@ -407,7 +431,7 @@ print.archetypes <- function(x, ...) {
 #' @importFrom graphics lines pairs plot points
 #' @exportS3Method
 plot.archetypes <- function(x,
-                            what = c("compositions", "loss", "coordinates"),
+                            what = c("compositions", "loss", "coordinates", "profiles"),
                             data = NULL,
                             projection = c("none", "pca"),
                             ...) {
@@ -415,11 +439,14 @@ plot.archetypes <- function(x,
 
     what <- match.arg(
         tolower(what[1L]),
-        c("compositions", "composition", "composision", "composisions", "loss", "coordinates")
+        c("compositions", "composition", "composision", "composisions",
+          "loss", "coordinates", "profiles")
     )
 
     # Composition Ternary Plot -----------------------------------------------
 
+    # TODO: rename this plot "ternary" or "simplex" and use "composition(s)"
+    #       to create a stacked barplot for the rows of `compositions` order by dendogram
     if (what %in% c("composition", "composision",  "composisions"))
         what <- "compositions"
     projection <- match.arg(projection)
@@ -450,15 +477,15 @@ plot.archetypes <- function(x,
 
     if (what == "loss") {
         loss <- x[["loss"]]
-        if (is.null(loss[["rss"]]))
-            stop("`x$loss` must contain an `rss` column for loss plots")
+        if (is.null(loss[["loss"]]))
+            stop("`x$loss` must contain a `loss` column for loss plots")
         args <- plot_args(
             list(
                 x = seq_len(nrow(loss)) - 1L,
-                y = loss[["rss"]],
+                y = loss[["loss"]],
                 type = "l",
                 xlab = "Iteration",
-                ylab = "RSS"
+                ylab = "Loss"
             ),
             dots
         )
@@ -466,7 +493,30 @@ plot.archetypes <- function(x,
         return(invisible(x))
     }
 
+    # Profile Plot ----------------------------------------------------------
+
+    if (what == "profiles") {
+        if (inherits(x[["data"]], "fd")) {
+            plot(coordinates_fd(x), ...)
+            return(invisible(x))
+        }
+        .aa_plot_profiles(x, ...)
+        return(invisible(x))
+    }
+
     # Coordinate Plot -------------------------------------------------------
+
+    family <- x[["family"]]
+    if (is.null(family))
+        family <- "gaussian"
+    if (!(family %in% c("gaussian", "directional"))) {
+        msg <- paste(
+            "Coordinate plots are not defined when archetype coordinates live",
+            "in parameter space but `data` lives in observation space;",
+            sprintf("family = '%s'", family)
+        )
+        stop(msg, call. = FALSE)
+    }
 
     X <- if (is.null(data)) x[["data"]] else data
     if (is.null(X)) {
@@ -557,6 +607,51 @@ plot.archetypes <- function(x,
     invisible(x)
 }
 
+.aa_plot_profiles <- function(x, ...) {
+    A <- as.matrix(x[["coordinates"]])
+    if (ncol(A) < 1L)
+        stop("Profile plots require at least one feature.", call. = FALSE)
+
+    dots <- list(...)
+    arg_or <- function(name, default) {
+        value <- dots[[name]]
+        if (is.null(value)) default else value
+    }
+    dots[c("x", "y", "type", "lty", "col", "xlab", "ylab", "xaxt")] <- NULL
+
+    family <- x[["family"]]
+    if (is.null(family))
+        family <- "gaussian"
+    ylab <- arg_or(
+        "ylab",
+        if (identical(family, "gaussian")) "Value" else sprintf("%s parameter", family)
+    )
+    feature_names <- colnames(A)
+    feature_x <- seq_len(ncol(A))
+    xlab <- arg_or("xlab", "Feature")
+    col <- arg_or("col", seq_len(nrow(A)))
+    lty <- arg_or("lty", 1)
+
+    args <- c(
+        list(
+            x = feature_x,
+            y = t(A),
+            type = "l",
+            lty = lty,
+            col = col,
+            xlab = xlab,
+            ylab = ylab,
+            xaxt = if (is.null(feature_names)) "s" else "n"
+        ),
+        dots
+    )
+    do.call(graphics::matplot, args)
+    if (!is.null(feature_names)) {
+        graphics::axis(1, at = feature_x, labels = feature_names, las = 2)
+    }
+    invisible(x)
+}
+
 # Directional Archetypes Class -----------------------------------------------
 
 #' Directional archetype analysis result object
@@ -597,7 +692,8 @@ directional_archetypes <- function(coordinates,
         converged = converged,
         call = call,
         data = data,
-        init = init
+        init = init,
+        family = "directional"
     )
     out[["generator_data"]] <- generator_data
     out[["hemisphere_direction"]] <- hemisphere_direction
@@ -708,7 +804,7 @@ kernel_archetypes <- function(coefficients,
     if (is.null(call))
         call <- match.call()
     if (is.null(loss))
-        loss <- data.frame(rss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
+        loss <- data.frame(loss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
     K <- nrow(coefficients)
     N <- ncol(coefficients)
     stopifnot("nrow(compositions) must match number of samples" = nrow(compositions) == N)
@@ -824,13 +920,14 @@ print.kernel_archetypes <- function(x, ...) {
 
 #' @exportS3Method
 plot.kernel_archetypes <- function(x,
-                                   what = c("compositions", "loss", "coordinates"),
+                                   what = c("compositions", "loss", "coordinates", "profiles"),
                                    data = NULL,
                                    projection = c("none", "pca"),
                                    ...) {
     what <- match.arg(
         tolower(what[1L]),
-        c("compositions", "composition", "composision", "composisions", "loss", "coordinates")
+        c("compositions", "composition", "composision", "composisions",
+          "loss", "coordinates", "profiles")
     )
     if (what %in% c("composition", "composision", "composisions"))
         what <- "compositions"
@@ -845,13 +942,20 @@ plot.kernel_archetypes <- function(x,
         loss <- x[["loss"]]
         graphics::plot(
             seq_len(nrow(loss)) - 1L,
-            loss[["rss"]],
+            loss[["loss"]],
             type = "l",
             xlab = "Iteration",
-            ylab = "RSS",
+            ylab = "Loss",
             ...
         )
         return(invisible(x))
+    }
+    if (what == "profiles") {
+        stop(
+            "Profile plots are not defined for kernel archetypes because ",
+            "their natural coordinates live in implicit Hilbert space.",
+            call. = FALSE
+        )
     }
 
     X <- if (is.null(data)) x[["data"]] else data
@@ -912,7 +1016,12 @@ AIC.archetypes <- function(object, ...) {
     # Compute AIC
     K     <- nrow(object[["coordinates"]])        # Number of Archetypes
     nelem <- prod(dim(X))                         # number of elements in X
-    rss   <- object[["loss"]][["rss"]]
+    family <- object[["family"]]
+    if (is.null(family))
+        family <- "gaussian"
+    if (!identical(family, "gaussian"))
+        stop("AIC is not defined for non-Gaussian archetypes objects.", call. = FALSE)
+    rss   <- object[["loss"]][["loss"]]
     X_hat <- with(object, compositions %*% coordinates)
     aic   <- log(rss[length(rss)] / nelem) + 2 * (2*K - 1) / effic(X, X_hat)
 

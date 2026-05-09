@@ -7,6 +7,7 @@ test_that("plot.archetypes smoke tests supported plot modes", {
     expect_identical(plot(fit, "compositions"), fit)
     expect_identical(plot(fit, "composition"), fit)
     expect_identical(plot(fit, "composision"), fit)
+    expect_identical(plot(fit, "profiles"), fit)
     expect_identical(plot(fit, "coordinates"), fit)
 })
 

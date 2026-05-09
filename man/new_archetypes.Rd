@@ -14,7 +14,8 @@ new_archetypes(
   AIC = NA_real_,
   call = NULL,
   data = NULL,
-  init = NULL
+  init = NULL,
+  family = "gaussian"
 )
 }
 \arguments{
@@ -38,6 +39,8 @@ row-sum relaxation.}
 \item{data}{Optional original data.}
 
 \item{init}{Optional initial archetype coordinates.}
+
+\item{family}{Observation family.}
 }
 \description{
 Archetypes object constructor

@@ -11,7 +11,8 @@ run_aa(data, K, ...)
 \method{run_aa}{default}(
   data,
   K,
-  method = c("pgd", "nnls", "kernel", "directional"),
+  method = c("pgd", "nnls", "kernel", "directional", "paa"),
+  family = "gaussian",
   init = NULL,
   init_args = list(),
   weights = NULL,
@@ -44,14 +45,18 @@ object with a class-specific \code{run_aa()} method.}
 \code{gram}, \code{kernel}, \code{kernel_args}, \code{delta}, \code{pseudo_pgd}, \code{step_size},
 \code{max_iter_optimizer}, \code{step_shrinkage}, and \code{max_no_update}. For
 \code{"directional"}, these include \code{hemisphere}, \code{precision}, \code{step_size},
-\code{max_iter_optimizer}, \code{step_shrinkage}, and \code{max_no_update}.}
+\code{max_iter_optimizer}, \code{step_shrinkage}, and \code{max_no_update}. For \code{"paa"},
+these include \code{step_size}, \code{max_iter_optimizer}, \code{step_shrinkage}, and
+\code{max_no_update}.}
 
-\item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, \code{"kernel"}, or
-\code{"directional"} (default: \code{"pgd"}).}
+\item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, \code{"kernel"},
+\code{"directional"}, or \code{"paa"} (default: \code{"pgd"}).}
+
+\item{family}{observation family for \code{method = "paa"}. Defaults to
+\code{"gaussian"}.}
 
 \item{init}{function, method string, or numeric coordinate matrix to initialize
-archetypes. \code{NULL} uses \code{"furthest_sum"} except for \code{method =
-"directional"}, where it uses \code{"random"}. When a matrix is supplied it
+archetypes. \code{NULL} uses \code{"furthest_sum"} except for \code{method = "directional"}, where it uses \code{"random"}. When a matrix is supplied it
 must have dimension \verb{K x ncol(data)}. Rows outside the allowed data hull
 are projected into it with a warning; row names, when present, are used as
 archetype names.}

@@ -6,7 +6,7 @@
 \usage{
 \method{plot}{archetypes}(
   x,
-  what = c("compositions", "loss", "coordinates"),
+  what = c("compositions", "loss", "coordinates", "profiles"),
   data = NULL,
   projection = c("none", "pca"),
   ...
@@ -16,7 +16,7 @@
 \item{x}{An object of class \code{archetypes}}
 
 \item{what}{Character string naming the plot to draw. Supported values are
-\code{"compositions"}, \code{"loss"}, and \code{"coordinates"}. \code{"composition"} and
+\code{"compositions"}, \code{"loss"}, \code{"profiles"}, and \code{"coordinates"}. \code{"composition"} and
 \code{"composision"} are accepted as aliases for \code{"compositions"}.}
 
 \item{data}{Optional numeric matrix with the original data. Required for
@@ -43,10 +43,12 @@ express each observation as a mixture of the archetypes. For three
 archetypes this is a ternary plot: points near a corner are dominated by
 one archetype, points near an edge mix two archetypes, and points near the
 center mix all three.
-\item \code{"loss"} plots the residual sum of squares stored in \code{x$loss$rss} across
+\item \code{"loss"} plots the objective value stored in \code{x$loss$loss} across
 optimization iterations. This is useful for checking whether the fitting
-algorithm reduced reconstruction error and whether the loss curve has
-plateaued.
+algorithm reduced the fitted objective and whether the loss curve has plateaued.
+\item \code{"profiles"} plots the fitted archetypes in their natural representation:
+coefficient functions for \code{fd} fits, and archetype profiles for matrix and
+probabilistic fits.
 \item \code{"coordinates"} plots the original observations together with the fitted
 archetype coordinates in feature space. In two dimensions the archetypes
 are connected as a closed polygon. In more than two dimensions the method

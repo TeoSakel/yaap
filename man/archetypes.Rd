@@ -13,7 +13,8 @@ archetypes(
   converged = TRUE,
   call = NULL,
   data = NULL,
-  init = NULL
+  init = NULL,
+  family = "gaussian"
 )
 }
 \arguments{
@@ -43,6 +44,8 @@ supplied, residuals are computed against fitted values.}
 
 \item{init}{Optional numeric matrix (K x M) with the initial archetype
 coordinates before optimization.}
+
+\item{family}{Observation family. Defaults to \code{"gaussian"}.}
 }
 \value{
 An object of class \code{archetypes}, which is a list with components:
