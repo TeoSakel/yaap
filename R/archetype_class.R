@@ -45,6 +45,17 @@
 #' * `rowSums(compositions) == 1`
 #' * If `data` is supplied: `dim(data) == c(N, M)` where `M = ncol(coordinates)`
 #'
+#' ## Archetype names
+#'
+#' Archetype labels are stored as row names on `coordinates` and `coefficients`,
+#' and as column names on `compositions`. Use `anames()` and `anames<-()` to get
+#' or set them consistently:
+#'
+#' ```
+#' anames(fit)
+#' anames(fit) <- c("A", "B", "C")
+#' ```
+#'
 #' @return
 #' An object of class `archetypes`, which is a list with components:
 #'
@@ -226,28 +237,39 @@ coefficients.archetypes <- function(object, ...)
 
 #' Archetype names
 #'
-#' Get or set the names of archetypes in an `archetypes` object.
+#' Get or set the names of archetypes in an archetype analysis result.
 #'
-#' @param x An object of class `archetypes`.
+#' @param x An archetype analysis result.
 #' @param value Character vector with one name per archetype.
 #'
 #' @return
-#' `names.archetypes()` returns a character vector. The replacement method
-#' returns `x` with names updated consistently across archetype coordinates,
-#' coefficients, compositions, and initial coordinates when present.
+#' `anames()` returns a character vector. The replacement method returns `x`
+#' with names updated consistently across archetype coordinates, coefficients,
+#' compositions, and initial coordinates when present.
 #'
 #' @examples
-#' # names(fit)
-#' # names(fit) <- c("A", "B", "C")
+#' # anames(fit)
+#' # anames(fit) <- c("A", "B", "C")
 #'
+#' @rdname archetypes
+#' @export
+anames <- function(x)
+    UseMethod("anames")
+
+#' @rdname archetypes
+#' @export
+`anames<-` <- function(x, value)
+    UseMethod("anames<-")
+
+#' @rdname archetypes
 #' @exportS3Method
-names.archetypes <- function(x)
+anames.archetypes <- function(x)
     rownames(x[["coordinates"]])
 
-#' @rdname names.archetypes
-#' @method names<- archetypes
+#' @rdname archetypes
+#' @method anames<- archetypes
 #' @export
-`names<-.archetypes` <- function(x, value) {
+`anames<-.archetypes` <- function(x, value) {
     K <- nrow(x[["coordinates"]])
     if (length(value) != K) {
         fmt <- "Expected %d archetype names, got %d"
@@ -849,13 +871,15 @@ kernel_archetypes <- function(coefficients,
 coefficients.kernel_archetypes <- function(object, ...)
     object[["coefficients"]]
 
+#' @rdname archetypes
 #' @exportS3Method
-names.kernel_archetypes <- function(x)
+anames.kernel_archetypes <- function(x)
     rownames(x[["coefficients"]])
 
-#' @method names<- kernel_archetypes
+#' @rdname archetypes
+#' @method anames<- kernel_archetypes
 #' @export
-`names<-.kernel_archetypes` <- function(x, value) {
+`anames<-.kernel_archetypes` <- function(x, value) {
     K <- nrow(x[["coefficients"]])
     if (length(value) != K) {
         fmt <- "Expected %d archetype names, got %d"

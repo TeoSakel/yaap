@@ -164,10 +164,10 @@ test_that("kernel archetypes methods expose names, residuals, and proxy plots", 
         max_iter = 1L
     ))
 
-    expect_equal(names(fit), c("A1", "A2", "A3"))
-    names(fit) <- c("left", "right", "top")
-    expect_equal(names(fit), c("left", "right", "top"))
-    expect_equal(rownames(coefficients(fit)), names(fit))
+    expect_equal(anames(fit), c("A1", "A2", "A3"))
+    anames(fit) <- c("left", "right", "top")
+    expect_equal(anames(fit), c("left", "right", "top"))
+    expect_equal(rownames(coefficients(fit)), anames(fit))
 
     res <- residuals(fit)
     expect_length(res, nrow(X))

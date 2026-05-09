@@ -2,6 +2,12 @@
 % Please edit documentation in R/archetype_class.R
 \name{archetypes}
 \alias{archetypes}
+\alias{anames}
+\alias{anames<-}
+\alias{anames.archetypes}
+\alias{anames<-.archetypes}
+\alias{anames.kernel_archetypes}
+\alias{anames<-.kernel_archetypes}
 \title{Archetype Analysis Result Object}
 \usage{
 archetypes(
@@ -16,6 +22,18 @@ archetypes(
   init = NULL,
   family = "gaussian"
 )
+
+anames(x)
+
+anames(x) <- value
+
+\method{anames}{archetypes}(x)
+
+\method{anames}{archetypes}(x) <- value
+
+\method{anames}{kernel_archetypes}(x)
+
+\method{anames}{kernel_archetypes}(x) <- value
 }
 \arguments{
 \item{coordinates}{Numeric matrix (K x M) giving the archetype coordinates
@@ -46,6 +64,10 @@ supplied, residuals are computed against fitted values.}
 coordinates before optimization.}
 
 \item{family}{Observation family. Defaults to \code{"gaussian"}.}
+
+\item{x}{An archetype analysis result.}
+
+\item{value}{Character vector with one name per archetype.}
 }
 \value{
 An object of class \code{archetypes}, which is a list with components:
@@ -60,11 +82,17 @@ An object of class \code{archetypes}, which is a list with components:
 \item \code{residuals} - \code{data - compositions \%*\% coordinates}
 \item \code{call} - the matched call.
 }
+
+\code{anames()} returns a character vector. The replacement method returns \code{x}
+with names updated consistently across archetype coordinates, coefficients,
+compositions, and initial coordinates when present.
 }
 \description{
 Creates an S3 object of class \code{archetypes} holding the fitted archetypes,
 their decomposition of the data, and diagnostic information from the fitting
 process.
+
+Get or set the names of archetypes in an archetype analysis result.
 }
 \details{
 Let \code{X} be the original data matrix (N x M).
@@ -87,6 +115,22 @@ outside the convex hull of the data.
 \item If \code{data} is supplied: \code{dim(data) == c(N, M)} where \code{M = ncol(coordinates)}
 }
 }
+
+\subsection{Archetype names}{
+
+Archetype labels are stored as row names on \code{coordinates} and \code{coefficients},
+and as column names on \code{compositions}. Use \code{anames()} and \verb{anames<-()} to get
+or set them consistently:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{anames(fit)
+anames(fit) <- c("A", "B", "C")
+}\if{html}{\out{</div>}}
+}
+}
+\examples{
+# anames(fit)
+# anames(fit) <- c("A", "B", "C")
+
 }
 \seealso{
 \code{\link[=plot.archetypes]{plot.archetypes()}}, \code{\link[=predict.archetypes]{predict.archetypes()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}}, \code{\link[=fitted.archetypes]{fitted.archetypes()}}
