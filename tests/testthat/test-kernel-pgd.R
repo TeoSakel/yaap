@@ -176,6 +176,8 @@ test_that("kernel archetypes methods expose names, residuals, and proxy plots", 
 
     grDevices::pdf(tempfile(fileext = ".pdf"))
     expect_silent(plot(fit, what = "loss"))
+    expect_silent(plot(fit, what = "compositions", legend = FALSE))
+    expect_silent(plot(fit, what = "ternary"))
     expect_silent(plot(fit, what = "coordinates"))
     grDevices::dev.off()
 })

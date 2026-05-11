@@ -411,16 +411,158 @@ print.archetypes <- function(x, ...) {
     invisible(x)
 }
 
+#' Stacked barplot of composition weights
+#'
+#' Draws a horizontal stacked barplot for a matrix-like set of composition
+#' weights, with rows interpreted as samples and columns interpreted as
+#' archetypes or other compositional parts.
+#'
+#' This display is intended for small composition matrices, roughly of tens of
+#' samples and/or archetypes. For many samples or many archetypes, a heatmap is
+#' usually easier to read.
+#'
+#' @param x Numeric matrix or data frame. Rows are samples and columns are
+#'   archetypes. Rows should contain non-negative composition weights.
+#' @param cluster_rows,cluster_cols Logical values or `hclust` objects. When
+#'   `TRUE`, rows or columns are reordered by hierarchical clustering. Row
+#'   clustering is computed on `compositions::cdt(compositions::acomp(x))`.
+#' @param distance Optional distance metric used for both row and column
+#'   clustering when `distance_rows` or `distance_cols` are not supplied.
+#' @param distance_rows,distance_cols Distance metrics used when clustering
+#'   rows or columns. Values may be any method accepted by [stats::dist()],
+#'   `"correlation"`, a function that returns a `dist` object, or a precomputed
+#'   `dist` object. Row distances are computed after the cdt transform.
+#' @param linkage Linkage method passed to [stats::hclust()].
+#' @param col Optional vector of colors, one per archetype. Defaults to a
+#'   qualitative HCL palette.
+#' @param legend Logical. Should an archetype legend be drawn?
+#' @param border Border color for the stacked bar segments.
+#' @param ... Additional graphical parameters passed to [graphics::barplot()].
+#'
+#' @return Invisibly returns a list with the reordered matrix, row and column
+#'   orders, and clustering objects.
+#'
+#' @export
+composition_barplot <- function(x,
+                                cluster_rows = FALSE,
+                                cluster_cols = FALSE,
+                                distance = NULL,
+                                distance_rows = "euclidean",
+                                distance_cols = "euclidean",
+                                linkage = "complete",
+                                col = NULL,
+                                legend = TRUE,
+                                border = NA,
+                                ...) {
+    S <- as.matrix(x)
+    if (!is.numeric(S))
+        stop("`x` must be a numeric matrix or data frame", call. = FALSE)
+    if (!all(is.finite(S)))
+        stop("`x` must contain only finite values", call. = FALSE)
+    if (any(S < 0))
+        stop("`x` must contain non-negative composition weights", call. = FALSE)
+    if (nrow(S) == 0L || ncol(S) == 0L)
+        stop("`x` must have at least one row and one column", call. = FALSE)
+    if (is.null(rownames(S)))
+        rownames(S) <- seq_len(nrow(S))
+    if (is.null(colnames(S)))
+        colnames(S) <- paste0("A", seq_len(ncol(S)))
+    if (!is.null(distance)) {
+        if (missing(distance_rows))
+            distance_rows <- distance
+        if (missing(distance_cols))
+            distance_cols <- distance
+    }
+
+    make_dist <- function(data, distance) {
+        if (inherits(distance, "dist"))
+            return(distance)
+        if (is.function(distance)) {
+            d <- distance(data)
+            if (inherits(d, "dist"))
+                return(d)
+            return(stats::as.dist(d))
+        }
+        if (!is.character(distance) || length(distance) != 1L || !nzchar(distance))
+            stop("Clustering distance must be a non-empty string, function, or dist object", call. = FALSE)
+        if (distance == "correlation")
+            return(stats::as.dist(1 - stats::cor(t(data))))
+        stats::dist(data, method = distance)
+    }
+
+    make_hclust <- function(value, data, margin, distance) {
+        if (inherits(value, "hclust"))
+            return(value)
+        if (!isTRUE(value))
+            return(NULL)
+        if (margin == "rows") {
+            if (nrow(data) < 2L)
+                return(NULL)
+            transformed <- as.matrix(compositions::cdt(compositions::acomp(data)))
+            return(stats::hclust(make_dist(transformed, distance), method = linkage))
+        }
+        if (ncol(data) < 2L)
+            return(NULL)
+        stats::hclust(make_dist(t(data), distance), method = linkage)
+    }
+
+    row_hclust <- make_hclust(cluster_rows, S, "rows", distance_rows)
+    col_hclust <- make_hclust(cluster_cols, S, "cols", distance_cols)
+    row_order <- if (is.null(row_hclust)) seq_len(nrow(S)) else row_hclust[["order"]]
+    col_order <- if (is.null(col_hclust)) seq_len(ncol(S)) else col_hclust[["order"]]
+    S_plot <- S[row_order, col_order, drop = FALSE]
+
+    if (is.null(col)) {
+        col <- grDevices::hcl.colors(ncol(S_plot), palette = "Dark 3")
+    } else if (!is.null(names(col)) && all(colnames(S_plot) %in% names(col))) {
+        col <- col[colnames(S_plot)]
+    }
+    col <- rep_len(col, ncol(S_plot))
+
+    dots <- list(...)
+    args <- list(
+        height = t(S_plot),
+        col = col,
+        border = border,
+        xlab = "Composition",
+        names.arg = rownames(S_plot),
+        horiz = TRUE,
+        las = 1L
+    )
+    args[names(dots)] <- dots
+    do.call(graphics::barplot, args)
+    if (isTRUE(legend)) {
+        graphics::legend(
+            "topright",
+            legend = colnames(S_plot),
+            fill = col,
+            border = border,
+            bty = "n",
+            cex = 0.8
+        )
+    }
+
+    invisible(list(
+        compositions = S_plot,
+        row_order = row_order,
+        col_order = col_order,
+        row_hclust = row_hclust,
+        col_hclust = col_hclust
+    ))
+}
+
 #' Plot method for archetypes objects
 #'
 #' Draws diagnostic and geometric plots for a fitted archetypal analysis model.
 #' The `what` argument controls which part of the fit is visualized:
 #'
-#' * `"compositions"` plots the rows of `x$compositions`, i.e. the weights that
-#'   express each observation as a mixture of the archetypes. For three
-#'   archetypes this is a ternary plot: points near a corner are dominated by
-#'   one archetype, points near an edge mix two archetypes, and points near the
-#'   center mix all three.
+#' * `"composition"` and `"compositions"` draw a stacked barplot of
+#'   `x$compositions`, with bars representing observations and colors
+#'   representing archetypes. Rows and columns are clustered by default.
+#' * `"ternary"` and `"simplex"` plot the rows of `x$compositions` as points in
+#'   simplex coordinates. For three archetypes this is a ternary plot: points
+#'   near a corner are dominated by one archetype, points near an edge mix two
+#'   archetypes, and points near the center mix all three.
 #' * `"loss"` plots the objective value stored in `x$loss$loss` across
 #'   optimization iterations. This is useful for checking whether the fitting
 #'   algorithm reduced the fitted objective and whether the loss curve has plateaued.
@@ -436,8 +578,13 @@ print.archetypes <- function(x, ...) {
 #'
 #' @param x An object of class `archetypes`
 #' @param what Character string naming the plot to draw. Supported values are
-#'   `"compositions"`, `"loss"`, `"profiles"`, and `"coordinates"`. `"composition"` and
-#'   `"composision"` are accepted as aliases for `"compositions"`.
+#'   `"composition"`, `"compositions"`, `"ternary"`, `"simplex"`, `"loss"`,
+#'   `"profiles"`, and `"coordinates"`. `"composision"` and `"composisions"` are
+#'   accepted as aliases for `"compositions"`.
+#' @param samples Optional sample subset for plots that display observations:
+#'   `"composition"`, `"compositions"`, `"ternary"`, `"simplex"`, and
+#'   `"coordinates"`. May be numeric row indices, sample names, or a logical
+#'   vector. Subsetting is applied before clustering or projection.
 #' @param data Optional numeric matrix with the original data. Required for
 #'   `what = "coordinates"` if the object does not store its original data.
 #' @param projection Projection to use for coordinate plots. Use `"pca"` to
@@ -454,6 +601,7 @@ print.archetypes <- function(x, ...) {
 #' @exportS3Method
 plot.archetypes <- function(x,
                             what = c("compositions", "loss", "coordinates", "profiles"),
+                            samples = NULL,
                             data = NULL,
                             projection = c("none", "pca"),
                             ...) {
@@ -462,13 +610,10 @@ plot.archetypes <- function(x,
     what <- match.arg(
         tolower(what[1L]),
         c("compositions", "composition", "composision", "composisions",
+          "ternary", "simplex",
           "loss", "coordinates", "profiles")
     )
 
-    # Composition Ternary Plot -----------------------------------------------
-
-    # TODO: rename this plot "ternary" or "simplex" and use "composition(s)"
-    #       to create a stacked barplot for the rows of `compositions` order by dendogram
     if (what %in% c("composition", "composision",  "composisions"))
         what <- "compositions"
     projection <- match.arg(projection)
@@ -482,9 +627,33 @@ plot.archetypes <- function(x,
         value <- dots[[name]]
         if (is.null(value)) default else value
     }
+    subset_samples <- function(z) {
+        if (is.null(samples))
+            return(z)
+        if (is.logical(samples) && length(samples) != nrow(z))
+            stop("Logical `samples` must have one value per sample", call. = FALSE)
+        if (is.character(samples) && anyNA(match(samples, rownames(z))))
+            stop("Some `samples` are not sample names", call. = FALSE)
+        out <- z[samples, , drop = FALSE]
+        if (nrow(out) == 0L)
+            stop("`samples` selects no samples", call. = FALSE)
+        out
+    }
 
     if (what == "compositions") {
-        S <- as.matrix(x[["compositions"]])
+        S <- subset_samples(as.matrix(x[["compositions"]]))
+        args <- plot_args(
+            list(x = S, cluster_rows = TRUE, cluster_cols = TRUE),
+            dots
+        )
+        do.call(composition_barplot, args)
+        return(invisible(x))
+    }
+
+    # Composition Ternary/Simplex Plot ---------------------------------------
+
+    if (what %in% c("ternary", "simplex")) {
+        S <- subset_samples(as.matrix(x[["compositions"]]))
         if (is.null(colnames(S)))
             colnames(S) <- paste0("A", seq_len(ncol(S)))
         args <- plot_args(
@@ -548,6 +717,7 @@ plot.archetypes <- function(x,
     }
 
     X <- if (inherits(X, "fd")) .aa_fd_to_matrix(X) else as.matrix(X)
+    X <- subset_samples(X)
     A <- as.matrix(x[["coordinates"]])
     if (ncol(X) != ncol(A)) {
         fmt <- "`data` has %d columns but `x$coordinates` has %d columns"
@@ -951,11 +1121,20 @@ plot.kernel_archetypes <- function(x,
     what <- match.arg(
         tolower(what[1L]),
         c("compositions", "composition", "composision", "composisions",
+          "ternary", "simplex",
           "loss", "coordinates", "profiles")
     )
     if (what %in% c("composition", "composision", "composisions"))
         what <- "compositions"
     if (what == "compositions") {
+        S <- as.matrix(x[["compositions"]])
+        dots <- list(...)
+        args <- list(x = S, cluster_rows = TRUE, cluster_cols = TRUE)
+        args[names(dots)] <- dots
+        do.call(composition_barplot, args)
+        return(invisible(x))
+    }
+    if (what %in% c("ternary", "simplex")) {
         S <- as.matrix(x[["compositions"]])
         if (is.null(colnames(S)))
             colnames(S) <- paste0("A", seq_len(ncol(S)))

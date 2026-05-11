@@ -7,6 +7,7 @@
 \method{plot}{archetypes}(
   x,
   what = c("compositions", "loss", "coordinates", "profiles"),
+  samples = NULL,
   data = NULL,
   projection = c("none", "pca"),
   ...
@@ -16,8 +17,14 @@
 \item{x}{An object of class \code{archetypes}}
 
 \item{what}{Character string naming the plot to draw. Supported values are
-\code{"compositions"}, \code{"loss"}, \code{"profiles"}, and \code{"coordinates"}. \code{"composition"} and
-\code{"composision"} are accepted as aliases for \code{"compositions"}.}
+\code{"composition"}, \code{"compositions"}, \code{"ternary"}, \code{"simplex"}, \code{"loss"},
+\code{"profiles"}, and \code{"coordinates"}. \code{"composision"} and \code{"composisions"} are
+accepted as aliases for \code{"compositions"}.}
+
+\item{samples}{Optional sample subset for plots that display observations:
+\code{"composition"}, \code{"compositions"}, \code{"ternary"}, \code{"simplex"}, and
+\code{"coordinates"}. May be numeric row indices, sample names, or a logical
+vector. Subsetting is applied before clustering or projection.}
 
 \item{data}{Optional numeric matrix with the original data. Required for
 \code{what = "coordinates"} if the object does not store its original data.}
@@ -38,11 +45,13 @@ The \code{what} argument controls which part of the fit is visualized:
 }
 \details{
 \itemize{
-\item \code{"compositions"} plots the rows of \code{x$compositions}, i.e. the weights that
-express each observation as a mixture of the archetypes. For three
-archetypes this is a ternary plot: points near a corner are dominated by
-one archetype, points near an edge mix two archetypes, and points near the
-center mix all three.
+\item \code{"composition"} and \code{"compositions"} draw a stacked barplot of
+\code{x$compositions}, with bars representing observations and colors
+representing archetypes. Rows and columns are clustered by default.
+\item \code{"ternary"} and \code{"simplex"} plot the rows of \code{x$compositions} as points in
+simplex coordinates. For three archetypes this is a ternary plot: points
+near a corner are dominated by one archetype, points near an edge mix two
+archetypes, and points near the center mix all three.
 \item \code{"loss"} plots the objective value stored in \code{x$loss$loss} across
 optimization iterations. This is useful for checking whether the fitting
 algorithm reduced the fitted objective and whether the loss curve has plateaued.
