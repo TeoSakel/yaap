@@ -1129,7 +1129,7 @@ plot.kernel_archetypes <- function(x,
     if (what == "compositions") {
         S <- as.matrix(x[["compositions"]])
         dots <- list(...)
-        args <- list(x = S, cluster_rows = TRUE, cluster_cols = TRUE)
+        args <- list(x = S, cluster_rows = TRUE, cluster_cols = TRUE, linkage = "ward.D2")
         args[names(dots)] <- dots
         do.call(composition_barplot, args)
         return(invisible(x))
@@ -1224,12 +1224,13 @@ AIC.archetypes <- function(object, ...) {
         family <- "gaussian"
     if (!identical(family, "gaussian"))
         stop("AIC is not defined for non-Gaussian archetypes objects.", call. = FALSE)
-    rss   <- object[["loss"]][["loss"]]
+    # rss   <- object[["loss"]][["loss"]]
     X_hat <- with(object, compositions %*% coordinates)
-    aic   <- log(rss[length(rss)] / nelem) + 2 * (2*K - 1) / effic(X, X_hat)
+    rss   <- norm(X - X_hat, "F")^2  # "loss" is not necessarily the RSS on the original data
+    aic   <- log(rss / nelem) + 2 * (2*K - 1) / effic(X, X_hat)
 
     object[["AIC"]] <- aic  # cache for future calls
-    return(aic)
+    aic
 }
 
 .aa_fd_to_matrix <- function(x) {

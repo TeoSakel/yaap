@@ -154,7 +154,6 @@ archetypes_pgd <- function(data,
     loss_terms <- list(
         rss = rss,
         xss = xss,
-        StS = crossprod(S),
         A = A
     )
     loss <- .aa_update_loss(
@@ -162,8 +161,23 @@ archetypes_pgd <- function(data,
         1L,
         loss_terms,
         verbose = verbose,
-        max_kappa = max_kappa
+        max_kappa = 1
     )
+
+    # Edge case: if max_iter = 0 return initial fit
+    if (max_iter == 0) {
+        return(list(
+            A0 = A0,
+            A = A,
+            B = aB,
+            S = S,
+            delta = delta,
+            i = 0L,
+            loss = loss,
+            converged = TRUE
+        ))
+    }
+
     converged <- FALSE
 
     step_S <- step_size
@@ -237,24 +251,29 @@ archetypes_pgd <- function(data,
             }
         }
 
-        # Update loss terms
-        loss_terms <- list(
-            rss = rss,
-            xss = xss,
-            StS = if (i %% 10 == 0 && max_kappa > 1) crossprod(S) else NULL,
-            A = A
-        )
-        loss <- .aa_update_loss(
-            loss,
-            i + 1L,
-            loss_terms,
-            verbose = verbose,
-            max_kappa = max_kappa
-        )
-
-        # Check update acceptance and convergence
+        # Check progress
         if (!accepted_update) {
             no_update <- no_update + 1L
+
+            # Copy previous loss entries to keep history.
+            loss <- .aa_update_loss(
+                loss,
+                i + 1L,
+                loss_terms,
+                verbose = verbose,
+                max_kappa = 1
+            )
+
+            if (no_update >= max_no_update) {
+                fmt <- paste(
+                    "Missing-data PGD stalled: no line-search update accepted after",
+                    "%d consecutive step shrinkages"
+                )
+                warning(sprintf(fmt, max_no_update), call. = FALSE)
+                break
+            }
+
+            # Refine step sizes for next iteration.
             step_S <- step_S * step_shrinkage
             step_B <- step_B * step_shrinkage
             if (update_alpha)
@@ -267,20 +286,24 @@ archetypes_pgd <- function(data,
                 )
                 message(sprintf(fmt, i, no_update, max_no_update))
             }
-            if (no_update >= max_no_update) {
-                fmt <- paste(
-                    "Missing-data PGD stalled: no line-search update accepted after",
-                    "%d consecutive step shrinkages"
-                )
-                warning(sprintf(fmt, max_no_update), call. = FALSE)
-                break
-            }
-            next
-        }
+        } else {
+            loss_terms <- list(
+                rss = rss,
+                xss = xss,
+                A = A
+            )
+            loss <- .aa_update_loss(
+                loss,
+                i + 1L,
+                loss_terms,
+                verbose = verbose,
+                max_kappa = 1
+            )
 
-        no_update <- 0L
-        converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
-        if (converged) break
+            no_update <- 0L
+            converged <- .aa_check_convergence(loss, i, tol, tol_r2, 1, verbose)
+            if (converged) break
+        }
     }
 
     list(
@@ -303,6 +326,7 @@ archetypes_pgd <- function(data,
                         max_kappa,
                         eps,
                         verbose,
+                        loss_fun,
                         A,
                         B,
                         S,
@@ -341,10 +365,7 @@ archetypes_pgd <- function(data,
     a_lo <- max(1 - delta, a_lo) # lower bound for a
     a_hi <- 1 + delta # upper bound for a
     clip <- function(a) pmax(pmin(a, a_hi), a_lo) # clip a to [a_lo, a_hi]
-
-    A0 <- A
     a  <- rowSums(B)
-
     slack_tol <- 1e-6
     if (any(a < a_lo - slack_tol) || any(a > a_hi + slack_tol)) {
         fmt <- "Initialize B marginals are outside the specified delta range [%.3f, %.3f]"
@@ -352,25 +373,12 @@ archetypes_pgd <- function(data,
     }
     B  <- B / a # normalize B to row-stochastic
 
-    # Compute auxiliary variables
-    A     <- A0                # (K x M) = Archetypes = a*B %*% X
-    loss_terms <- .aa_loss_terms(
+    # Initialize Variables and loss terms
+    A0 <- A  # keep initial archetypes for output
+    loss_terms <- loss_fun(
         X, A, S,
-        weight_fun = weight_fun,
-        return_S_terms = TRUE
+        weight_fun = weight_fun
     )
-    XAt <- loss_terms[["XAt"]] # (N x K)
-    AAt <- loss_terms[["AAt"]] # (K x K)
-    StS <- loss_terms[["StS"]] # (K x K)
-    StX <- loss_terms[["StX"]] # (K x M)
-    xss <- loss_terms[["xss"]] # scalar = ||X||^2; invariant for fixed X
-    rss <- loss_terms[["rss"]] # scalar = ||X - SA||^2
-    XXt <- tcrossprod(X)       # (N x N)
-    row_xss <- loss_terms[["row_xss"]]  # (N x 1) row-wise sum of squares; invariant for fixed X
-    row_weights <- loss_terms[["row_weights"]]
-    S_weighted <- loss_terms[["S_weighted"]]
-    StXXt <- crossprod(S_weighted, XXt) # (K x N)
-
     loss <- .aa_update_loss(
         loss,
         1L,
@@ -378,13 +386,38 @@ archetypes_pgd <- function(data,
         verbose = verbose,
         max_kappa = max_kappa
     )
-    converged <- FALSE
+
+    # Edge case: if max_iter = 0 return initial fit
+    if (max_iter == 0) {
+        return(list(
+            A0 = A0,
+            A = A,
+            B = a * B,
+            S = S,
+            delta = delta,
+            i = 0L,
+            loss = loss,
+            converged = TRUE
+        ))
+    }
+
+    # Auxiliary variables for efficient loss and gradient updates
+    XAt <- loss_terms[["XAt"]] # (N x K)
+    AAt <- loss_terms[["AAt"]] # (K x K)
+    StS <- loss_terms[["StS"]] # (K x K)
+    StX <- loss_terms[["StX"]] # (K x M)
+    xss <- loss_terms[["xss"]] # scalar = ||X||^2; invariant for fixed X
+    rss <- loss_terms[["rss"]] # scalar = ||X - SA||^2
+    row_xss <- loss_terms[["row_xss"]]  # (N x 1) row-wise sum of squares; invariant for fixed X
+    row_weights <- loss_terms[["row_weights"]]
+    StXXt <- loss_terms[["StXXt"]] # (K x N)
 
     ## Step sizes
     step_S <- step_size # mu_S in the paper
     step_B <- step_size # mu_C in the paper
     step_a <- step_size # mu_a in the paper
     no_update <- 0L
+    converged <- FALSE
 
     # Main optimization loop  -------------------------------------------------
 
@@ -399,13 +432,14 @@ archetypes_pgd <- function(data,
             S_new_weighted <- .aa_weight_rows(S_new, row_weights)
             StS_new <- crossprod(S_new_weighted, S_new)
             StX_new <- crossprod(S_new_weighted, X)
+            StXXt_new <- tcrossprod(StX_new, X)
             rss_new <- xss - 2 * sum(A * StX_new) + sum(StS_new * AAt)
             if (rss_new < rss) { # update variables
                 S      <- S_new
                 StS    <- StS_new
                 StX    <- StX_new
                 rss    <- rss_new
-                StXXt  <- crossprod(S_new_weighted, XXt)
+                StXXt  <- StXXt_new
                 step_S <- step_S / step_shrinkage # leave room for shrinkage
                 accepted_update <- TRUE
                 break
@@ -457,29 +491,29 @@ archetypes_pgd <- function(data,
             }
         }
 
-        loss_terms <- .aa_loss_terms(X, A, S, weight_fun = weight_fun, return_S_terms = TRUE,
-                                     xss = xss, rss = rss, row_xss = row_xss,
-                                     row_weights = row_weights,
-                                     StS = StS, StX = StX, AAt = AAt, XAt = XAt)
-        row_weights <- loss_terms[["row_weights"]]
-        AAt   <- loss_terms[["AAt"]]
-        StS   <- loss_terms[["StS"]]
-        StX   <- loss_terms[["StX"]]
-        xss   <- loss_terms[["xss"]]
-        rss   <- loss_terms[["rss"]]
-        S_weighted <- loss_terms[["S_weighted"]]
-        StXXt <- crossprod(S_weighted, XXt)
-
-        # Check convergence
-        loss <- .aa_update_loss(
-            loss,
-            i + 1L,
-            loss_terms,
-            verbose = verbose,
-            max_kappa = max_kappa
-        )
+        # Check progress
         if (!accepted_update) {
             no_update <- no_update + 1L
+
+            # Copy previous loss entries to keep history
+            loss <- .aa_update_loss(
+                loss,
+                i + 1L,
+                loss_terms,
+                verbose = verbose,
+                max_kappa = max_kappa
+            )
+
+            if (no_update >= max_no_update) {
+                fmt <- paste(
+                    "PGD stalled: no line-search update accepted after",
+                    "%d consecutive step shrinkages"
+                )
+                warning(sprintf(fmt, max_no_update), call. = FALSE)
+                break
+            }
+
+            # Refine step sizes for next iteration
             step_S <- step_S * step_shrinkage
             step_B <- step_B * step_shrinkage
             if (update_alpha)
@@ -492,22 +526,45 @@ archetypes_pgd <- function(data,
                 )
                 message(sprintf(fmt, i, no_update, max_no_update))
             }
-            if (no_update >= max_no_update) {
-                fmt <- paste(
-                    "PGD stalled: no line-search update accepted after",
-                    "%d consecutive step shrinkages"
-                )
-                warning(sprintf(fmt, max_no_update), call. = FALSE)
-                break
-            }
-            next
+        } else { # update accepted
+            # Update loss only after accepting an update
+            loss_terms <- loss_fun(
+                X, A, S,
+                weight_fun = weight_fun,
+                xss = xss,
+                rss = rss,
+                row_xss = row_xss,
+                row_weights = row_weights,
+                StS = StS,
+                StX = StX,
+                StXXt = StXXt,
+                AAt = AAt,
+                XAt = XAt
+            )
+            loss <- .aa_update_loss(
+                loss,
+                i + 1L,
+                loss_terms,
+                verbose = verbose,
+                max_kappa = max_kappa
+            )
+
+            # Refresh cached terms. In the weighted route, robust reweighting
+            # changes S_weighted and therefore StS, StX, StXXt, xss, and rss.
+            AAt <- loss_terms[["AAt"]]
+            XAt <- loss_terms[["XAt"]]
+            StS <- loss_terms[["StS"]]
+            StX <- loss_terms[["StX"]]
+            xss <- loss_terms[["xss"]]
+            rss <- loss_terms[["rss"]]
+            row_weights <- loss_terms[["row_weights"]]
+            StXXt <- loss_terms[["StXXt"]]
+
+            no_update <- 0L
+            converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
+            if (converged) break
         }
-
-        no_update <- 0L
-        converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
-        if (converged) break
     }
-
 
     list(
         A0 = A0,
@@ -518,6 +575,64 @@ archetypes_pgd <- function(data,
         i = i,
         loss = loss,
         converged = converged
+    )
+}
+
+.aa_pgd_loss_terms <- function(X, A, S, xss = NULL, rss = NULL,
+                               StS = NULL, StX = NULL, AAt = NULL, XAt = NULL,
+                               StXXt = NULL,
+                               ...) {
+    if (is.null(xss)) xss <- norm(X, "F")^2
+    if (is.null(AAt)) AAt <- tcrossprod(A)
+    if (is.null(XAt)) XAt <- tcrossprod(X, A)
+    if (is.null(StS)) StS <- crossprod(S)
+    if (is.null(StX)) StX <- crossprod(S, X)
+    if (is.null(StXXt)) StXXt <- tcrossprod(StX, X)
+    if (is.null(rss)) rss <- xss - 2 * sum(A * StX) + sum(StS * AAt)
+
+    list(
+        rss = rss,
+        xss = xss,
+        StS = StS,
+        StX = StX,
+        StXXt = StXXt,
+        S_weighted = S,
+        AAt = AAt,
+        XAt = XAt,
+        A = A
+    )
+}
+
+.aa_pgd_weighted_loss_terms <- function(X, A, S, weight_fun, row_xss = NULL,
+                                        AAt = NULL, XAt = NULL, ...) {
+    if (is.null(row_xss)) row_xss <- rowSums(X * X)
+    if (is.null(AAt)) AAt <- tcrossprod(A)
+    if (is.null(XAt)) XAt <- tcrossprod(X, A)
+
+    row_rss <- .aa_trace_row_rss(row_xss, S, XAt, AAt)
+    row_weights <- weight_fun(row_rss)
+    .aa_check_row_weights(row_weights, nrow(X))
+    if (.aa_trivial_row_weights(row_weights))
+        row_weights <- NULL
+
+    S_weighted <- .aa_weight_rows(S, row_weights)
+    StS <- crossprod(S_weighted, S)
+    StX <- crossprod(S_weighted, X)
+    StXXt <- tcrossprod(StX, X)
+
+    list(
+        rss = sum(.aa_weight_rows(row_rss, row_weights)),
+        xss = sum(.aa_weight_rows(row_xss, row_weights)),
+        row_xss = row_xss,
+        row_rss = row_rss,
+        row_weights = row_weights,
+        StS = StS,
+        StX = StX,
+        StXXt = StXXt,
+        S_weighted = S_weighted,
+        AAt = AAt,
+        XAt = XAt,
+        A = A
     )
 }
 

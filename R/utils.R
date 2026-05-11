@@ -766,87 +766,9 @@ effic <- function(X, Y) {
     init_vars
 }
 
-# Workhorse function to run archetypes fitting with method-specific arguments;
-# Computes the loss metrics per row and for the whole dataset without forming
-# the full residual matrix. Interemediate parts can be cached in the loop for efficiency.
-# return_S_terms can skip computing the expensive StS and StX when not needed for the fit (nnls case)
-# TODO: consider refactoring into: cache, weight, objective, s_terms
-.aa_loss_terms <- function(X, A, S, weight_fun = NULL,
-                           return_S_terms = TRUE,
-                           xss = NULL,
-                           rss = NULL,
-                           row_xss = NULL,
-                           row_rss = NULL,
-                           row_weights = NULL,
-                           StS = NULL,
-                           StX = NULL,
-                           AAt = NULL,
-                           XAt = NULL) {
-    # TODO: instead of creating copies consider correcting the affected terms (used to compute rss, xss)
-    iM <- attr(X, "bigM")
-    if (!is.null(iM)) {
-        X <- X[, -iM, drop = FALSE]
-        A <- A[, -iM, drop = FALSE]
-    }
-    update_row_weights <- !is.null(weight_fun)
-    if (update_row_weights) {
-        xss <- NULL
-        rss <- NULL
-        row_weights <- NULL
-        StS <- NULL
-        StX <- NULL
-    } else if (!is.null(row_weights)) {
-        .aa_check_row_weights(row_weights, nrow(X))
-        if (all(row_weights == 1))
-            row_weights <- NULL
-    }
-
-    # row_xss does not change between iterations, so compute it once and cache for efficiency
-    if (is.null(row_xss)) row_xss <- rowSums(X * X)
-
-    # A-terms
-    if (is.null(AAt)) AAt <- tcrossprod(A)
-    if (is.null(XAt)) XAt <- tcrossprod(X, A)
-
-    # Residual terms
-    if (is.null(row_rss))
-        row_rss <- pmax(row_xss - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
-    if (update_row_weights) {
-        new_row_weights <- weight_fun(row_rss)
-        .aa_check_row_weights(new_row_weights, nrow(X))
-        if (!.aa_trivial_row_weights(new_row_weights)) {
-            row_weights <- new_row_weights
-            xss <- sum(row_weights * row_xss)  # weighted total sum of squares
-        }
-    }
-    if (is.null(xss)) xss <- sum(.aa_weight_rows(row_xss, row_weights))
-    if (is.null(rss)) rss <- sum(.aa_weight_rows(row_rss, row_weights))
-
-    S_weighted <- .aa_weight_rows(S, row_weights)
-    if (return_S_terms) {
-        if (is.null(StX)) StX <- crossprod(S_weighted, X)
-        if (is.null(StS)) StS <- crossprod(S_weighted, S)
-    }
-    if (!return_S_terms) {
-        StX <- NULL
-        StS <- NULL
-    }
-
-    list(
-        rss = rss,
-        xss = xss,
-        row_xss = row_xss,
-        row_rss = row_rss,
-        row_weights = row_weights,
-        StS = StS,
-        StX = StX,
-        S_weighted = S_weighted,
-        AAt = AAt,
-        XAt = XAt,
-        A = A
-    )
+.aa_trace_row_rss <- function(row_xss, S, XAt, AAt) {
+    pmax(row_xss - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
 }
-
 
 .aa_update_loss <- function(loss, i, loss_terms, verbose, max_kappa = 1,
                             k_A = c("exact", "gram")) {

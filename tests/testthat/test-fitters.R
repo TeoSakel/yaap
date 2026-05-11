@@ -294,7 +294,7 @@ test_that("NNLS matrix scale keeps bigM outside returned coordinates", {
     expect_true(all(is.finite(fit[["loss"]][["loss"]])))
 })
 
-test_that("NNLS keeps previous iterate when candidate loss does not improve", {
+test_that("NNLS advances current iterate when loss does not improve", {
     set.seed(1)
     X <- toy_matrix()
 
@@ -309,8 +309,8 @@ test_that("NNLS keeps previous iterate when candidate loss does not improve", {
     loss <- fit[["loss"]]
 
     expect_false(fit[["converged"]])
-    expect_true(all(diff(loss[["loss"]]) <= 0))
-    expect_equal(tail(diff(loss[["loss"]]), 2L), c(0, 0))
+    expect_true(any(diff(loss[["loss"]]) > 0))
+    expect_lte(min(loss[["loss"]]), loss[["loss"]][nrow(loss)])
 })
 
 test_that("NNLS warns when raw coefficients are far from simplex", {
@@ -444,6 +444,35 @@ test_that("missing-data PGD defaults on for dense NA input", {
     expect_row_stochastic(fit[["compositions"]])
     expect_true(all(is.finite(fit[["loss"]][["loss"]])))
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
+})
+
+test_that("missing-data PGD supports zero optimizer iterations", {
+    X <- matrix(
+        c(
+            1, NA, 2, 0,
+            0, 3, NA, 1,
+            4, 0, 0, NA,
+            NA, 5, 1, 0,
+            2, NA, 0, 3,
+            0, 1, NA, 0
+        ),
+        nrow = 6L,
+        byrow = TRUE
+    )
+
+    set.seed(3)
+    fit <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 2L,
+        init = "uniform_archetypes",
+        sd_threshold = 0,
+        max_iter = 0L
+    ))
+
+    expect_s3_class(fit, "archetypes")
+    expect_true(fit[["converged"]])
+    expect_equal(nrow(fit[["loss"]]), 1L)
+    expect_true(is.finite(fit[["loss"]][["loss"]]))
 })
 
 test_that("missing-data PGD treats sparse structural zeros as missing", {

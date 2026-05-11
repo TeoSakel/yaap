@@ -298,6 +298,7 @@ run_aa.fd <- function(data, K, ...) {
             list(
                 bigM = 0,
                 delta = args[["delta"]],
+                loss_fun = if (robust) .aa_pgd_weighted_loss_terms else .aa_pgd_loss_terms,
                 fit_fun = if (missing) .aa_fit_pgd_missing else .aa_fit_pgd,
                 fit_args = list(
                     delta = args[["delta"]],
@@ -314,6 +315,7 @@ run_aa.fd <- function(data, K, ...) {
             list(
                 bigM = args[["bigM"]],
                 delta = 0,
+                loss_fun = if (robust) .aa_nnls_weighted_loss_terms else .aa_nnls_loss_terms,
                 fit_fun = .aa_fit_nnls,
                 fit_args = list(
                     ols_solver = args[["ols_solver"]],
@@ -373,8 +375,11 @@ run_aa.fd <- function(data, K, ...) {
         eps = eps,
         verbose = verbose
     )
-    if (missing)
+    if (missing) {
         common_args[["M"]] <- M
+    } else {
+        common_args[["loss_fun"]] <- method_config[["loss_fun"]]
+    }
     init_vars <- .aa_init_vars( # nolint: object_usage_linter.
         X = X,
         K = K,
