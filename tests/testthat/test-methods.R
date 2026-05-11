@@ -38,6 +38,30 @@ test_that("S3 methods return expected values", {
     expect_true(is.numeric(AIC(fit)))
 })
 
+test_that("adapted AIC returns NA outside covariance assumptions", {
+    high_dim <- archetypes(
+        coordinates = matrix(c(1, 0, 0, 0, 0, 1, 0, 0), nrow = 2L, byrow = TRUE),
+        coefficients = matrix(c(1, 0, 0, 0, 1, 0), nrow = 2L, byrow = TRUE),
+        compositions = matrix(c(1, 0, 0, 1, 0.5, 0.5), nrow = 3L, byrow = TRUE),
+        data = matrix(seq_len(12), nrow = 3L)
+    )
+    expect_warning(
+        expect_true(is.na(AIC(high_dim))),
+        "not larger than the number of features"
+    )
+
+    singular <- archetypes(
+        coordinates = matrix(c(1, 2, 2, 4), nrow = 2L, byrow = TRUE),
+        coefficients = matrix(c(1, 0, 0, 0, 0, 1, 0, 0), nrow = 2L, byrow = TRUE),
+        compositions = matrix(c(1, 0, 0, 1, 0.5, 0.5, 0.25, 0.75), nrow = 4L, byrow = TRUE),
+        data = cbind(seq_len(4), 2 * seq_len(4))
+    )
+    expect_warning(
+        expect_true(is.na(AIC(singular))),
+        "cov\\(X\\) is singular"
+    )
+})
+
 test_that("predict returns row-stochastic compositions for new data", {
     set.seed(1)
     X <- toy_data()

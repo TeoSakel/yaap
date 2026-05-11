@@ -182,8 +182,9 @@ archetypes_nnls <- function(data,
     no_update <- 0L
     max_simplex_error <- 0
     project <- proj_l1
-    best_loss <- loss_terms[["rss"]]
+    best_loss_terms <- loss_terms
     best_args <- list(A = A, B = B, S = S)
+    last_update_accepted <- TRUE
 
     # edge case: if max_iter = 0 return initial solution without any updates
     if (max_iter == 0L) {
@@ -238,12 +239,14 @@ archetypes_nnls <- function(data,
             max_kappa = max_kappa
         )
 
-        if (loss_terms[["rss"]] < best_loss) {
-            best_loss <- loss_terms[["rss"]]
+        if (loss_terms[["rss"]] < best_loss_terms[["rss"]]) {
+            best_loss_terms <- loss_terms
             best_args <- list(A = A, B = B, S = S)
             no_update <- 0L
+            last_update_accepted <- TRUE
         } else {
             no_update <- no_update + 1L
+            last_update_accepted <- FALSE
 
             if (verbose) {
                 fmt <- paste(
@@ -274,6 +277,15 @@ archetypes_nnls <- function(data,
         # Check convergence
         converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
         if (converged) break
+    }
+    if (!last_update_accepted) {
+        loss <- .aa_update_loss(
+            loss,
+            i + 1L,
+            best_loss_terms,
+            verbose = FALSE,
+            max_kappa = max_kappa
+        )
     }
     if (max_simplex_error > 0.05) {
         fmt <- paste(

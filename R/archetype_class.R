@@ -95,7 +95,6 @@ archetypes <- function(coordinates,
             compositions = compositions,
             slack        = slack,
             loss         = loss,
-            AIC          = NA_real_,
             converged    = converged,
             call         = call,
             data         = data,
@@ -114,7 +113,6 @@ archetypes <- function(coordinates,
 #'   row-sum relaxation.
 #' @param loss Data frame containing per-iteration metrics.
 #' @param converged Logical. Whether the optimization converged.
-#' @param AIC Numeric scalar with a precomputed AIC value.
 #' @param call The matched function call that created the object.
 #' @param data Optional original data.
 #' @param init Optional initial archetype coordinates.
@@ -125,7 +123,6 @@ new_archetypes <- function(coordinates,
                            slack,
                            loss,
                            converged,
-                           AIC = NA_real_,
                            call = NULL,
                            data = NULL,
                            init = NULL,
@@ -202,7 +199,6 @@ new_archetypes <- function(coordinates,
             slack        = slack,
             init         = init,
             loss         = loss,
-            AIC          = AIC,
             converged    = converged,
             data         = data,
             call         = call,
@@ -1191,11 +1187,24 @@ plot.kernel_archetypes <- function(x,
 
 #' AIC for archetypes objects
 #'
-#' Computes the Akaike Information Criterion (AIC) for an `archetypes` object
+#' Computes the AIC-like validity criterion for an `archetypes` object.
+#'
+#' This is not the classical likelihood-based Akaike Information Criterion
+#' \eqn{-2 \log L + 2k}. Instead, it implements the adapted archetypal-analysis
+#' criterion proposed by Suleman (2017), using the reconstruction variance
+#' \eqn{\|X - \hat X\|_F^2 / (N M)} and an efficiency-adjusted complexity
+#' penalty based on the full parameter count
+#' \eqn{K_\mu + K_\beta + 1 = N(K - 1) + K(N - 1) + 1}. The value is intended
+#' for comparing Euclidean Gaussian archetype fits on the same data, especially
+#' across different numbers of archetypes.
+#' Following the assumptions in Suleman (2017), the criterion is undefined when
+#' the number of samples is not larger than the number of features, or when the
+#' covariance matrix of `X` is singular; in these cases `NA_real_` is returned
+#' with a warning.
 #'
 #' @param object An object of class `archetypes`.
 #' @param ... Ignored.
-#' @return Numeric scalar with the AIC value.
+#' @return Numeric scalar with the adapted AIC-like criterion.
 #'
 #' @references
 #' A. Suleman, "Validation of archetypal analysis,"
@@ -1208,29 +1217,40 @@ AIC.archetypes <- function(object, ...) {
         warning(paste("AIC computation assumes coefficients are row-stochastic;",
                       "slack > 0 may violate this assumption."))
 
-    aic <- object[["AIC"]]
-    if (!is.na(aic)) return(aic)  # check for cached value
     X <- object[["data"]]
     if (is.null(X))
-        stop(paste("AIC was not precomputed because original data `X`",
-                   "was not provided when constructing the archetypes object."))
+        stop(paste("AIC requires original data `X`;",
+                   "provide it when constructing the archetypes object."))
     X <- if (inherits(X, "fd")) .aa_fd_to_matrix(X) else X
 
     # Compute AIC
-    K     <- nrow(object[["coordinates"]])        # Number of Archetypes
-    nelem <- prod(dim(X))                         # number of elements in X
+    K <- nrow(object[["coordinates"]]) # Number of Archetypes
+    N <- nrow(X)
+    M <- ncol(X)
+    nelem <- prod(dim(X)) # number of elements in X
     family <- object[["family"]]
     if (is.null(family))
         family <- "gaussian"
     if (!identical(family, "gaussian"))
         stop("AIC is not defined for non-Gaussian archetypes objects.", call. = FALSE)
+    if (N <= M) {
+        warning(paste("Adapted AIC is undefined when the number of samples",
+                      "is not larger than the number of features; returning NA."),
+                call. = FALSE)
+        return(NA_real_)
+    }
     # rss   <- object[["loss"]][["loss"]]
     X_hat <- with(object, compositions %*% coordinates)
-    rss   <- norm(X - X_hat, "F")^2  # "loss" is not necessarily the RSS on the original data
-    aic   <- log(rss / nelem) + 2 * (2*K - 1) / effic(X, X_hat)
-
-    object[["AIC"]] <- aic  # cache for future calls
-    aic
+    eta <- tryCatch(effic(X, X_hat), error = function(e) NA_real_)
+    if (!is.finite(eta) || eta <= 0) {
+        warning(paste("Adapted AIC is undefined because cov(X) is singular",
+                      "or the efficiency term is non-positive; returning NA."),
+                call. = FALSE)
+        return(NA_real_)
+    }
+    npar <- N * (K - 1) + K * (N - 1) + 1  # K_mu + K_beta + 1
+    rss  <- norm(X - X_hat, "F")^2  # "loss" is not necessarily the RSS on the original data
+    log(rss / nelem) + 2 * npar / (N * eta)
 }
 
 .aa_fd_to_matrix <- function(x) {

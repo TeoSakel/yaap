@@ -11,7 +11,6 @@ new_archetypes(
   slack,
   loss,
   converged,
-  AIC = NA_real_,
   call = NULL,
   data = NULL,
   init = NULL,
@@ -31,8 +30,6 @@ row-sum relaxation.}
 \item{loss}{Data frame containing per-iteration metrics.}
 
 \item{converged}{Logical. Whether the optimization converged.}
-
-\item{AIC}{Numeric scalar with a precomputed AIC value.}
 
 \item{call}{The matched function call that created the object.}
 

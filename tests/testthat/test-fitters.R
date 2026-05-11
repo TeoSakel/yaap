@@ -294,7 +294,7 @@ test_that("NNLS matrix scale keeps bigM outside returned coordinates", {
     expect_true(all(is.finite(fit[["loss"]][["loss"]])))
 })
 
-test_that("NNLS advances current iterate when loss does not improve", {
+test_that("NNLS reports best loss when final candidate does not improve", {
     set.seed(1)
     X <- toy_matrix()
 
@@ -310,7 +310,7 @@ test_that("NNLS advances current iterate when loss does not improve", {
 
     expect_false(fit[["converged"]])
     expect_true(any(diff(loss[["loss"]]) > 0))
-    expect_lte(min(loss[["loss"]]), loss[["loss"]][nrow(loss)])
+    expect_equal(loss[["loss"]][nrow(loss)], min(loss[["loss"]]))
 })
 
 test_that("NNLS warns when raw coefficients are far from simplex", {
