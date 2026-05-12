@@ -2,14 +2,17 @@
 % Please edit documentation in R/run_aa.R
 \name{run_aa}
 \alias{run_aa}
+\alias{run_aa.formula}
 \alias{run_aa.default}
 \alias{run_aa.fd}
 \title{Run Archetypal Analysis}
 \usage{
-run_aa(data, K, ...)
+run_aa(x, ...)
+
+\method{run_aa}{formula}(formula, data = NULL, K, ..., subset, na.action)
 
 \method{run_aa}{default}(
-  data,
+  x,
   K,
   method = c("pgd", "nnls", "kernel", "directional", "paa"),
   family = "gaussian",
@@ -24,30 +27,43 @@ run_aa(data, K, ...)
   tol = 1e-06,
   tol_r2 = 0.9999,
   max_kappa = 1000,
-  eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-08),
+  eps = NULL,
   verbose = FALSE,
-  missing = any(is.na(data)),
+  missing = NULL,
+  nrep = 1L,
   ...
 )
 
-\method{run_aa}{fd}(data, K, ...)
+\method{run_aa}{fd}(x, K, ...)
 }
 \arguments{
-\item{data}{data matrix (rows = samples, columns = dimensions), or an
-object with a class-specific \code{run_aa()} method.}
-
-\item{K}{number of archetypes}
+\item{x}{data matrix (rows = samples, columns = dimensions), or an object
+with a class-specific \code{run_aa()} method.}
 
 \item{...}{method-specific arguments. For \code{"pgd"}, these are \code{delta},
 \code{missing}, \code{pseudo_pgd}, \code{step_size}, \code{max_iter_optimizer},
 \code{step_shrinkage}, and \code{max_no_update}. For \code{"nnls"}, these are
 \code{ols_solver}, \code{bigM}, and \code{max_no_update}. For \code{"kernel"}, these include
-\code{gram}, \code{kernel}, \code{kernel_args}, \code{delta}, \code{pseudo_pgd}, \code{step_size},
+\code{kernel}, \code{kernel_args}, \code{delta}, \code{pseudo_pgd}, \code{step_size},
 \code{max_iter_optimizer}, \code{step_shrinkage}, and \code{max_no_update}. For
 \code{"directional"}, these include \code{hemisphere}, \code{precision}, \code{step_size},
 \code{max_iter_optimizer}, \code{step_shrinkage}, and \code{max_no_update}. For \code{"paa"},
 these include \code{step_size}, \code{max_iter_optimizer}, \code{step_shrinkage}, and
 \code{max_no_update}.}
+
+\item{formula}{formula selecting variables from \code{data} or the formula
+environment for formula input. The response, when present, is ignored.}
+
+\item{data}{data matrix (rows = samples, columns = dimensions), an optional
+data frame for formula input, or an object with a class-specific \code{run_aa()}
+method.}
+
+\item{K}{number of archetypes}
+
+\item{subset}{optional expression selecting rows before fitting formula input.}
+
+\item{na.action}{function controlling missing-value handling for formula
+input. Defaults to \code{\link[stats:na.omit]{stats::na.omit()}}.}
 
 \item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, \code{"kernel"},
 \code{"directional"}, or \code{"paa"} (default: \code{"pgd"}).}
@@ -57,7 +73,7 @@ these include \code{step_size}, \code{max_iter_optimizer}, \code{step_shrinkage}
 
 \item{init}{function, method string, or numeric coordinate matrix to initialize
 archetypes. \code{NULL} uses \code{"furthest_sum"} except for \code{method = "directional"}, where it uses \code{"random"}. When a matrix is supplied it
-must have dimension \verb{K x ncol(data)}. Rows outside the allowed data hull
+must have dimension \verb{K x ncol(x)}. Rows outside the allowed data hull
 are projected into it with a warning; row names, when present, are used as
 archetype names.}
 
@@ -94,6 +110,10 @@ low-variance features (default: 1e-6)}
 \item{missing}{whether to fit the missing-data PGD objective. When \code{TRUE},
 only observed entries are optimized; dense \code{NA} values are treated as
 missing and sparse structural zeros are treated as missing.}
+
+\item{nrep}{number of random restarts. The optimizer is run \code{nrep} times
+from independent initializations and the fit with the lowest final loss
+is returned (default: 1).}
 }
 \value{
 An object of class \code{\link{archetypes}}
@@ -115,6 +135,7 @@ them to an \code{fda::fd} object on demand.
 toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
 run_aa(as.matrix(toy), K = 3)
 run_aa(as.matrix(toy), K = 3, method = "nnls")
+run_aa(Species ~ ., data = iris, K = 3)
 
 \dontrun{
 # Functional data example based on fda::growth

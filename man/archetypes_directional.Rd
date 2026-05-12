@@ -5,7 +5,7 @@
 \title{Directional Archetypal Analysis}
 \usage{
 archetypes_directional(
-  data,
+  x,
   K,
   init = "random",
   init_args = list(),
@@ -25,7 +25,7 @@ archetypes_directional(
 )
 }
 \arguments{
-\item{data}{Dense numeric data matrix (rows = samples, columns = dimensions).}
+\item{x}{Dense numeric data matrix (rows = samples, columns = dimensions).}
 
 \item{K}{Number of archetypes.}
 

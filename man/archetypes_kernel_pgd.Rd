@@ -5,11 +5,11 @@
 \title{Kernel Archetypal Analysis using Projected Gradient Descent}
 \usage{
 archetypes_kernel_pgd(
-  data = NULL,
+  x,
   K,
-  gram = NULL,
-  kernel = NULL,
+  kernel = c("linear", "rbf", "laplace", "polynomial", "precomputed"),
   kernel_args = list(),
+  data = NULL,
   init = "furthest_sum",
   init_args = list(),
   robust = FALSE,
@@ -29,16 +29,19 @@ archetypes_kernel_pgd(
 )
 }
 \arguments{
-\item{data}{Optional data matrix with rows as samples.}
+\item{x}{Data matrix with rows as samples, or an \verb{N x N} Gram matrix when
+\code{kernel = "precomputed"}.}
 
 \item{K}{Number of archetypes.}
 
-\item{gram}{Optional precomputed \verb{N x N} Gram matrix.}
-
-\item{kernel}{Optional kernel specification. One of \code{"linear"}, \code{"rbf"},
-\code{"polynomial"}, or a function returning an \verb{N x N} Gram matrix.}
+\item{kernel}{Kernel specification. One of \code{"linear"}, \code{"rbf"},
+\code{"laplace"}, \code{"polynomial"}, \code{"precomputed"}, or a function returning an
+\verb{N x N} Gram matrix.}
 
 \item{kernel_args}{List of arguments passed to the kernel.}
+
+\item{data}{Optional original data matrix attached to precomputed-kernel fits
+so input-space \code{coordinates} can be returned.}
 
 \item{init}{Initialization method, row indices/names, or a \verb{K x N}
 coefficient matrix.}
@@ -78,9 +81,10 @@ line-search update before stopping as stalled.}
 An object of class \code{kernel_archetypes}.
 }
 \description{
-Fits kernel archetypal analysis from a precomputed Gram matrix or from a
-kernel computed on \code{data}. For nonlinear kernels, \code{coordinates_proxy} is the
-input-space convex combination \code{coefficients \%*\% data}, matching the plotting
-convention used by Mørup and Hansen for Figure 5. It is a visualization
-proxy, not the exact Hilbert-space archetype.
+Fits kernel archetypal analysis from a kernel computed on \code{x}, or from a
+precomputed Gram matrix when \code{kernel = "precomputed"}. When original data are
+available, \code{coordinates} are the input-space convex combination
+\code{coefficients \%*\% data}, matching the plotting convention used by Mørup and
+Hansen for Figure 5. They are visualization coordinates, not exact
+Hilbert-space archetypes.
 }

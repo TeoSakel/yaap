@@ -5,7 +5,7 @@
 \title{Perform Archetypal Analysis using NNLS}
 \usage{
 archetypes_nnls(
-  data,
+  x,
   K,
   init = "furthest_sum",
   init_args = list(),
@@ -18,7 +18,7 @@ archetypes_nnls(
   tol = 1e-06,
   tol_r2 = 0.9999,
   max_kappa = 1000,
-  eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-08),
+  eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
   ols_solver = c("qr", "ginv", "BFGS"),
   bigM = NULL,
@@ -26,13 +26,13 @@ archetypes_nnls(
 )
 }
 \arguments{
-\item{data}{data matrix (rows = samples, columns = dimensions)}
+\item{x}{data matrix (rows = samples, columns = dimensions)}
 
 \item{K}{number of archetypes}
 
 \item{init}{function, method string, or numeric coordinate matrix to initialize
 archetypes (default: \code{"furthest_sum"}). When a matrix is supplied it must
-have dimension \verb{K x ncol(data)}. Rows outside the convex hull of \code{data} are
+have dimension \verb{K x ncol(x)}. Rows outside the convex hull of \code{x} are
 projected into it with a warning; row names, when present, are used as
 archetype names.}
 

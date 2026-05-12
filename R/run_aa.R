@@ -4,8 +4,13 @@
 #' It handles shared validation, preprocessing, initialization, and output
 #' formatting, then delegates the optimization loop to the selected method.
 #'
-#' @param data data matrix (rows = samples, columns = dimensions), or an
-#'   object with a class-specific `run_aa()` method.
+#' @param x data matrix (rows = samples, columns = dimensions), or an object
+#'   with a class-specific `run_aa()` method.
+#' @param formula formula selecting variables from `data` or the formula
+#'   environment for formula input. The response, when present, is ignored.
+#' @param data data matrix (rows = samples, columns = dimensions), an optional
+#'   data frame for formula input, or an object with a class-specific `run_aa()`
+#'   method.
 #' @param K number of archetypes
 #' @param ... arguments passed to methods.
 #'
@@ -15,6 +20,7 @@
 #' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
 #' run_aa(as.matrix(toy), K = 3)
 #' run_aa(as.matrix(toy), K = 3, method = "nnls")
+#' run_aa(Species ~ ., data = iris, K = 3)
 #'
 #' \dontrun{
 #' # Functional data example based on fda::growth
@@ -34,8 +40,54 @@
 #' }
 #'
 #' @export
-run_aa <- function(data, K, ...) {
+run_aa <- function(x, ...) {
     UseMethod("run_aa")
+}
+
+#' @rdname run_aa
+#' @param subset optional expression selecting rows before fitting formula input.
+#' @param na.action function controlling missing-value handling for formula
+#'   input. Defaults to [stats::na.omit()].
+#'
+#' @exportS3Method
+run_aa.formula <- function(formula,
+                           data = NULL,
+                           K,
+                           ...,
+                           subset,
+                           na.action) {
+    if (missing(K))
+        stop("`K` must be supplied.", call. = FALSE)
+
+    call <- match.call()
+    call[[1L]] <- quote(run_aa)
+
+    terms <- stats::delete.response(stats::terms(formula, data = data))
+    mf_call <- match.call(expand.dots = FALSE)
+    keep <- match(c("formula", "data", "subset", "na.action"), names(mf_call), 0L)
+    mf_call <- mf_call[c(1L, keep)]
+    mf_call[[1L]] <- quote(stats::model.frame)
+    mf_call[["formula"]] <- terms
+    mf <- eval(mf_call, parent.frame())
+
+    terms <- attr(mf, "terms")
+    attr(terms, "intercept") <- 0L
+    X <- stats::model.matrix(terms, mf)
+    intercept <- colnames(X) == "(Intercept)"
+    if (any(intercept))
+        X <- X[, !intercept, drop = FALSE]
+    if (ncol(X) == 0L)
+        stop("Formula input must select at least one predictor column.", call. = FALSE)
+
+    fit <- .aa_fit_engine(
+        call = call,
+        x = X,
+        K = K,
+        ...
+    )
+    fit[["formula"]] <- formula
+    fit[["terms"]] <- terms
+    fit
 }
 
 #' @rdname run_aa
@@ -46,7 +98,7 @@ run_aa <- function(data, K, ...) {
 #' @param init function, method string, or numeric coordinate matrix to initialize
 #'   archetypes. `NULL` uses `"furthest_sum"` except for `method =
 #'   "directional"`, where it uses `"random"`. When a matrix is supplied it
-#'   must have dimension `K x ncol(data)`. Rows outside the allowed data hull
+#'   must have dimension `K x ncol(x)`. Rows outside the allowed data hull
 #'   are projected into it with a warning; row names, when present, are used as
 #'   archetype names.
 #' @param init_args list of additional arguments for the initialization function
@@ -70,11 +122,14 @@ run_aa <- function(data, K, ...) {
 #' @param missing whether to fit the missing-data PGD objective. When `TRUE`,
 #'   only observed entries are optimized; dense `NA` values are treated as
 #'   missing and sparse structural zeros are treated as missing.
+#' @param nrep number of random restarts. The optimizer is run `nrep` times
+#'   from independent initializations and the fit with the lowest final loss
+#'   is returned (default: 1).
 #' @param ... method-specific arguments. For `"pgd"`, these are `delta`,
 #'   `missing`, `pseudo_pgd`, `step_size`, `max_iter_optimizer`,
 #'   `step_shrinkage`, and `max_no_update`. For `"nnls"`, these are
 #'   `ols_solver`, `bigM`, and `max_no_update`. For `"kernel"`, these include
-#'   `gram`, `kernel`, `kernel_args`, `delta`, `pseudo_pgd`, `step_size`,
+#'   `kernel`, `kernel_args`, `delta`, `pseudo_pgd`, `step_size`,
 #'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`. For
 #'   `"directional"`, these include `hemisphere`, `precision`, `step_size`,
 #'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`. For `"paa"`,
@@ -82,7 +137,7 @@ run_aa <- function(data, K, ...) {
 #'   `max_no_update`.
 #'
 #' @exportS3Method
-run_aa.default <- function(data,
+run_aa.default <- function(x,
                            K,
                            method = c("pgd", "nnls", "kernel", "directional", "paa"),
                            family = "gaussian",
@@ -97,16 +152,23 @@ run_aa.default <- function(data,
                            tol = 1e-6,
                            tol_r2 = 0.9999,
                            max_kappa = 1000,
-                           eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
+                           eps = NULL,
                            verbose = FALSE,
-                           missing = any(is.na(data)),
+                           missing = NULL,
+                           nrep = 1L,
                            ...) {
+    data <- if (inherits(x, "data.frame")) as.matrix(x) else x
+    if (is.null(eps))
+        eps <- ifelse(inherits(data, "sparseMatrix"), 0, 1e-8)
+    if (is.null(missing))
+        missing <- any(is.na(data))
+
     call <- match.call()
     call[[1L]] <- quote(run_aa)
 
-    .aa_run_aa_default(
+    .aa_fit_engine(
         call = call,
-        data = data,
+        x = data,
         K = K,
         method = method,
         family = family,
@@ -124,6 +186,7 @@ run_aa.default <- function(data,
         eps = eps,
         verbose = verbose,
         missing = missing,
+        nrep = nrep,
         ...
     )
 }
@@ -138,7 +201,8 @@ run_aa.default <- function(data,
 #' them to an `fda::fd` object on demand.
 #'
 #' @exportS3Method
-run_aa.fd <- function(data, K, ...) {
+run_aa.fd <- function(x, K, ...) {
+    data <- x
     if (!requireNamespace("fda", quietly = TRUE))
         stop("Package `fda` is required for `run_aa.fd()`.", call. = FALSE)
 
@@ -158,9 +222,9 @@ run_aa.fd <- function(data, K, ...) {
     call <- match.call()
     call[[1L]] <- quote(run_aa)
 
-    fit <- .aa_run_aa_default(
+    fit <- .aa_fit_engine(
         call = call,
-        data = B,
+        x = B,
         K = K,
         scale = G,
         ...
@@ -170,187 +234,286 @@ run_aa.fd <- function(data, K, ...) {
     fit
 }
 
-.aa_run_aa_default <- function(call,
-                               data,
-                               K,
-                               method = c("pgd", "nnls", "kernel", "directional", "paa"),
-                               family = "gaussian",
-                               init = NULL,
-                               init_args = list(),
-                               weights = NULL,
-                               scale = TRUE,
-                               robust = FALSE,
-                               tukey_c = 4.685,
-                               sd_threshold = 1e-6,
-                               max_iter = 100L,
-                               tol = 1e-6,
-                               tol_r2 = 0.9999,
-                               max_kappa = 1000,
-                               eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
-                               verbose = FALSE,
-                               missing = any(is.na(data)),
-                               ...) {
+.aa_fit_engine <- function(call,
+                           x,
+                           K,
+                           method = c("pgd", "nnls", "kernel", "directional", "paa"),
+                           family = "gaussian",
+                           init = NULL,
+                           init_args = list(),
+                           weights = NULL,
+                           scale = TRUE,
+                           robust = FALSE,
+                           tukey_c = 4.685,
+                           sd_threshold = 1e-6,
+                           max_iter = 100L,
+                           tol = 1e-6,
+                           tol_r2 = 0.9999,
+                           max_kappa = 1000,
+                           eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
+                           verbose = FALSE,
+                           missing = any(is.na(x)),
+                           nrep = 1L,
+                           data = NULL,
+                           ...) {
     method <- match.arg(method, c("pgd", "nnls", "kernel", "directional", "paa"))
     if (is.null(init))
         init <- if (identical(method, "directional")) "random" else "furthest_sum"
     stopifnot("`missing` must be TRUE or FALSE" =
                   is.logical(missing) && length(missing) == 1L && !is.na(missing))
-    if (identical(method, "directional")) {
-        if (missing)
-            stop("`missing = TRUE` is not supported for `method = 'directional'`.",
-                 call. = FALSE)
-        if (robust)
-            stop("`robust = TRUE` is not supported for `method = 'directional'`.",
-                 call. = FALSE)
-        if (!isTRUE(scale))
-            stop("`scale` is not supported for `method = 'directional'`.", call. = FALSE)
-        fit <- archetypes_directional(
-            data = data,
-            K = K,
-            init = init,
-            init_args = init_args,
-            weights = weights,
-            max_iter = max_iter,
-            tol = tol,
-            tol_r2 = tol_r2,
-            max_kappa = max_kappa,
-            eps = eps,
-            verbose = verbose,
-            ...
-        )
-        fit[["call"]] <- call
-        return(fit)
-    }
-    if (identical(method, "kernel")) {
-        if (missing)
-            stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
-        if (!is.null(weights))
-            stop("`weights` are not supported for `method = 'kernel'`.", call. = FALSE)
-        if (!isTRUE(scale))
-            stop("`scale` is not supported for `method = 'kernel'`.", call. = FALSE)
-        fit <- archetypes_kernel_pgd(
-            data = data,
-            K = K,
-            init = init,
-            init_args = init_args,
-            robust = robust,
-            tukey_c = tukey_c,
-            max_iter = max_iter,
-            tol = tol,
-            tol_r2 = tol_r2,
-            max_kappa = max_kappa,
-            eps = eps,
-            verbose = verbose,
-            ...
-        )
-        fit[["call"]] <- call
-        return(fit)
-    }
-    if (identical(method, "paa")) {
-        if (missing)
-            stop("`missing = TRUE` is not supported for `method = 'paa'`.", call. = FALSE)
-        if (robust)
-            stop("`robust = TRUE` is not supported for `method = 'paa'`.", call. = FALSE)
-        if (!is.null(weights))
-            stop("`weights` are not supported for `method = 'paa'`.", call. = FALSE)
-        fit <- archetypes_paa(
-            data = data,
-            K = K,
-            family = family,
-            init = init,
-            init_args = init_args,
-            max_iter = max_iter,
-            tol = tol,
-            tol_r2 = tol_r2,
-            max_kappa = max_kappa,
-            eps = eps,
-            verbose = verbose,
-            ...
-        )
-        fit[["call"]] <- call
-        return(fit)
-    }
-    if (!identical(method, "pgd") && missing)
-        stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
-    if (missing && robust)
-        stop("`robust = TRUE` is not supported with `missing = TRUE`.", call. = FALSE)
-    if (missing && !is.null(weights))
-        stop("`weights` are not supported with `missing = TRUE`.", call. = FALSE)
-    if (missing && (is.matrix(scale) || inherits(scale, "Matrix")))
-        stop("matrix `scale` is not supported with `missing = TRUE`.", call. = FALSE)
-
-    .aa_check_inputs( # nolint: object_usage_linter.
+    stopifnot("`nrep` must be a single positive integer" =
+                  is.numeric(nrep) && length(nrep) == 1L && is.finite(nrep) &&
+                  nrep >= 1L && nrep == as.integer(nrep))
+    nrep <- as.integer(nrep)
+    method_args <- list(...)
+    precomputed_kernel <- identical(method, "kernel") &&
+        identical(method_args[["kernel"]], "precomputed")
+    .aa_check_x(x, missing = missing, validate_values = !precomputed_kernel)
+    ctx <- list(
+        call = call,
+        x = x,
         data = data,
         K = K,
+        method = method,
+        family = family,
+        init = init,
+        init_args = init_args,
+        weights = weights,
+        scale = scale,
+        robust = robust,
+        tukey_c = tukey_c,
+        sd_threshold = sd_threshold,
+        max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
         max_kappa = max_kappa,
         eps = eps,
-        robust = robust,
-        tukey_c = tukey_c,
-        scale = scale,
-        missing = missing
-    )
-    method_config <- switch(
-        method,
-        pgd = {
-            args <- .aa_pgd_method_args(...)
-            list(
-                bigM = 0,
-                delta = args[["delta"]],
-                loss_fun = if (robust) .aa_pgd_weighted_loss_terms else .aa_pgd_loss_terms,
-                fit_fun = if (missing) .aa_fit_pgd_missing else .aa_fit_pgd,
-                fit_args = list(
-                    delta = args[["delta"]],
-                    pseudo_pgd = args[["pseudo_pgd"]],
-                    step_size = args[["step_size"]],
-                    max_iter_optimizer = args[["max_iter_optimizer"]],
-                    step_shrinkage = args[["step_shrinkage"]],
-                    max_no_update = args[["max_no_update"]]
-                )
-            )
-        },
-        nnls = {
-            args <- .aa_nnls_method_args(...)
-            list(
-                bigM = args[["bigM"]],
-                delta = 0,
-                loss_fun = if (robust) .aa_nnls_weighted_loss_terms else .aa_nnls_loss_terms,
-                fit_fun = .aa_fit_nnls,
-                fit_args = list(
-                    ols_solver = args[["ols_solver"]],
-                    max_no_update = args[["max_no_update"]]
-                )
-            )
-        }
+        verbose = verbose,
+        missing = missing,
+        nrep = nrep
     )
 
-    weight_fun <- if (robust) {
-        function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
+    block <- switch(
+        method,
+        pgd         = .aa_pgd_block(ctx, ...),
+        nnls        = .aa_nnls_block(ctx, ...),
+        kernel      = .aa_kernel_block(ctx, ...),
+        directional = .aa_directional_block(ctx, ...),
+        paa         = .aa_paa_block(ctx, ...)
+    )
+    block[["check"]](ctx)
+    prep <- block[["preprocess"]](ctx)
+    out <- block[["edge_case"]](ctx, prep)  # check for K = 1 or K == N
+    if (!is.null(out)) return(out)
+
+    # Run multiple restarts and return the best fit
+    best_fit <- NULL
+    best_loss <- Inf
+    for (.nrep_i in seq_len(ctx[["nrep"]])) {
+        init_vars <- block[["init"]](ctx, prep)
+        fit <- block[["fit"]](ctx, prep, init_vars)
+        current_loss <- block[["final_loss"]](fit)
+        if (is.finite(current_loss) && current_loss < best_loss) {
+            best_fit <- fit
+            best_loss <- current_loss
+        }
+    }
+    block[["prepare_output"]](ctx, prep, best_fit)
+}
+
+.aa_final_loss <- function(fit) {
+    fit[["loss"]][["loss"]][fit[["i"]] + 1L]
+}
+
+.aa_weight_fun <- function(robust, tukey_c) {
+    if (!robust)
+        return(NULL)
+    function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
+}
+
+.aa_check_x <- function(x, missing = FALSE, validate_values = TRUE) {
+    stopifnot("data must be a matrix-like object" =
+                  is.matrix(x) || inherits(x, "data.frame") ||
+                      inherits(x, "sparseMatrix"))
+    if (inherits(x, "sparseMatrix")) {
+        if (!methods::is(x, "dMatrix"))
+            stop("data must be numeric", call. = FALSE)
+        values <- x@x
     } else {
-        NULL
+        values <- as.matrix(x)
+        stopifnot("data must be numeric" = is.numeric(values))
+    }
+    if (!validate_values)
+        return(invisible(TRUE))
+    if (missing) {
+        stopifnot("observed data contains non-finite values" =
+                      all(is.na(values) | is.finite(values)))
+    } else {
+        stopifnot("data contains missing values" = !any(is.na(values)))
+        stopifnot("data contains non-finite values" = all(is.finite(values)))
+    }
+    invisible(TRUE)
+}
+
+.aa_check_missing_route <- function(ctx) {
+    if (!identical(ctx[["method"]], "pgd") && ctx[["missing"]])
+        stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
+    if (ctx[["missing"]] && ctx[["robust"]])
+        stop("`robust = TRUE` is not supported with `missing = TRUE`.", call. = FALSE)
+    if (ctx[["missing"]] && !is.null(ctx[["weights"]]))
+        stop("`weights` are not supported with `missing = TRUE`.", call. = FALSE)
+    if (ctx[["missing"]] && (is.matrix(ctx[["scale"]]) || inherits(ctx[["scale"]], "Matrix")))
+        stop("matrix `scale` is not supported with `missing = TRUE`.", call. = FALSE)
+    invisible(TRUE)
+}
+
+.aa_check_max_no_update <- function(max_no_update) {
+    stopifnot("max_no_update must be a positive integer" =
+                  max_no_update == as.integer(max_no_update) &&
+                      max_no_update >= 1L)
+    invisible(TRUE)
+}
+
+.aa_check_projected_gradient_controls <- function(step_size,
+                                                  max_iter_optimizer,
+                                                  step_shrinkage,
+                                                  max_no_update) {
+    stopifnot("step_size must be positive" = step_size > 0)
+    stopifnot("max_iter_optimizer must be a positive integer" =
+                  max_iter_optimizer == as.integer(max_iter_optimizer) &&
+                      max_iter_optimizer >= 1L)
+    stopifnot("step_shrinkage must be between (0, 1)" =
+                  step_shrinkage > 0 && step_shrinkage < 1)
+    .aa_check_max_no_update(max_no_update)
+    invisible(TRUE)
+}
+
+.aa_euclidean_check <- function(ctx) {
+    .aa_check_missing_route(ctx)
+    .aa_check_fit_controls(ctx)
+    .aa_check_scale(ctx[["scale"]], ncol(ctx[["x"]]))
+}
+
+.aa_euclidean_preprocess <- function(ctx, bigM = 0) {
+    data <- ctx[["x"]]
+    sd_threshold <- ctx[["sd_threshold"]]
+    weights <- ctx[["weights"]]
+    scale <- ctx[["scale"]]
+
+    if (ctx[["verbose"]]) message("Preprocessing data...")
+
+    if (ctx[["missing"]])
+        return(.aa_preprocess_missing(data, sd_threshold, ctx[["verbose"]], scale = scale))
+
+    if (inherits(data, "sparseMatrix"))
+        data <- Matrix::drop0(data)
+
+    original_center <- colMeans(data)
+    names(original_center) <- colnames(data)
+    scale_mode <- if (identical(scale, FALSE)) {
+        "none"
+    } else if (isTRUE(scale) || (is.numeric(scale) && is.null(dim(scale)))) {
+        "vector"
+    } else {
+        "matrix"
     }
 
-    pre <- .aa_preprocess(
-        data,
-        sd_threshold,
-        weights,
-        verbose,
-        bigM = method_config[["bigM"]],
-        scale = scale,
-        missing = missing
-    )
-    X <- pre[["X"]]
-    M <- pre[["M"]]
-    undo_scale <- pre[["undo_scale"]]
-    rm(pre)
+    X <- if (inherits(data, "sparseMatrix")) {
+        data
+    } else {
+        as.matrix(data)
+    }
+    if (isTRUE(scale)) {
+        n <- nrow(data)
+        x_mean <- colMeans(data)
+        x2 <- colSums(data * data)
+        x_var <- pmax((x2 - n * x_mean * x_mean) / max(n - 1L, 1L), 0)
+        scale <- sqrt(x_var)
+        names(scale) <- colnames(data)
 
-    out <- if (missing) NULL else .aa_checks_edge_cases(X, K, verbose)
-    if (!is.null(out)) {
-        return(.aa_prepare_output(
-            call = call,
-            data = data,
-            X = X,
+        if (!inherits(data, "sparseMatrix")) {
+            X <- sweep(X, 2L, x_mean, "-")
+            attr(X, "scaled:center") <- x_mean
+        }
+        attr(X, "scaled:scale") <- scale
+    }
+
+    X <- .filter_low_variance(X, sd_threshold)
+    mask <- attr(X, "mask")
+
+    if (identical(scale_mode, "matrix")) {
+        if (!is.null(mask))
+            scale <- scale[mask, mask, drop = FALSE]
+        scale_factor <- t(chol(as.matrix(scale)))
+        X <- as.matrix(X) %*% scale_factor
+        retained_names <- names(original_center)
+        if (!is.null(mask))
+            retained_names <- retained_names[mask]
+        colnames(X) <- retained_names
+        attr(X, "mask") <- mask
+        attr(X, "scale:factor") <- scale_factor
+    } else if (identical(scale_mode, "vector")) {
+        if (!is.null(mask))
+            scale <- scale[mask]
+        scale_factor <- ifelse(scale > 0, scale, 1)
+        x_attrs <- attributes(X)
+        X <- if (inherits(X, "sparseMatrix")) {
+            Matrix::colScale(X, 1 / scale_factor)
+        } else {
+            sweep(X, 2L, scale_factor, "/")
+        }
+        attributes(X) <- utils::modifyList(attributes(X), x_attrs)
+        attr(X, "scale:factor") <- scale_factor
+    }
+    attr(X, "scale:mode") <- scale_mode
+    attr(X, "restore:center") <- original_center
+    N <- nrow(X)
+    if (is.null(bigM))
+        bigM <- .aa_auto_bigM(X)
+
+    if (!is.null(weights)) {
+        if (length(weights) != N) {
+            fmt <- "Number of weights (%d) must equal number of rows in data (%d)"
+            stop(sprintf(fmt, length(weights), N))
+        }
+        stopifnot("Weights contain NA values" = !any(is.na(weights)))
+        stopifnot("Weights must be non-negative" = all(weights >= 0))
+        weights <- weights / mean(weights)
+        x_attrs <- attributes(X)
+        X <- X * weights
+        attributes(X) <- utils::modifyList(attributes(X), x_attrs)
+        attr(X, "weights") <- weights
+    }
+
+    if (bigM > 0) {
+        x_attrs <- attributes(X)
+        bigM_col <- matrix(bigM, nrow = N, ncol = 1L, dimnames = list(rownames(X), "bigM"))
+        if (inherits(X, "sparseMatrix"))
+            bigM_col <- as(bigM_col, "sparseMatrix")
+        X <- cbind(bigM_col, X)
+        attr(X, "scaled:center") <- x_attrs[["scaled:center"]]
+        attr(X, "scaled:scale") <- x_attrs[["scaled:scale"]]
+        attr(X, "scale:mode") <- x_attrs[["scale:mode"]]
+        attr(X, "scale:factor") <- x_attrs[["scale:factor"]]
+        attr(X, "restore:center") <- x_attrs[["restore:center"]]
+        attr(X, "mask") <- x_attrs[["mask"]]
+        attr(X, "bigM") <- 1L
+        attr(X, "bigM.value") <- bigM
+    }
+
+    list(X = X, undo_scale = .aa_undo_scale)
+}
+
+.aa_euclidean_edge_case <- function(ctx, prep) {
+    # TODO: handle missing-data edge cases
+    if (ctx[["missing"]]) return(NULL)
+
+    out <- .aa_checks_edge_cases(prep[["X"]], ctx[["K"]], ctx[["verbose"]])
+    if (is.null(out)) return(NULL)
+    .aa_euclidean_output(
+        ctx,
+        prep,
+        list(
             A0 = out[["init"]],
             A = out[["coordinates"]],
             B = out[["coefficients"]],
@@ -358,99 +521,90 @@ run_aa.fd <- function(data, K, ...) {
             delta = out[["slack"]],
             i = nrow(out[["loss"]]) - 1L,
             loss = out[["loss"]],
-            converged = out[["converged"]],
-            undo_scale = undo_scale,
-            max_iter = max_iter,
-            verbose = verbose
-        ))
-    }
-
-    common_args <- list(
-        X = X,
-        weight_fun = weight_fun,
-        max_iter = max_iter,
-        tol = tol,
-        tol_r2 = tol_r2,
-        max_kappa = max_kappa,
-        eps = eps,
-        verbose = verbose
-    )
-    if (missing) {
-        common_args[["M"]] <- M
-    } else {
-        common_args[["loss_fun"]] <- method_config[["loss_fun"]]
-    }
-    init_vars <- .aa_init_vars( # nolint: object_usage_linter.
-        X = X,
-        K = K,
-        init = init,
-        init_args = init_args,
-        eps = eps,
-        max_iter = max_iter,
-        verbose = verbose,
-        delta = method_config[["delta"]]
-    )
-    fit <- do.call(
-        what = method_config[["fit_fun"]],
-        args = c(common_args, init_vars, method_config[["fit_args"]])
-    )
-
-    .aa_prepare_output(
-        call = call,
-        data = data,
-        X = X,
-        A0 = fit[["A0"]],
-        A = fit[["A"]],
-        B = fit[["B"]],
-        S = fit[["S"]],
-        delta = fit[["delta"]],
-        i = fit[["i"]],
-        loss = fit[["loss"]],
-        converged = fit[["converged"]],
-        undo_scale = undo_scale,
-        max_iter = max_iter,
-        verbose = verbose
+            converged = out[["converged"]]
+        )
     )
 }
 
-.aa_pgd_method_args <- function(delta = 0,
-                                pseudo_pgd = TRUE,
-                                step_size = 1.0,
-                                max_iter_optimizer = 10L,
-                                step_shrinkage = 0.5,
-                                max_no_update = 5L) {
-    stopifnot("step_size must be positive" = step_size > 0)
-    stopifnot("step_shrinkage must be between (0, 1)" =
-                  step_shrinkage > 0 && step_shrinkage < 1)
-    stopifnot("delta must be single non-negative number" =
-                  length(delta) == 1 && delta >= 0)
-    stopifnot("max_no_update must be a positive integer" =
-                  max_no_update == as.integer(max_no_update) && max_no_update >= 1L)
+.aa_euclidean_init <- function(ctx, prep, delta = 0) {
+    X <- prep[["X"]]
+    init <- ctx[["init"]]
+    init_args <- ctx[["init_args"]]
+    if (ctx[["verbose"]]) message("Initializing archetypes...")
+    L <- ctx[["max_iter"]] + 1L
 
-    list(
-        delta = delta,
-        pseudo_pgd = pseudo_pgd,
-        step_size = step_size,
-        max_iter_optimizer = max_iter_optimizer,
-        step_shrinkage = step_shrinkage,
-        max_no_update = as.integer(max_no_update)
-    )
+    if (is.matrix(init) || inherits(init, "data.frame")) {
+        init <- .aa_preprocess_init(init, X)
+        if (length(init_args) > 0L) {
+            warning("`init_args` are ignored when `init` is a matrix", call. = FALSE)
+            init_args <- list()
+        }
+        return(.aa_matrix_init(X, ctx[["K"]], init, ctx[["eps"]], L, delta))
+    }
+
+    if (is.character(init)) {
+        stopifnot("`init` must be a single string" = length(init) == 1L)
+        init_args <- c(list(method = init), init_args)
+        init <- aa_init
+    } else if (!is.function(init)) {
+        stop("`init` must be a function, a single string, or archetypes coordinate matrix")
+    }
+
+    init_vars <- do.call(init, args = c(list(X = X, K = ctx[["K"]]), init_args))
+    rownames(init_vars[["A"]]) <- .aa_init_names(init_vars[["A"]])
+    rownames(init_vars[["B"]]) <- rownames(init_vars[["A"]])
+    init_vars[["S"]] <- .init_S(X, init_vars[["A"]], eps = ctx[["eps"]])
+    init_vars[["loss"]] <- .aa_new_loss(L)
+    init_vars
 }
 
-.aa_nnls_method_args <- function(ols_solver = c("qr", "ginv", "BFGS"),
-                                 bigM = NULL,
-                                 max_no_update = 5L) {
-    ols_solver <- match.arg(ols_solver)
-    if (!is.null(bigM)) {
-        stopifnot("`bigM` must be NULL or a positive number" =
-                      is.numeric(bigM) && length(bigM) == 1L && is.finite(bigM) && bigM > 0)
-    }
-    stopifnot("max_no_update must be a positive integer" =
-                  max_no_update == as.integer(max_no_update) && max_no_update >= 1L)
+.aa_euclidean_output <- function(ctx, prep, fit) {
+    X <- if (!is.null(prep[["output_X"]])) prep[["output_X"]] else prep[["X"]]
+    undo_scale <- prep[["undo_scale"]]
+    if (is.null(undo_scale))
+        undo_scale <- function(A, X) A
 
-    list(
-        ols_solver = ols_solver,
-        bigM = bigM,
-        max_no_update = as.integer(max_no_update)
+    j <- fit[["i"]] + 1L
+    loss <- as.data.frame(fit[["loss"]])[seq_len(j), , drop = FALSE]
+    rownames(loss) <- NULL
+
+    A <- fit[["A"]]
+    A0 <- fit[["A0"]]
+    archetype_names <- if (!is.null(A0)) rownames(A0) else rownames(A)
+    A <- undo_scale(A, X)
+    if (!is.null(A0))
+        A0 <- undo_scale(A0, X)
+
+    if (is.null(archetype_names))
+        archetype_names <- paste0("A", seq_len(nrow(A)))
+    rownames(A) <- rownames(fit[["B"]]) <- colnames(fit[["S"]]) <- archetype_names
+    if (!is.null(A0))
+        rownames(A0) <- archetype_names
+    colnames(fit[["B"]]) <- rownames(fit[["S"]]) <- rownames(X)
+
+    if (!fit[["converged"]]) {
+        fmt <- "Algorithm did not converge after %d iterations"
+        warning(sprintf(fmt, ctx[["max_iter"]]), call. = FALSE)
+    }
+
+    if (ctx[["verbose"]]) {
+        fmt <- ifelse(fit[["converged"]],
+                      "Converged after %d iterations:",
+                      "Final iteration %d:")
+        fmt <- paste(fmt, "loss = %.4g, R2 = %.3f")
+        message(sprintf(fmt, fit[["i"]], loss[j, "loss"], loss[j, "r2"]))
+    }
+
+    archetypes(
+        call         = ctx[["call"]],
+        data         = ctx[["x"]],
+        init         = A0,
+        coordinates  = A,
+        coefficients = fit[["B"]],
+        compositions = fit[["S"]],
+        slack        = if (is.null(fit[["delta"]])) 0 else fit[["delta"]],
+        loss         = loss,
+        converged    = fit[["converged"]],
+        family       = prep[["family"]]
     )
 }

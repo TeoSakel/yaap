@@ -110,7 +110,85 @@ test_that("common fitter defaults are synchronized", {
 test_that("run_aa is an S3 generic", {
     expect_true(isS3stdGeneric(run_aa))
     expect_true("run_aa.default" %in% methods("run_aa"))
+    expect_true("run_aa.formula" %in% methods("run_aa"))
     expect_true("run_aa.fd" %in% methods("run_aa"))
+})
+
+test_that("run_aa handles formula input", {
+    set.seed(1)
+    fit <- suppressWarnings(run_aa(
+        Species ~ .,
+        data = iris,
+        K = 3L,
+        max_iter = 1L,
+        sd_threshold = 0
+    ))
+
+    expect_s3_class(fit, "archetypes")
+    expect_matrix_dim(fit[["coordinates"]], 3L, 4L)
+    expect_matrix_dim(fit[["coefficients"]], 3L, nrow(iris))
+    expect_matrix_dim(fit[["compositions"]], nrow(iris), 3L)
+    expect_equal(colnames(fit[["data"]]), names(iris)[1:4])
+    expect_equal(fit[["formula"]], Species ~ .)
+    expect_identical(as.character(fit[["call"]][[1L]]), "run_aa")
+})
+
+test_that("run_aa formula input can use the formula environment", {
+    set.seed(1)
+    df <- iris[1:25, 1:4]
+    fit <- with(df, suppressWarnings(run_aa(
+        ~ Sepal.Length + Sepal.Width,
+        K = 2L,
+        max_iter = 1L
+    )))
+
+    expect_s3_class(fit, "archetypes")
+    expect_matrix_dim(fit[["data"]], nrow(df), 2L)
+    expect_matrix_dim(fit[["coordinates"]], 2L, 2L)
+    expect_equal(colnames(fit[["data"]]), c("Sepal.Length", "Sepal.Width"))
+})
+
+test_that("run_aa formula input requires K", {
+    expect_error(
+        run_aa(Species ~ ., data = iris, max_iter = 1L),
+        "`K` must be supplied"
+    )
+})
+
+test_that("run_aa formula input handles missing data like model.frame", {
+    df <- iris[1:25, ]
+    df[1L, "Sepal.Length"] <- NA_real_
+    fit <- suppressWarnings(run_aa(
+        Species ~ .,
+        data = df,
+        K = 3L,
+        max_iter = 1L,
+        sd_threshold = 0
+    ))
+
+    expect_s3_class(fit, "archetypes")
+    expect_matrix_dim(fit[["data"]], nrow(df) - 1L, 4L)
+    expect_matrix_dim(fit[["compositions"]], nrow(df) - 1L, 3L)
+    expect_error(
+        run_aa(Species ~ ., data = df, K = 3L, na.action = stats::na.fail),
+        "missing values"
+    )
+})
+
+test_that("run_aa formula input ignores the response", {
+    df <- iris[1:25, ]
+    df[1L, "Species"] <- NA
+    fit <- suppressWarnings(run_aa(
+        Species ~ .,
+        data = df,
+        K = 3L,
+        max_iter = 1L,
+        sd_threshold = 0
+    ))
+
+    expect_s3_class(fit, "archetypes")
+    expect_matrix_dim(fit[["data"]], nrow(df), 4L)
+    expect_equal(colnames(fit[["data"]]), names(iris)[1:4])
 })
 
 test_that("run_aa handles fda fd objects through basis coefficients", {
@@ -199,23 +277,37 @@ test_that("PGD stalls instead of converging when no updates are accepted", {
     expect_equal(diff(fit[["loss"]][["loss"]]), c(0, 0))
 })
 
+.aa_test_euclidean_preprocess <- function(x,
+                                          sd_threshold = 0,
+                                          weights = NULL,
+                                          verbose = FALSE,
+                                          scale = TRUE,
+                                          missing = FALSE,
+                                          bigM = 0) {
+    .aa_euclidean_preprocess(
+        list(
+            x = x,
+            sd_threshold = sd_threshold,
+            weights = weights,
+            verbose = verbose,
+            scale = scale,
+            missing = missing
+        ),
+        bigM = bigM
+    )
+}
+
 test_that("scale preprocessing supports TRUE, FALSE, vector, and matrix transforms", {
     X <- toy_matrix()
-    pre_default <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE)
-    pre_raw <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE, scale = FALSE)
+    pre_default <- .aa_test_euclidean_preprocess(X)
+    pre_raw <- .aa_test_euclidean_preprocess(X, scale = FALSE)
     sd <- apply(X, 2L, stats::sd)
-    pre_vector <- .aa_preprocess(
+    pre_vector <- .aa_test_euclidean_preprocess(
         X,
-        sd_threshold = 0,
-        weights = NULL,
-        verbose = FALSE,
         scale = sd
     )
-    pre_matrix <- .aa_preprocess(
+    pre_matrix <- .aa_test_euclidean_preprocess(
         X,
-        sd_threshold = 0,
-        weights = NULL,
-        verbose = FALSE,
         scale = diag(1 / sd^2)
     )
 
@@ -238,12 +330,9 @@ test_that("scale preprocessing supports TRUE, FALSE, vector, and matrix transfor
 test_that("automatic bigM preserves old default on z-scored data and scales raw data", {
     X <- toy_matrix()
 
-    pre_default <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE, bigM = NULL)
-    pre_raw <- .aa_preprocess(
+    pre_default <- .aa_test_euclidean_preprocess(X, bigM = NULL)
+    pre_raw <- .aa_test_euclidean_preprocess(
         10 * X,
-        sd_threshold = 0,
-        weights = NULL,
-        verbose = FALSE,
         bigM = NULL,
         scale = FALSE
     )
@@ -345,7 +434,7 @@ test_that("sparse preprocessing preserves sparse structure without centering", {
     )
     X_sparse <- Matrix::Matrix(X_dense, sparse = TRUE)
 
-    pre <- .aa_preprocess(X_sparse, sd_threshold = 0, weights = NULL, verbose = FALSE)
+    pre <- .aa_test_euclidean_preprocess(X_sparse)
 
     expect_s4_class(pre[["X"]], "sparseMatrix")
     expect_null(attr(pre[["X"]], "scaled:center"))
@@ -359,7 +448,7 @@ test_that("sparse preprocessing keeps NNLS bigM column sparse", {
         sparse = TRUE
     )
 
-    pre <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE, bigM = 200)
+    pre <- .aa_test_euclidean_preprocess(X, bigM = 200)
 
     expect_s4_class(pre[["X"]], "sparseMatrix")
     expect_equal(attr(pre[["X"]], "bigM"), 1L)
@@ -523,7 +612,7 @@ test_that("missing preprocessing scales observed entries", {
         byrow = TRUE,
         dimnames = list(NULL, c("a", "b"))
     )
-    pre <- .aa_preprocess(X, sd_threshold = 0, weights = NULL, verbose = FALSE, missing = TRUE)
+    pre <- .aa_test_euclidean_preprocess(X, missing = TRUE)
     M <- pre[["M"]]
 
     expect_equal(unname(colMeans(pre[["X"]][M[, 1L], 1L, drop = FALSE])), 0, tolerance = 1e-12)
@@ -535,11 +624,8 @@ test_that("missing preprocessing scales observed entries", {
         matrix(c(1, 0, 2, 10, 0, 20, 4, 30), nrow = 4L, byrow = TRUE),
         sparse = TRUE
     )
-    pre_sparse <- .aa_preprocess(
+    pre_sparse <- .aa_test_euclidean_preprocess(
         X_sparse,
-        sd_threshold = 0,
-        weights = NULL,
-        verbose = FALSE,
         missing = TRUE
     )
     entries <- Matrix::summary(pre_sparse[["M"]])
@@ -554,11 +640,8 @@ test_that("missing preprocessing sparsifies very sparse dense masks", {
     X <- matrix(NA_real_, nrow = 10L, ncol = 10L)
     X[cbind(seq_len(9L), seq_len(9L))] <- seq_len(9L)
 
-    pre <- .aa_preprocess(
+    pre <- .aa_test_euclidean_preprocess(
         X,
-        sd_threshold = 0,
-        weights = NULL,
-        verbose = FALSE,
         scale = FALSE,
         missing = TRUE
     )
@@ -697,4 +780,76 @@ test_that("PGD coordinate matrix initialization honors delta-relaxed hull", {
     expect_equal(unname(strict[["A"]][1, ]), c(1, 0), tolerance = 1e-8)
     expect_equal(unname(relaxed[["A"]][1, ]), c(1.2, 0), tolerance = 1e-8)
     expect_true(rowSums(relaxed[["B"]])[1] <= 1.25 + 1e-8)
+})
+
+# nrep -----------------------------------------------------------------
+
+test_that("run_aa with nrep = 1 returns same structure as default", {
+    set.seed(42)
+    X <- toy_matrix()
+    fit_default <- run_aa(X, K = 3L, max_iter = 10L)
+    set.seed(42)
+    fit_nrep1 <- run_aa(X, K = 3L, max_iter = 10L, nrep = 1L)
+
+    expect_s3_class(fit_nrep1, "archetypes")
+    expect_equal(fit_default[["coordinates"]], fit_nrep1[["coordinates"]])
+})
+
+test_that("run_aa with nrep > 1 returns a single archetypes object", {
+    set.seed(1)
+    X <- toy_matrix()
+    fit <- run_aa(X, K = 3L, max_iter = 10L, nrep = 5L)
+
+    expect_s3_class(fit, "archetypes")
+    expect_false(is.list(fit) && !inherits(fit, "archetypes"))
+    expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
+    expect_matrix_dim(fit[["compositions"]], 250L, 3L)
+})
+
+test_that("run_aa with nrep > 1 returns a fit no worse than each single run", {
+    set.seed(7)
+    X <- toy_matrix()
+    final_loss <- function(fit) tail(fit[["loss"]][["loss"]], 1L)
+
+    fit_nrep <- run_aa(X, K = 3L, max_iter = 15L, nrep = 10L)
+    nrep_loss <- final_loss(fit_nrep)
+
+    single_losses <- replicate(10L, {
+        final_loss(run_aa(X, K = 3L, max_iter = 15L))
+    })
+    expect_lte(nrep_loss, max(single_losses) + .Machine$double.eps)
+})
+
+test_that("run_aa nrep validation rejects invalid values", {
+    X <- toy_matrix()
+    expect_error(run_aa(X, K = 3L, nrep = 0L),  "`nrep`")
+    expect_error(run_aa(X, K = 3L, nrep = -1L), "`nrep`")
+    expect_error(run_aa(X, K = 3L, nrep = 1.5), "`nrep`")
+})
+
+test_that("run_aa nrep works with method = 'nnls'", {
+    set.seed(3)
+    X <- toy_matrix()
+    fit <- run_aa(X, K = 3L, method = "nnls", max_iter = 10L, nrep = 3L)
+
+    expect_s3_class(fit, "archetypes")
+    expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
+})
+
+test_that("run_aa nrep works with method = 'kernel'", {
+    set.seed(5)
+    X <- toy_matrix()
+    G <- tcrossprod(X)
+    fit <- run_aa(G, K = 3L, method = "kernel", kernel = "precomputed",
+                  data = X, max_iter = 10L, nrep = 3L)
+
+    expect_s3_class(fit, "kernel_archetypes")
+})
+
+test_that("run_aa nrep works with method = 'paa'", {
+    set.seed(9)
+    X <- toy_matrix()
+    fit <- run_aa(X, K = 3L, method = "paa", max_iter = 10L, nrep = 3L)
+
+    expect_s3_class(fit, "archetypes")
 })

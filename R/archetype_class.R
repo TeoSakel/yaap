@@ -965,8 +965,9 @@ AIC.directional_archetypes <- function(object, ...) {
 #' @param compositions Numeric matrix (`N x K`) giving each sample as a weighted
 #'   combination of kernel archetypes.
 #' @param gram Training Gram matrix.
-#' @param coordinates_proxy Optional input-space proxy coordinates
-#'   `coefficients %*% data`.
+#' @param coordinates Optional input-space coordinates `coefficients %*% data`.
+#'   For nonlinear kernels these are visualization coordinates, not exact
+#'   Hilbert-space archetypes.
 #' @param slack Non-negative coefficient row-sum relaxation.
 #' @param loss Data frame containing per-iteration metrics.
 #' @param converged Logical convergence flag.
@@ -980,7 +981,7 @@ AIC.directional_archetypes <- function(object, ...) {
 kernel_archetypes <- function(coefficients,
                               compositions,
                               gram,
-                              coordinates_proxy = NULL,
+                              coordinates = NULL,
                               slack = 0,
                               loss = NULL,
                               converged = TRUE,
@@ -1009,9 +1010,9 @@ kernel_archetypes <- function(coefficients,
     }
     if (!isTRUE(all.equal(rowSums(compositions), rep(1, N), check.attributes = FALSE)))
         stop("Compositions must be row-stochastic (each row sums to 1)")
-    if (!is.null(coordinates_proxy)) {
-        stopifnot("coordinates_proxy must have one row per archetype" =
-                      nrow(coordinates_proxy) == K)
+    if (!is.null(coordinates)) {
+        stopifnot("coordinates must have one row per archetype" =
+                      nrow(coordinates) == K)
     }
 
     structure(
@@ -1019,7 +1020,7 @@ kernel_archetypes <- function(coefficients,
             coefficients = coefficients,
             compositions = compositions,
             gram = gram,
-            coordinates_proxy = coordinates_proxy,
+            coordinates = coordinates,
             slack = slack,
             init = init,
             loss = loss,
@@ -1057,8 +1058,8 @@ anames.kernel_archetypes <- function(x)
 
     rownames(x[["coefficients"]]) <- value
     colnames(x[["compositions"]]) <- value
-    if (!is.null(x[["coordinates_proxy"]]))
-        rownames(x[["coordinates_proxy"]]) <- value
+    if (!is.null(x[["coordinates"]]))
+        rownames(x[["coordinates"]]) <- value
     if (!is.null(x[["init"]]))
         rownames(x[["init"]]) <- value
     x
@@ -1068,7 +1069,7 @@ anames.kernel_archetypes <- function(x)
 fitted.kernel_archetypes <- function(object, ...) {
     stop(
         "`fitted()` is not defined for nonlinear kernel archetypes; use ",
-        "`residuals()` for Hilbert-space residual norms or `coordinates_proxy` ",
+        "`residuals()` for Hilbert-space residual norms or `coordinates` ",
         "for input-space visualization.",
         call. = FALSE
     )
@@ -1093,8 +1094,8 @@ print.kernel_archetypes <- function(x, ...) {
     cat("Kernel Archetypes Summary:\n")
     cat("Number of Archetypes:", nrow(x[["coefficients"]]), "\n")
     cat("Number of Samples:", ncol(x[["coefficients"]]), "\n")
-    if (!is.null(x[["coordinates_proxy"]]))
-        cat("Input-space proxy coordinates: available\n")
+    if (!is.null(x[["coordinates"]]))
+        cat("Input-space coordinates: available\n")
     loss <- x[["loss"]]
     conv_info <- sprintf(
         "%s after %d iterations.\n",
@@ -1158,11 +1159,11 @@ plot.kernel_archetypes <- function(x,
     }
 
     X <- if (is.null(data)) x[["data"]] else data
-    A <- x[["coordinates_proxy"]]
+    A <- x[["coordinates"]]
     if (is.null(X) || is.null(A)) {
         stop(
             "Coordinate plots for kernel archetypes require original `data` ",
-            "and available `coordinates_proxy`.",
+            "and available `coordinates`.",
             call. = FALSE
         )
     }

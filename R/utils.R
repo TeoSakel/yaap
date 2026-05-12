@@ -157,22 +157,25 @@ effic <- function(X, Y) {
 
 # Archetypes Fitting Subroutines -----------------------------------------------------
 
-.aa_check_inputs <- function(data, tol, tol_r2, K, max_kappa, eps, robust, tukey_c,
-                             scale = TRUE, missing = FALSE) {
-    if (!missing)
-        stopifnot("data contains missing values" = !any(is.na(data)))
-    stopifnot("tol must be positive" = tol > 0)
-    stopifnot("tol_r2 must be between (0, 1)" = tol_r2 >= 0 && tol_r2 <= 1)
-    stopifnot("K must be an integer" = K == as.integer(K))
-    stopifnot("K must be an integer greater or equal to 1" = K >= 1L)
-    stopifnot("K cannot be greater than number of samples" = K <= nrow(data))
-    stopifnot("max_kappa must be >=1" = max_kappa >= 1)
-    stopifnot("eps must be non-negative" = eps >= 0)
+.aa_check_fit_controls <- function(ctx, n = nrow(ctx[["x"]])) {
+    stopifnot("max_iter must be a non-negative integer" =
+                  ctx[["max_iter"]] == as.integer(ctx[["max_iter"]]) &&
+                      ctx[["max_iter"]] >= 0L)
+    stopifnot("tol must be positive" = ctx[["tol"]] > 0)
+    stopifnot("tol_r2 must be between (0, 1)" =
+                  ctx[["tol_r2"]] >= 0 && ctx[["tol_r2"]] <= 1)
+    stopifnot("K must be an integer" = ctx[["K"]] == as.integer(ctx[["K"]]))
+    stopifnot("K must be an integer greater or equal to 1" = ctx[["K"]] >= 1L)
+    stopifnot("K cannot be greater than number of samples" = ctx[["K"]] <= n)
+    stopifnot("max_kappa must be >=1" = ctx[["max_kappa"]] >= 1)
+    stopifnot("eps must be non-negative" = ctx[["eps"]] >= 0)
     stopifnot("robust must be TRUE or FALSE" =
-                  is.logical(robust) && length(robust) == 1L && !is.na(robust))
+                  is.logical(ctx[["robust"]]) && length(ctx[["robust"]]) == 1L &&
+                      !is.na(ctx[["robust"]]))
     stopifnot("tukey_c must be positive" =
-                  length(tukey_c) == 1L && is.finite(tukey_c) && tukey_c > 0)
-    .aa_check_scale(scale, ncol(data))
+                  length(ctx[["tukey_c"]]) == 1L && is.finite(ctx[["tukey_c"]]) &&
+                      ctx[["tukey_c"]] > 0)
+    invisible(TRUE)
 }
 
 .aa_new_loss <- function(L) {
@@ -323,126 +326,6 @@ effic <- function(X, Y) {
     X
 }
 
-
-# Common subroutine to preprocess input data matrix:
-# - optionally z-score or apply a matrix metric embedding
-# - filter out low-variance features
-# - apply user-provided sample weights (if any)
-# - add bigM intercept term (if bigM > 0) to "force" the simplex constraint during nnls fit
-# Returns a list with:
-# - X: preprocessed data matrix with attributes to undo scaling and filtering
-# - undo_scale: function to undo scaling and filtering of archetype coordinates
-.aa_preprocess <- function(data, sd_threshold, weights, verbose, bigM = 0,
-                           scale = TRUE, missing = FALSE) {
-    if (verbose) message("Preprocessing data...")
-
-    if (missing)
-        return(.aa_preprocess_missing(data, sd_threshold, verbose, scale = scale))
-
-    if (inherits(data, "sparseMatrix"))
-        data <- Matrix::drop0(data)
-
-    original_center <- colMeans(data)
-    names(original_center) <- colnames(data)
-    scale_mode <- if (identical(scale, FALSE)) {
-        "none"
-    } else if (isTRUE(scale) || (is.numeric(scale) && is.null(dim(scale)))) {
-        "vector"
-    } else {
-        "matrix"
-    }
-
-    X <- if (inherits(data, "sparseMatrix")) {
-        data
-    } else {
-        as.matrix(data)
-    }
-    if (isTRUE(scale)) {
-        n <- nrow(data)
-        x_mean <- colMeans(data)
-        x2 <- colSums(data * data)
-        x_var <- pmax((x2 - n * x_mean * x_mean) / max(n - 1L, 1L), 0)
-        scale <- sqrt(x_var)
-        names(scale) <- colnames(data)
-
-        if (!inherits(data, "sparseMatrix")) {
-            X <- sweep(X, 2L, x_mean, "-")
-            attr(X, "scaled:center") <- x_mean
-        }
-        attr(X, "scaled:scale") <- scale
-    }
-
-    # Filter out low-variance features
-    X <- .filter_low_variance(X, sd_threshold)
-    mask <- attr(X, "mask")
-
-    if (identical(scale_mode, "matrix")) {
-        if (!is.null(mask))
-            scale <- scale[mask, mask, drop = FALSE]
-        scale_factor <- t(chol(as.matrix(scale)))
-        X <- as.matrix(X) %*% scale_factor
-        retained_names <- names(original_center)
-        if (!is.null(mask))
-            retained_names <- retained_names[mask]
-        colnames(X) <- retained_names
-        attr(X, "mask") <- mask
-        attr(X, "scale:factor") <- scale_factor
-    } else if (identical(scale_mode, "vector")) {
-        if (!is.null(mask))
-            scale <- scale[mask]
-        scale_factor <- ifelse(scale > 0, scale, 1)
-        x_attrs <- attributes(X)
-        X <- if (inherits(X, "sparseMatrix")) {
-            Matrix::colScale(X, 1 / scale_factor)
-        } else {
-            sweep(X, 2L, scale_factor, "/")
-        }
-        attributes(X) <- utils::modifyList(attributes(X), x_attrs)
-        attr(X, "scale:factor") <- scale_factor
-    }
-    attr(X, "scale:mode") <- scale_mode
-    attr(X, "restore:center") <- original_center
-    N <- nrow(X) # number of samples
-    if (is.null(bigM))
-        bigM <- .aa_auto_bigM(X)
-
-    # Weight samples by user-provided "importance" weights
-    if (!is.null(weights)) {
-        # Check weights sanity
-        if (length(weights) != N) {
-            fmt <- "Number of weights (%d) must equal number of rows in data (%d)"
-            stop(sprintf(fmt, length(weights), N))
-        }
-        stopifnot("Weights contain NA values" = !any(is.na(weights)))
-        stopifnot("Weights must be non-negative" = all(weights >= 0))
-        # Rescale and apply weights
-        weights <- weights / mean(weights) # normalize weights to mean 1
-        x_attrs <- attributes(X)
-        X <- X * weights
-        attributes(X) <- utils::modifyList(attributes(X), x_attrs)
-        attr(X, "weights") <- weights # store weights in X attributes
-    }
-
-    if (bigM > 0) {
-        # add bigM intercept term to "force" the simplex constraint during nnls fit
-        x_attrs <- attributes(X)
-        bigM_col <- matrix(bigM, nrow = N, ncol = 1L, dimnames = list(rownames(X), "bigM"))
-        if (inherits(X, "sparseMatrix"))
-            bigM_col <- as(bigM_col, "sparseMatrix")
-        X <- cbind(bigM_col, X)
-        # Restore attributes
-        attr(X, "scaled:center") <- x_attrs[["scaled:center"]]
-        attr(X, "scaled:scale")  <- x_attrs[["scaled:scale"]]
-        attr(X, "scale:mode") <- x_attrs[["scale:mode"]]
-        attr(X, "scale:factor") <- x_attrs[["scale:factor"]]
-        attr(X, "restore:center") <- x_attrs[["restore:center"]]
-        attr(X, "mask") <- x_attrs[["mask"]]
-        attr(X, "bigM")  <- 1L
-        attr(X, "bigM.value") <- bigM
-    }
-
-    list(X = X, undo_scale = .aa_undo_scale)
-}
 
 .aa_preprocess_missing <- function(data, sd_threshold, verbose, scale = TRUE) {
     if (is.matrix(scale) || inherits(scale, "Matrix"))
@@ -730,42 +613,6 @@ effic <- function(X, Y) {
     )
 }
 
-# Common subroutine to initialize variables:
-# archetype coordinates (A), coefficients (B), compositions (S) and
-# loss metrics: loss, r2, condition numbers of S and A (k_S, k_A)
-.aa_init_vars <- function(X, K, init, init_args, eps, max_iter, verbose, delta = 0) {
-    if (verbose) message("Initializing archetypes...")
-    L <- max_iter + 1L
-
-    # `init` is fixed coordinates of archetypes: call .aa_matrix_init
-    if (is.matrix(init) || inherits(init, "data.frame")) {
-        # use provided coordinate matrix as initialization; ignore `init_args`
-        init <- .aa_preprocess_init(init, X)
-        if (length(init_args) > 0L) {
-            warning("`init_args` are ignored when `init` is a matrix", call. = FALSE)
-            init_args <- list()
-        }
-        init_vars <- .aa_matrix_init(X, K, init, eps, L, delta)
-        return(init_vars)
-    }
-
-    # init_vars must be generated from data
-    if (is.character(init)) {
-        # use `aa_init` function with method specified by `init` string
-        stopifnot("`init` must be a single string" = length(init) == 1L)
-        init_args <- c(list(method = init), init_args)
-        init <- aa_init
-    } else if (!is.function(init)) {
-        stop("`init` must be a function, a single string, or archetypes coordinate matrix")
-    }
-    init_vars <- do.call(init, args = c(list(X = X, K = K), init_args))
-    rownames(init_vars[["A"]]) <- .aa_init_names(init_vars[["A"]])
-    rownames(init_vars[["B"]]) <- rownames(init_vars[["A"]])
-    init_vars[["S"]] <- .init_S(X, init_vars[["A"]], eps = eps)
-    init_vars[["loss"]] <- .aa_new_loss(L)
-    init_vars
-}
-
 .aa_trace_row_rss <- function(row_xss, S, XAt, AAt) {
     pmax(row_xss - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
 }
@@ -817,56 +664,4 @@ effic <- function(X, Y) {
         warning(sprintf(fmt, k_S, k_A), call. = FALSE)
     }
     converged
-}
-
-# Format output of archetypes fitting into "archetypes" S3 object
-.aa_prepare_output <- function(X, A, B, S,
-                               i, loss, converged,
-                               undo_scale, max_iter, verbose, delta = 0,
-                               data = NULL, call = NULL, A0 = NULL) {
-
-    # Format loss dataframe: keep only rows up to iteration "i" and reset row names
-    j <- i + 1L
-    loss <- as.data.frame(loss)[1:j, , drop = FALSE]
-    rownames(loss) <- NULL
-
-    # Undo scaling of archetype coordinates to return them in the original data space
-    archetype_names <- if (!is.null(A0)) rownames(A0) else rownames(A)
-    A <- undo_scale(A, X)
-    if (!is.null(A0))
-        A0 <- undo_scale(A0, X)
-
-    # set row and column names for output matrices
-    if (is.null(archetype_names))
-        archetype_names <- paste0("A", seq_len(nrow(A)))
-    rownames(A) <- rownames(B) <- colnames(S) <- archetype_names
-    if (!is.null(A0))
-        rownames(A0) <- archetype_names
-    colnames(B) <- rownames(S) <- rownames(X)
-
-    # Warn or message about convergence
-    if (!converged) {
-        fmt <- "Algorithm did not converge after %d iterations"
-        warning(sprintf(fmt, max_iter), call. = FALSE)
-    }
-
-    if (verbose) {
-        fmt <- ifelse(converged,
-                      "Converged after %d iterations:",
-                      "Final iteration %d:")
-        fmt <- paste(fmt, "loss = %.4g, R2 = %.3f")
-        message(sprintf(fmt, i, loss[j, "loss"], loss[j, "r2"]))
-    }
-
-    archetypes(
-        call         = call,
-        data         = data,
-        init         = A0,
-        coordinates  = A,
-        coefficients = B,
-        compositions = S,
-        slack        = delta,
-        loss         = loss,
-        converged    = converged
-    )
 }

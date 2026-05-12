@@ -4,7 +4,7 @@
 #' optimizer shared across likelihood families. Archetypes are convex
 #' combinations of family-specific parameter profiles derived from the data.
 #'
-#' @param data Data matrix with rows as samples.
+#' @param x Data matrix with rows as samples.
 #' @param K Number of archetypes.
 #' @param family Observation family. One of `"gaussian"`, `"bernoulli"`,
 #'   `"poisson"`, or `"multinomial"`.
@@ -29,7 +29,7 @@
 #' arXiv:1312.7604.
 #'
 #' @export
-archetypes_paa <- function(data,
+archetypes_paa <- function(x,
                            K,
                            family = c("gaussian", "bernoulli", "poisson", "multinomial"),
                            init = "furthest_sum",
@@ -44,135 +44,101 @@ archetypes_paa <- function(data,
                            max_iter_optimizer = 10L,
                            step_shrinkage = 0.5,
                            max_no_update = 5L) {
-    call <- match.call()
     family <- match.arg(family)
-    .aa_check_paa_inputs(
-        data = data,
+    .aa_fit_engine(
+        call = match.call(),
+        x = x,
         K = K,
+        method = "paa",
+        family = family,
+        init = init,
+        init_args = init_args,
+        weights = NULL,
+        scale = TRUE,
+        robust = FALSE,
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
         max_kappa = max_kappa,
         eps = eps,
+        verbose = verbose,
+        missing = FALSE,
         step_size = step_size,
         max_iter_optimizer = max_iter_optimizer,
         step_shrinkage = step_shrinkage,
         max_no_update = max_no_update
     )
-
-    spec <- .aa_paa_family(family, eps = eps)
-    prep <- spec[["prepare"]](data)
-    X <- prep[["X"]]
-    P <- prep[["P"]]
-
-    init_vars <- .aa_init_vars(
-        X = P,
-        K = K,
-        init = init,
-        init_args = init_args,
-        eps = eps,
-        max_iter = max_iter,
-        verbose = verbose,
-        delta = 0
-    )
-
-    fit <- .aa_fit_paa_pgd(
-        X = X,
-        P = P,
-        spec = spec,
-        max_iter = max_iter,
-        tol = tol,
-        tol_r2 = tol_r2,
-        max_kappa = max_kappa,
-        eps = eps,
-        verbose = verbose,
-        A0 = init_vars[["A"]],
-        B = init_vars[["B"]],
-        S = init_vars[["S"]],
-        loss = init_vars[["loss"]],
-        step_size = step_size,
-        max_iter_optimizer = max_iter_optimizer,
-        step_shrinkage = step_shrinkage,
-        max_no_update = as.integer(max_no_update)
-    )
-
-    archetype_names <- rownames(fit[["B"]])
-    if (is.null(archetype_names))
-        archetype_names <- paste0("A", seq_len(K))
-    rownames(fit[["A"]]) <- rownames(fit[["A0"]]) <- rownames(fit[["B"]]) <-
-        colnames(fit[["S"]]) <- archetype_names
-    colnames(fit[["B"]]) <- rownames(fit[["S"]]) <- rownames(P)
-    colnames(fit[["A"]]) <- colnames(fit[["A0"]]) <- colnames(P)
-
-    j <- fit[["i"]] + 1L
-    loss <- as.data.frame(fit[["loss"]])[seq_len(j), , drop = FALSE]
-    rownames(loss) <- NULL
-
-    if (!fit[["converged"]])
-        warning(sprintf("Algorithm did not converge after %d iterations", max_iter), call. = FALSE)
-    if (verbose) {
-        fmt <- ifelse(fit[["converged"]], "Converged after %d iterations:",
-                      "Final iteration %d:")
-        fmt <- paste(fmt, "loss = %.4g, R2 = %.3f")
-        message(sprintf(fmt, fit[["i"]], loss[j, "loss"], loss[j, "r2"]))
-    }
-
-    archetypes(
-        call = call,
-        data = as.matrix(data),
-        init = fit[["A0"]],
-        coordinates = fit[["A"]],
-        coefficients = fit[["B"]],
-        compositions = fit[["S"]],
-        loss = loss,
-        converged = fit[["converged"]],
-        family = family
-    )
 }
 
-.aa_check_paa_inputs <- function(data,
-                                 K,
-                                 max_iter,
-                                 tol,
-                                 tol_r2,
-                                 max_kappa,
-                                 eps,
-                                 step_size,
-                                 max_iter_optimizer,
-                                 step_shrinkage,
-                                 max_no_update) {
-    stopifnot("data must be a matrix-like object" =
-                  is.matrix(data) || inherits(data, "data.frame") ||
-                  inherits(data, "sparseMatrix"))
-    stopifnot("K must be an integer" = K == as.integer(K))
-    stopifnot("K must be an integer greater or equal to 1" = K >= 1L)
-    stopifnot("K cannot be greater than number of samples" = K <= nrow(data))
-    stopifnot("max_iter must be a non-negative integer" =
-                  max_iter == as.integer(max_iter) && max_iter >= 0L)
-    stopifnot("tol must be positive" = tol > 0)
-    stopifnot("tol_r2 must be between (0, 1)" = tol_r2 >= 0 && tol_r2 <= 1)
-    stopifnot("max_kappa must be >=1" = max_kappa >= 1)
-    stopifnot("eps must be positive" = eps > 0)
-    stopifnot("step_size must be positive" = step_size > 0)
-    stopifnot("max_iter_optimizer must be a positive integer" =
-                  max_iter_optimizer == as.integer(max_iter_optimizer) &&
-                  max_iter_optimizer >= 1L)
-    stopifnot("step_shrinkage must be between (0, 1)" =
-                  step_shrinkage > 0 && step_shrinkage < 1)
-    stopifnot("max_no_update must be a positive integer" =
-                  max_no_update == as.integer(max_no_update) && max_no_update >= 1L)
-    invisible(TRUE)
+.aa_paa_block <- function(ctx,
+                          step_size = 1.0,
+                          max_iter_optimizer = 10L,
+                          step_shrinkage = 0.5,
+                          max_no_update = 5L) {
+    family <- match.arg(
+        ctx[["family"]],
+        c("gaussian", "bernoulli", "poisson", "multinomial")
+    )
+    list(
+        check = function(ctx) {
+            if (ctx[["missing"]])
+                stop("`missing = TRUE` is not supported for `method = 'paa'`.", call. = FALSE)
+            if (ctx[["robust"]])
+                stop("`robust = TRUE` is not supported for `method = 'paa'`.", call. = FALSE)
+            if (!is.null(ctx[["weights"]]))
+                stop("`weights` are not supported for `method = 'paa'`.", call. = FALSE)
+            .aa_check_fit_controls(ctx)
+            stopifnot("eps must be positive" = ctx[["eps"]] > 0)
+            .aa_check_projected_gradient_controls(
+                step_size = step_size,
+                max_iter_optimizer = max_iter_optimizer,
+                step_shrinkage = step_shrinkage,
+                max_no_update = max_no_update
+            )
+        },
+        preprocess = function(ctx) {
+            spec <- .aa_paa_family(family, eps = ctx[["eps"]])
+            prep <- spec[["prepare"]](ctx[["x"]])
+            prep[["data_X"]] <- prep[["X"]]
+            prep[["X"]] <- prep[["P"]]
+            prep[["spec"]] <- spec
+            prep[["family"]] <- family
+            prep[["undo_scale"]] <- function(A, X) A
+            prep
+        },
+        edge_case = function(ctx, prep) NULL,
+        init = function(ctx, prep) .aa_euclidean_init(ctx, prep, delta = 0),
+        fit = function(ctx, prep, init_vars) {
+            .aa_fit_paa_pgd(
+                X = prep[["data_X"]],
+                P = prep[["P"]],
+                spec = prep[["spec"]],
+                max_iter = ctx[["max_iter"]],
+                tol = ctx[["tol"]],
+                tol_r2 = ctx[["tol_r2"]],
+                max_kappa = ctx[["max_kappa"]],
+                eps = ctx[["eps"]],
+                verbose = ctx[["verbose"]],
+                A0 = init_vars[["A"]],
+                B = init_vars[["B"]],
+                S = init_vars[["S"]],
+                loss = init_vars[["loss"]],
+                step_size = step_size,
+                max_iter_optimizer = max_iter_optimizer,
+                step_shrinkage = step_shrinkage,
+                max_no_update = as.integer(max_no_update)
+            )
+        },
+        final_loss = .aa_final_loss,
+        prepare_output = .aa_euclidean_output
+    )
 }
 
 .aa_paa_family <- function(family, eps) {
     clip_prob <- function(Y) pmin(pmax(Y, eps), 1 - eps)
     clip_pos <- function(Y) pmax(Y, eps)
     as_numeric_matrix <- function(data) {
-        X <- as.matrix(data)
-        stopifnot("data must be numeric" = is.numeric(X))
-        stopifnot("data contains missing values" = !any(is.na(X)))
-        stopifnot("data contains non-finite values" = all(is.finite(X)))
-        X
+        as.matrix(data)
     }
     normalize_rows <- function(X) {
         X <- pmax(X, eps)

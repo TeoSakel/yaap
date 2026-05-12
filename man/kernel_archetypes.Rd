@@ -8,7 +8,7 @@ kernel_archetypes(
   coefficients,
   compositions,
   gram,
-  coordinates_proxy = NULL,
+  coordinates = NULL,
   slack = 0,
   loss = NULL,
   converged = TRUE,
@@ -28,8 +28,9 @@ combination of kernel archetypes.}
 
 \item{gram}{Training Gram matrix.}
 
-\item{coordinates_proxy}{Optional input-space proxy coordinates
-\code{coefficients \%*\% data}.}
+\item{coordinates}{Optional input-space coordinates \code{coefficients \%*\% data}.
+For nonlinear kernels these are visualization coordinates, not exact
+Hilbert-space archetypes.}
 
 \item{slack}{Non-negative coefficient row-sum relaxation.}
 

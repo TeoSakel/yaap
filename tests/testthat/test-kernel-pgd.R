@@ -28,9 +28,10 @@ test_that("kernel PGD matches Euclidean PGD for the linear kernel", {
         eps = 1e-8
     ))
     kernel <- suppressWarnings(archetypes_kernel_pgd(
-        data = X,
+        x = tcrossprod(X),
         K = 3L,
-        gram = tcrossprod(X),
+        kernel = "precomputed",
+        data = X,
         init = B0,
         max_iter = 3L,
         tol_r2 = 1,
@@ -44,13 +45,13 @@ test_that("kernel PGD matches Euclidean PGD for the linear kernel", {
     expect_equal(unname(kernel[["compositions"]]), unname(pgd[["compositions"]]), tolerance = 1e-7)
 })
 
-test_that("kernel PGD fits an RBF kernel and returns proxy coordinates", {
+test_that("kernel PGD fits an RBF kernel and returns coordinates", {
     set.seed(1)
     X <- toy_matrix()
     X <- X[seq_len(30L), , drop = FALSE]
 
     fit <- suppressWarnings(archetypes_kernel_pgd(
-        data = X,
+        x = X,
         K = 3L,
         kernel = "rbf",
         kernel_args = list(sigma = 0.5),
@@ -65,10 +66,10 @@ test_that("kernel PGD fits an RBF kernel and returns proxy coordinates", {
     expect_row_stochastic(fit[["compositions"]])
     expect_true(all(is.finite(fit[["loss"]][["loss"]])))
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
-    expect_equal(fit[["coordinates_proxy"]], fit[["coefficients"]] %*% X)
+    expect_equal(fit[["coordinates"]], fit[["coefficients"]] %*% X)
     expect_error(
         archetypes_kernel_pgd(
-            data = X,
+            x = X,
             K = 3L,
             kernel = "rbf",
             kernel_args = list(gamma = 5)
@@ -77,7 +78,7 @@ test_that("kernel PGD fits an RBF kernel and returns proxy coordinates", {
     )
     expect_error(
         archetypes_kernel_pgd(
-            data = X,
+            x = X,
             K = 3L,
             kernel = "laplace",
             kernel_args = list(gamma = 5)
@@ -91,7 +92,7 @@ test_that("kernel PGD passes refinement_steps to furthest_sum initialization", {
     X <- toy_matrix()[1:20, , drop = FALSE]
 
     fit <- suppressWarnings(archetypes_kernel_pgd(
-        data = X,
+        x = X,
         K = 4L,
         kernel = "linear",
         init = "furthest_sum",
@@ -120,32 +121,40 @@ test_that("run_aa dispatches to kernel PGD", {
     expect_s3_class(fit, "kernel_archetypes")
     expect_identical(as.character(fit[["call"]][[1L]]), "run_aa")
     expect_matrix_dim(fit[["coefficients"]], 3L, nrow(X))
-    expect_equal(fit[["coordinates_proxy"]], fit[["coefficients"]] %*% X)
+    expect_equal(fit[["coordinates"]], fit[["coefficients"]] %*% X)
 })
 
 test_that("kernel PGD validates Gram and kernel inputs", {
     X <- toy_matrix()[1:8, , drop = FALSE]
     G <- tcrossprod(X)
 
-    expect_error(archetypes_kernel_pgd(data = X, K = 2L), "Supply either")
     expect_error(
-        archetypes_kernel_pgd(data = X, K = 2L, gram = G, kernel = "linear"),
-        "exactly one"
+        archetypes_kernel_pgd(x = X, K = 2L, kernel = "linear", data = X),
+        "only used with `kernel = 'precomputed'`"
     )
-    expect_error(archetypes_kernel_pgd(data = X[-1L, ], K = 2L, gram = G), "rows")
-    expect_error(archetypes_kernel_pgd(K = 2L, gram = G[1:7, ]), "square")
+    expect_error(
+        archetypes_kernel_pgd(x = G, data = X[-1L, ], K = 2L, kernel = "precomputed"),
+        "rows"
+    )
+    expect_error(archetypes_kernel_pgd(x = G[1:7, ], K = 2L, kernel = "precomputed"), "square")
 
     G_bad <- G
     G_bad[1, 2] <- G_bad[1, 2] + 1
-    expect_error(archetypes_kernel_pgd(K = 2L, gram = G_bad), "symmetric")
+    expect_error(archetypes_kernel_pgd(x = G_bad, K = 2L, kernel = "precomputed"), "symmetric")
 
     G_bad <- G
     G_bad[1, 1] <- NA_real_
-    expect_error(archetypes_kernel_pgd(K = 2L, gram = G_bad), "missing or non-finite")
+    expect_error(archetypes_kernel_pgd(x = G_bad, K = 2L, kernel = "precomputed"),
+                 "missing or non-finite")
+
+    G_bad <- G
+    G_bad[1, 1] <- -10
+    expect_error(archetypes_kernel_pgd(x = G_bad, K = 2L, kernel = "precomputed"),
+                 "positive semidefinite")
 
     custom <- function(X) tcrossprod(X)
     fit <- suppressWarnings(archetypes_kernel_pgd(
-        data = X,
+        x = X,
         K = 2L,
         kernel = custom,
         init = c(1L, 2L),
@@ -157,7 +166,7 @@ test_that("kernel PGD validates Gram and kernel inputs", {
 test_that("kernel archetypes methods expose names, residuals, and proxy plots", {
     X <- toy_matrix()[1:12, , drop = FALSE]
     fit <- suppressWarnings(archetypes_kernel_pgd(
-        data = X,
+        x = X,
         K = 3L,
         kernel = "linear",
         init = c(1L, 2L, 3L),

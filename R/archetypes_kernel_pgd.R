@@ -1,17 +1,21 @@
 #' Kernel Archetypal Analysis using Projected Gradient Descent
 #'
-#' Fits kernel archetypal analysis from a precomputed Gram matrix or from a
-#' kernel computed on `data`. For nonlinear kernels, `coordinates_proxy` is the
-#' input-space convex combination `coefficients %*% data`, matching the plotting
-#' convention used by Mørup and Hansen for Figure 5. It is a visualization
-#' proxy, not the exact Hilbert-space archetype.
+#' Fits kernel archetypal analysis from a kernel computed on `x`, or from a
+#' precomputed Gram matrix when `kernel = "precomputed"`. When original data are
+#' available, `coordinates` are the input-space convex combination
+#' `coefficients %*% data`, matching the plotting convention used by Mørup and
+#' Hansen for Figure 5. They are visualization coordinates, not exact
+#' Hilbert-space archetypes.
 #'
-#' @param data Optional data matrix with rows as samples.
+#' @param x Data matrix with rows as samples, or an `N x N` Gram matrix when
+#'   `kernel = "precomputed"`.
 #' @param K Number of archetypes.
-#' @param gram Optional precomputed `N x N` Gram matrix.
-#' @param kernel Optional kernel specification. One of `"linear"`, `"rbf"`,
-#'   `"polynomial"`, or a function returning an `N x N` Gram matrix.
+#' @param kernel Kernel specification. One of `"linear"`, `"rbf"`,
+#'   `"laplace"`, `"polynomial"`, `"precomputed"`, or a function returning an
+#'   `N x N` Gram matrix.
 #' @param kernel_args List of arguments passed to the kernel.
+#' @param data Optional original data matrix attached to precomputed-kernel fits
+#'   so input-space `coordinates` can be returned.
 #' @param init Initialization method, row indices/names, or a `K x N`
 #'   coefficient matrix.
 #' @param init_args List of additional arguments for the initialization method.
@@ -34,11 +38,12 @@
 #' @returns An object of class `kernel_archetypes`.
 #'
 #' @export
-archetypes_kernel_pgd <- function(data = NULL,
+archetypes_kernel_pgd <- function(x,
                                   K,
-                                  gram = NULL,
-                                  kernel = NULL,
+                                  kernel = c("linear", "rbf", "laplace",
+                                             "polynomial", "precomputed"),
                                   kernel_args = list(),
+                                  data = NULL,
                                   init = "furthest_sum",
                                   init_args = list(),
                                   robust = FALSE,
@@ -55,23 +60,29 @@ archetypes_kernel_pgd <- function(data = NULL,
                                   max_iter_optimizer = 10L,
                                   step_shrinkage = 0.5,
                                   max_no_update = 5L) {
-    call <- match.call()
-    kernel_spec <- .aa_kernel_prepare(data, gram, kernel, kernel_args)
-    G <- kernel_spec[["gram"]]
-    N <- nrow(G)
-
-    .aa_check_kernel_inputs(
-        G = G,
-        data = data,
+    if (!is.function(kernel))
+        kernel <- match.arg(kernel)
+    .aa_fit_engine(
+        call = match.call(),
+        x = x,
         K = K,
+        method = "kernel",
+        init = init,
+        init_args = init_args,
+        weights = NULL,
+        scale = TRUE,
+        robust = robust,
+        tukey_c = tukey_c,
+        max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
         max_kappa = max_kappa,
         eps = eps,
-        robust = robust,
-        tukey_c = tukey_c
-    )
-    pgd_args <- .aa_pgd_method_args(
+        verbose = verbose,
+        missing = FALSE,
+        data = data,
+        kernel = kernel,
+        kernel_args = kernel_args,
         delta = delta,
         pseudo_pgd = pseudo_pgd,
         step_size = step_size,
@@ -79,60 +90,111 @@ archetypes_kernel_pgd <- function(data = NULL,
         step_shrinkage = step_shrinkage,
         max_no_update = max_no_update
     )
+}
 
-    weight_fun <- if (robust) {
-        function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
-    } else {
-        NULL
-    }
+.aa_kernel_block <- function(ctx,
+                             kernel = c("linear", "rbf", "laplace", "polynomial", "precomputed"),
+                             kernel_args = list(),
+                             delta = 0,
+                             pseudo_pgd = TRUE,
+                             step_size = 1.0,
+                             max_iter_optimizer = 10L,
+                             step_shrinkage = 0.5,
+                             max_no_update = 5L) {
+    if (!is.function(kernel))
+        kernel <- match.arg(kernel)
 
-    init_vars <- .aa_kernel_init_vars(
-        G = G,
-        K = K,
-        init = init,
-        init_args = init_args,
-        eps = eps,
-        max_iter = max_iter,
-        verbose = verbose,
-        delta = pgd_args[["delta"]]
-    )
-
-    fit <- .aa_fit_kernel_pgd(
-        G = G,
-        weight_fun = weight_fun,
-        max_iter = max_iter,
-        tol = tol,
-        tol_r2 = tol_r2,
-        max_kappa = max_kappa,
-        eps = eps,
-        verbose = verbose,
-        B = init_vars[["B"]],
-        S = init_vars[["S"]],
-        loss = init_vars[["loss"]],
-        delta = pgd_args[["delta"]],
-        pseudo_pgd = pgd_args[["pseudo_pgd"]],
-        step_size = pgd_args[["step_size"]],
-        max_iter_optimizer = pgd_args[["max_iter_optimizer"]],
-        step_shrinkage = pgd_args[["step_shrinkage"]],
-        max_no_update = pgd_args[["max_no_update"]]
-    )
-
-    .aa_prepare_kernel_output(
-        call = call,
-        data = data,
-        gram = G,
-        kernel = kernel_spec[["kernel"]],
-        kernel_args = kernel_spec[["kernel_args"]],
-        init = init_vars[["init"]],
-        B = fit[["B"]],
-        S = fit[["S"]],
-        delta = fit[["delta"]],
-        i = fit[["i"]],
-        loss = fit[["loss"]],
-        converged = fit[["converged"]],
-        max_iter = max_iter,
-        verbose = verbose,
-        row_names = rownames(G)
+    list(
+        check = function(ctx) {
+            if (ctx[["missing"]])
+                stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
+            if (!is.null(ctx[["weights"]]))
+                stop("`weights` are not supported for `method = 'kernel'`.", call. = FALSE)
+            if (!isTRUE(ctx[["scale"]]))
+                stop("`scale` is not supported for `method = 'kernel'`.", call. = FALSE)
+            if (!is.list(kernel_args))
+                stop("`kernel_args` must be a list.", call. = FALSE)
+            .aa_check_projected_gradient_controls(
+                step_size = step_size,
+                max_iter_optimizer = max_iter_optimizer,
+                step_shrinkage = step_shrinkage,
+                max_no_update = max_no_update
+            )
+            stopifnot("delta must be single non-negative number" =
+                          length(delta) == 1 && delta >= 0)
+            stopifnot("pseudo_pgd must be TRUE or FALSE" =
+                          is.logical(pseudo_pgd) && length(pseudo_pgd) == 1L &&
+                          !is.na(pseudo_pgd))
+            invisible(TRUE)
+        },
+        preprocess = function(ctx) {
+            prep <- .aa_kernel_prepare(
+                x = ctx[["x"]],
+                kernel = kernel,
+                kernel_args = kernel_args,
+                data = ctx[["data"]]
+            )
+            .aa_check_kernel_inputs(
+                ctx = ctx,
+                prep = prep,
+                check_psd = identical(prep[["kernel"]], "precomputed")
+            )
+            prep
+        },
+        edge_case = function(ctx, prep) NULL,
+        init = function(ctx, prep) {
+            .aa_kernel_init_vars(
+                G = prep[["gram"]],
+                K = ctx[["K"]],
+                init = ctx[["init"]],
+                init_args = ctx[["init_args"]],
+                eps = ctx[["eps"]],
+                max_iter = ctx[["max_iter"]],
+                verbose = ctx[["verbose"]],
+                delta = delta
+            )
+        },
+        fit = function(ctx, prep, init_vars) {
+            .aa_fit_kernel_pgd(
+                G = prep[["gram"]],
+                weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["tukey_c"]]),
+                max_iter = ctx[["max_iter"]],
+                tol = ctx[["tol"]],
+                tol_r2 = ctx[["tol_r2"]],
+                max_kappa = ctx[["max_kappa"]],
+                eps = ctx[["eps"]],
+                verbose = ctx[["verbose"]],
+                B = init_vars[["B"]],
+                S = init_vars[["S"]],
+                loss = init_vars[["loss"]],
+                delta = delta,
+                pseudo_pgd = pseudo_pgd,
+                step_size = step_size,
+                max_iter_optimizer = as.integer(max_iter_optimizer),
+                step_shrinkage = step_shrinkage,
+                max_no_update = as.integer(max_no_update)
+            )
+        },
+        final_loss = .aa_final_loss,
+        prepare_output = function(ctx, prep, fit) {
+            .aa_prepare_kernel_output(
+                call = ctx[["call"]],
+                data = prep[["data"]],
+                gram = prep[["gram"]],
+                kernel = prep[["kernel"]],
+                kernel_args = prep[["kernel_args"]],
+                init = fit[["init"]],
+                B = fit[["B"]],
+                S = fit[["S"]],
+                delta = fit[["delta"]],
+                i = fit[["i"]],
+                loss = fit[["loss"]],
+                converged = fit[["converged"]],
+                max_iter = ctx[["max_iter"]],
+                verbose = ctx[["verbose"]],
+                row_names = rownames(prep[["gram"]])
+            )
+        }
     )
 }
 
@@ -332,35 +394,35 @@ archetypes_kernel_pgd <- function(data = NULL,
     )
 }
 
-.aa_kernel_prepare <- function(data, gram, kernel, kernel_args) {
-    has_gram <- !is.null(gram)
-    has_kernel <- !is.null(kernel)
-    if (has_gram && has_kernel)
-        stop("Supply exactly one of `gram` or `kernel`, not both.", call. = FALSE)
-    if (!has_gram && !has_kernel)
-        stop("Supply either a precomputed `gram` matrix or a `kernel`.", call. = FALSE)
-    if (has_kernel && is.null(data))
-        stop("`data` is required when `kernel` is supplied.", call. = FALSE)
+.aa_kernel_prepare <- function(x, kernel, kernel_args, data = NULL) {
     if (!is.list(kernel_args))
         stop("`kernel_args` must be a list.", call. = FALSE)
 
-    if (has_gram) {
-        G <- as.matrix(gram)
-        return(list(gram = G, kernel = "precomputed", kernel_args = list()))
+    if (identical(kernel, "precomputed")) {
+        G <- as.matrix(x)
+        attached_data <- if (is.null(data)) NULL else as.matrix(data)
+        return(list(
+            gram = G,
+            data = attached_data,
+            kernel = "precomputed",
+            kernel_args = list()
+        ))
     }
 
-    X <- as.matrix(data)
+    if (!is.null(data))
+        stop("`data` is only used with `kernel = 'precomputed'`.", call. = FALSE)
+    X <- as.matrix(x)
     if (is.function(kernel)) {
         G <- do.call(kernel, c(list(X), kernel_args))
-        return(list(gram = as.matrix(G), kernel = kernel, kernel_args = kernel_args))
+        return(list(gram = as.matrix(G), data = X, kernel = kernel, kernel_args = kernel_args))
     }
 
     # TODO: extend to use kernlab or kerntools methods
     if (!is.character(kernel) || length(kernel) != 1L)
         stop("`kernel` must be a single string or a function.", call. = FALSE)
-    kernel <- match.arg(kernel, c("linear", "rbf", "laplace", "polynomial"))
+    kernel <- match.arg(kernel, c("linear", "rbf", "laplace", "polynomial", "precomputed"))
     G <- do.call(.aa_builtin_kernel, c(list(X = X, kernel = kernel), kernel_args))
-    list(gram = G, kernel = kernel, kernel_args = kernel_args)
+    list(gram = G, data = X, kernel = kernel, kernel_args = kernel_args)
 }
 
 .aa_builtin_kernel <- function(X,
@@ -441,24 +503,21 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
     (gamma * tcrossprod(X) + coef0)^degree
 }
 
-.aa_check_kernel_inputs <- function(G, data, K, tol, tol_r2, max_kappa,
-                                    eps, robust, tukey_c) {
+.aa_check_kernel_inputs <- function(ctx, prep, check_psd = FALSE) {
+    G <- prep[["gram"]]
+    data <- prep[["data"]]
     stopifnot("Gram matrix must be square" = nrow(G) == ncol(G))
     stopifnot("Gram matrix must be numeric" = is.numeric(G))
     stopifnot("Gram matrix contains missing or non-finite values" =
                   !any(is.na(G)) && all(is.finite(G)))
     stopifnot("Gram matrix must be symmetric" = isSymmetric(G, tol = 1e-8))
-    .aa_check_inputs(
-        data = G,
-        K = K,
-        tol = tol,
-        tol_r2 = tol_r2,
-        max_kappa = max_kappa,
-        eps = eps,
-        robust = robust,
-        tukey_c = tukey_c,
-        scale = FALSE
-    )
+    if (check_psd) {
+        eigenvalues <- eigen(G, symmetric = TRUE, only.values = TRUE)[["values"]]
+        tol_psd <- 1e-8 * max(1, max(abs(eigenvalues)))
+        stopifnot("Gram matrix must be positive semidefinite" =
+                      min(eigenvalues) >= -tol_psd)
+    }
+    .aa_check_fit_controls(ctx, n = nrow(G))
     if (!is.null(data))
         stopifnot("`data` rows must match Gram matrix dimensions" = nrow(data) == nrow(G))
     invisible(TRUE)
@@ -585,12 +644,12 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
     if (!is.null(init))
         rownames(init) <- archetype_names
 
-    coordinates_proxy <- NULL
+    coordinates <- NULL
     if (!is.null(data)) {
         X <- as.matrix(data)
-        coordinates_proxy <- B %*% X
-        rownames(coordinates_proxy) <- archetype_names
-        colnames(coordinates_proxy) <- colnames(X)
+        coordinates <- B %*% X
+        rownames(coordinates) <- archetype_names
+        colnames(coordinates) <- colnames(X)
     }
 
     if (!converged)
@@ -605,7 +664,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
         coefficients = B,
         compositions = S,
         gram = gram,
-        coordinates_proxy = coordinates_proxy,
+        coordinates = coordinates,
         slack = delta,
         loss = loss,
         converged = converged,

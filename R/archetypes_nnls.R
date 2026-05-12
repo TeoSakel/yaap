@@ -1,10 +1,10 @@
 #' Perform Archetypal Analysis using NNLS
 #'
-#' @param data data matrix (rows = samples, columns = dimensions)
+#' @param x data matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes
 #' @param init function, method string, or numeric coordinate matrix to initialize
 #'   archetypes (default: `"furthest_sum"`). When a matrix is supplied it must
-#'   have dimension `K x ncol(data)`. Rows outside the convex hull of `data` are
+#'   have dimension `K x ncol(x)`. Rows outside the convex hull of `x` are
 #'   projected into it with a warning; row names, when present, are used as
 #'   archetype names.
 #' @param init_args list of additional arguments for the initialization function
@@ -39,7 +39,7 @@
 #' \url{https://arxiv.org/abs/2504.12392}
 #'
 #' @export
-archetypes_nnls <- function(data,
+archetypes_nnls <- function(x,
                             K,
                             init = "furthest_sum",
                             init_args = list(),
@@ -52,15 +52,15 @@ archetypes_nnls <- function(data,
                             tol = 1e-6,
                             tol_r2 = 0.9999,
                             max_kappa = 1000,
-                            eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
+                            eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                             verbose = FALSE,
                             # NNLS specific
                             ols_solver = c("qr", "ginv", "BFGS"),
                             bigM = NULL,
                             max_no_update = 5L) {
-    .aa_run_aa_default(
+    .aa_fit_engine(
         call = match.call(),
-        data = data,
+        x = x,
         K = K,
         method = "nnls",
         init = init,
@@ -79,6 +79,56 @@ archetypes_nnls <- function(data,
         ols_solver = ols_solver,
         bigM = bigM,
         max_no_update = max_no_update
+    )
+}
+
+.aa_nnls_block <- function(ctx,
+                           ols_solver = c("qr", "ginv", "BFGS"),
+                           bigM = NULL,
+                           max_no_update = 5L) {
+    ols_solver <- match.arg(ols_solver)
+    list(
+        check = function(ctx) {
+            .aa_euclidean_check(ctx)
+            if (!is.null(bigM)) {
+                stopifnot("`bigM` must be NULL or a positive number" =
+                              is.numeric(bigM) && length(bigM) == 1L &&
+                                  is.finite(bigM) && bigM > 0)
+            }
+            .aa_check_max_no_update(max_no_update)
+            invisible(TRUE)
+        },
+        preprocess = function(ctx) .aa_euclidean_preprocess(ctx, bigM = bigM),
+        edge_case = .aa_euclidean_edge_case,
+        init = function(ctx, prep) .aa_euclidean_init(ctx, prep, delta = 0),
+        fit = function(ctx, prep, init_vars) {
+            do.call(
+                .aa_fit_nnls,
+                c(
+                    list(
+                        X = prep[["X"]],
+                        weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["tukey_c"]]),
+                        max_iter = ctx[["max_iter"]],
+                        tol = ctx[["tol"]],
+                        tol_r2 = ctx[["tol_r2"]],
+                        max_kappa = ctx[["max_kappa"]],
+                        eps = ctx[["eps"]],
+                        verbose = ctx[["verbose"]],
+                        loss_fun = if (ctx[["robust"]])
+                            .aa_nnls_weighted_loss_terms
+                        else
+                            .aa_nnls_loss_terms
+                    ),
+                    init_vars,
+                    list(
+                        ols_solver = ols_solver,
+                        max_no_update = as.integer(max_no_update)
+                    )
+                )
+            )
+        },
+        final_loss = .aa_final_loss,
+        prepare_output = .aa_euclidean_output
     )
 }
 

@@ -6,7 +6,7 @@
 #' flipped onto a common hemisphere, and sample reconstructions are evaluated by
 #' a Watson-style polarity-invariant angular loss.
 #'
-#' @param data Dense numeric data matrix (rows = samples, columns = dimensions).
+#' @param x Dense numeric data matrix (rows = samples, columns = dimensions).
 #' @param K Number of archetypes.
 #' @param init Initialization method. `"random"` samples exponential generator
 #'   weights as in the reference implementation; any method accepted by
@@ -47,7 +47,7 @@
 #' fit <- archetypes_directional(X, K = 3, max_iter = 5)
 #'
 #' @export
-archetypes_directional <- function(data,
+archetypes_directional <- function(x,
                                    K,
                                    init = "random",
                                    init_args = list(),
@@ -64,128 +64,138 @@ archetypes_directional <- function(data,
                                    max_iter_optimizer = 10L,
                                    step_shrinkage = 0.5,
                                    max_no_update = 5L) {
-    call <- match.call()
-    hemisphere <- match.arg(hemisphere)
-    precision <- match.arg(precision)
-    .aa_check_directional_inputs(
-        data = data,
+    .aa_fit_engine(
+        call = match.call(),
+        x = x,
         K = K,
+        method = "directional",
+        init = init,
+        init_args = init_args,
         weights = weights,
+        scale = TRUE,
+        robust = FALSE,
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
         max_kappa = max_kappa,
         eps = eps,
+        verbose = verbose,
+        missing = FALSE,
+        hemisphere = hemisphere,
+        precision = precision,
         step_size = step_size,
         max_iter_optimizer = max_iter_optimizer,
         step_shrinkage = step_shrinkage,
         max_no_update = max_no_update
     )
-
-    X <- as.matrix(data)
-    row_norms <- sqrt(rowSums(X * X))
-
-    # Nomenclature follows Olsen et al. (2022), transposed to YAAAP's
-    # row-oriented convention:
-    #   X_loss: paper X^T, retaining row magnitude as Watson precision.
-    #   X_gen: paper X_tilde^T, row-normalized generator data.
-    #   X_flip: paper X_tilde_f^T, generator data flipped to one hemisphere.
-    X_gen <- .aa_unit_rows(X, row_norms)
-    X_loss <- if (precision == "row_norm") X else X_gen
-    if (!is.null(weights)) {
-        weights <- weights / mean(weights)
-        X_loss <- X_loss * sqrt(weights)
-    }
-    flip <- .aa_directional_hemisphere(X_gen, method = hemisphere)
-    X_flip <- flip[["X"]]
-
-    init_vars <- .aa_directional_init_vars(
-        X_flip = X_flip,
-        X_gen = X_gen,
-        K = K,
-        init = init,
-        init_args = init_args,
-        eps = eps
-    )
-
-    fit <- .aa_fit_directional(
-        X_loss = X_loss,
-        X_flip = X_flip,
-        A0 = init_vars[["A0"]],
-        B = init_vars[["B"]],
-        S = init_vars[["S"]],
-        max_iter = max_iter,
-        tol = tol,
-        tol_r2 = tol_r2,
-        eps = eps,
-        verbose = verbose,
-        step_size = step_size,
-        max_iter_optimizer = max_iter_optimizer,
-        step_shrinkage = step_shrinkage,
-        max_no_update = as.integer(max_no_update)
-    )
-
-    directional_archetypes(
-        coordinates = fit[["A"]],
-        coefficients = fit[["B"]],
-        compositions = fit[["S"]],
-        loss = fit[["loss"]],
-        converged = fit[["converged"]],
-        call = call,
-        data = X,
-        init = init_vars[["A0"]],
-        generator_data = X_flip,
-        hemisphere_direction = flip[["direction"]],
-        row_norms = row_norms,
-        precision = precision
-    )
 }
 
-.aa_check_directional_inputs <- function(data,
-                                         K,
-                                         weights,
-                                         max_iter,
-                                         tol,
-                                         tol_r2,
-                                         max_kappa,
-                                         eps,
-                                         step_size,
-                                         max_iter_optimizer,
-                                         step_shrinkage,
-                                         max_no_update) {
-    if (inherits(data, "sparseMatrix"))
-        stop("Directional AA currently requires a dense numeric matrix.", call. = FALSE)
-    stopifnot("data must be a matrix-like object" =
-                  is.matrix(data) || inherits(data, "data.frame"))
-    data <- as.matrix(data)
-    stopifnot("data must be numeric" = is.numeric(data))
-    stopifnot("data contains missing values" = !any(is.na(data)))
-    stopifnot("data contains non-finite values" = all(is.finite(data)))
-    stopifnot("K must be an integer" = K == as.integer(K))
-    stopifnot("K must be an integer greater or equal to 1" = K >= 1L)
-    stopifnot("K cannot be greater than number of samples" = K <= nrow(data))
-    stopifnot("max_iter must be a non-negative integer" =
-                  max_iter == as.integer(max_iter) && max_iter >= 0L)
-    stopifnot("tol must be positive" = tol > 0)
-    stopifnot("tol_r2 must be between (0, 1)" = tol_r2 >= 0 && tol_r2 <= 1)
-    stopifnot("max_kappa must be >=1" = max_kappa >= 1)
-    stopifnot("eps must be non-negative" = eps >= 0)
-    stopifnot("step_size must be positive" = step_size > 0)
-    stopifnot("max_iter_optimizer must be a positive integer" =
-                  max_iter_optimizer == as.integer(max_iter_optimizer) &&
-                      max_iter_optimizer >= 1L)
-    stopifnot("step_shrinkage must be between (0, 1)" =
-                  step_shrinkage > 0 && step_shrinkage < 1)
-    stopifnot("max_no_update must be a positive integer" =
-                  max_no_update == as.integer(max_no_update) && max_no_update >= 1L)
-    if (!is.null(weights)) {
-        stopifnot("weights must match rows in data" = length(weights) == nrow(data))
-        stopifnot("weights contain NA values" = !any(is.na(weights)))
-        stopifnot("weights must be non-negative" = all(weights >= 0))
-        stopifnot("at least one weight must be positive" = any(weights > 0))
-    }
-    .aa_check_no_zero_rows(data)
-    invisible(TRUE)
+.aa_directional_block <- function(ctx,
+                                  hemisphere = c("pca", "none"),
+                                  precision = c("row_norm", "unit"),
+                                  step_size = 1.0,
+                                  max_iter_optimizer = 10L,
+                                  step_shrinkage = 0.5,
+                                  max_no_update = 5L) {
+    hemisphere <- match.arg(hemisphere)
+    precision <- match.arg(precision)
+
+    list(
+        check = function(ctx) {
+            if (ctx[["missing"]])
+                stop("`missing = TRUE` is not supported for `method = 'directional'`.",
+                     call. = FALSE)
+            if (ctx[["robust"]])
+                stop("`robust = TRUE` is not supported for `method = 'directional'`.",
+                     call. = FALSE)
+            if (!isTRUE(ctx[["scale"]]))
+                stop("`scale` is not supported for `method = 'directional'`.", call. = FALSE)
+            if (inherits(ctx[["x"]], "sparseMatrix"))
+                stop("Directional AA currently requires a dense numeric matrix.", call. = FALSE)
+            X <- as.matrix(ctx[["x"]])
+            .aa_check_fit_controls(ctx, n = nrow(X))
+            .aa_check_projected_gradient_controls(
+                step_size = step_size,
+                max_iter_optimizer = max_iter_optimizer,
+                step_shrinkage = step_shrinkage,
+                max_no_update = max_no_update
+            )
+            if (!is.null(ctx[["weights"]])) {
+                stopifnot("weights must match rows in data" =
+                              length(ctx[["weights"]]) == nrow(X))
+                stopifnot("weights contain NA values" = !any(is.na(ctx[["weights"]])))
+                stopifnot("weights must be non-negative" = all(ctx[["weights"]] >= 0))
+                stopifnot("at least one weight must be positive" = any(ctx[["weights"]] > 0))
+            }
+            .aa_check_no_zero_rows(X)
+        },
+        preprocess = function(ctx) {
+            X <- as.matrix(ctx[["x"]])
+            row_norms <- sqrt(rowSums(X * X))
+            X_gen <- .aa_unit_rows(X, row_norms)
+            X_loss <- if (precision == "row_norm") X else X_gen
+            if (!is.null(ctx[["weights"]])) {
+                weights <- ctx[["weights"]] / mean(ctx[["weights"]])
+                X_loss <- X_loss * sqrt(weights)
+            }
+            flip <- .aa_directional_hemisphere(X_gen, method = hemisphere)
+            list(
+                X = X,
+                X_gen = X_gen,
+                X_loss = X_loss,
+                X_flip = flip[["X"]],
+                hemisphere_direction = flip[["direction"]],
+                row_norms = row_norms,
+                precision = precision
+            )
+        },
+        edge_case = function(ctx, prep) NULL,
+        init = function(ctx, prep) {
+            .aa_directional_init_vars(
+                X_flip = prep[["X_flip"]],
+                X_gen = prep[["X_gen"]],
+                K = ctx[["K"]],
+                init = ctx[["init"]],
+                init_args = ctx[["init_args"]],
+                eps = ctx[["eps"]]
+            )
+        },
+        fit = function(ctx, prep, init_vars) {
+            .aa_fit_directional(
+                X_loss = prep[["X_loss"]],
+                X_flip = prep[["X_flip"]],
+                A0 = init_vars[["A0"]],
+                B = init_vars[["B"]],
+                S = init_vars[["S"]],
+                max_iter = ctx[["max_iter"]],
+                tol = ctx[["tol"]],
+                tol_r2 = ctx[["tol_r2"]],
+                eps = ctx[["eps"]],
+                verbose = ctx[["verbose"]],
+                step_size = step_size,
+                max_iter_optimizer = max_iter_optimizer,
+                step_shrinkage = step_shrinkage,
+                max_no_update = as.integer(max_no_update)
+            )
+        },
+        final_loss = .aa_final_loss,
+        prepare_output = function(ctx, prep, fit) {
+            directional_archetypes(
+                coordinates = fit[["A"]],
+                coefficients = fit[["B"]],
+                compositions = fit[["S"]],
+                loss = fit[["loss"]],
+                converged = fit[["converged"]],
+                call = ctx[["call"]],
+                data = prep[["X"]],
+                init = fit[["A0"]],
+                generator_data = prep[["X_flip"]],
+                hemisphere_direction = prep[["hemisphere_direction"]],
+                row_norms = prep[["row_norms"]],
+                precision = prep[["precision"]]
+            )
+        }
+    )
 }
 
 .aa_check_no_zero_rows <- function(X) {

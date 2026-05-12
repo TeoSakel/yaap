@@ -5,7 +5,7 @@
 \title{Probabilistic Archetypal Analysis using Projected Gradient Descent}
 \usage{
 archetypes_paa(
-  data,
+  x,
   K,
   family = c("gaussian", "bernoulli", "poisson", "multinomial"),
   init = "furthest_sum",
@@ -23,7 +23,7 @@ archetypes_paa(
 )
 }
 \arguments{
-\item{data}{Data matrix with rows as samples.}
+\item{x}{Data matrix with rows as samples.}
 
 \item{K}{Number of archetypes.}
 

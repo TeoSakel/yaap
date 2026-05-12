@@ -84,7 +84,7 @@ tune_archetypes <- function(data,
         fit <- do.call(
             run_aa,
             c(
-                list(data = data, K = grid[["K"]][[i]], method = fit_method),
+                list(x = data, K = grid[["K"]][[i]], method = fit_method),
                 fit_args
             )
         )
@@ -465,9 +465,9 @@ summary.archetypes_ensemble <- function(object, ...)
 
 .aa_input_coordinates <- function(fit) {
     if (inherits(fit, "kernel_archetypes")) {
-        coords <- fit[["coordinates_proxy"]]
+        coords <- fit[["coordinates"]]
         if (is.null(coords))
-            stop("Kernel archetypes require `coordinates_proxy` for coordinate consistency.",
+            stop("Kernel archetypes require `coordinates` for coordinate consistency.",
                  call. = FALSE)
         return(as.matrix(coords))
     }

@@ -53,7 +53,7 @@ test_that("anames gets and sets kernel archetype labels", {
         coefficients = B,
         compositions = S,
         gram = G,
-        coordinates_proxy = P
+        coordinates = P
     )
 
     anames(fit) <- c("red", "green", "blue")
@@ -61,6 +61,6 @@ test_that("anames gets and sets kernel archetype labels", {
     expect_equal(anames(fit), c("red", "green", "blue"))
     expect_equal(rownames(fit[["coefficients"]]), anames(fit))
     expect_equal(colnames(fit[["compositions"]]), anames(fit))
-    expect_equal(rownames(fit[["coordinates_proxy"]]), anames(fit))
+    expect_equal(rownames(fit[["coordinates"]]), anames(fit))
     expect_true(all(c("coefficients", "compositions", "gram") %in% names(fit)))
 })

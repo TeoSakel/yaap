@@ -5,7 +5,7 @@
 \title{Archetypes Analysis using Projected Gradient Descent}
 \usage{
 archetypes_pgd(
-  data,
+  x,
   K,
   init = "furthest_sum",
   init_args = list(),
@@ -18,9 +18,9 @@ archetypes_pgd(
   tol = 1e-06,
   tol_r2 = 0.9999,
   max_kappa = 1000,
-  eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-08),
+  eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
-  missing = any(is.na(data)),
+  missing = any(is.na(x)),
   delta = 0,
   pseudo_pgd = TRUE,
   step_size = 1,
@@ -30,14 +30,14 @@ archetypes_pgd(
 )
 }
 \arguments{
-\item{data}{data matrix (rows = samples, columns = dimensions)}
+\item{x}{data matrix (rows = samples, columns = dimensions)}
 
 \item{K}{number of archetypes}
 
 \item{init}{function, method string, or numeric coordinate matrix to initialize
 archetypes (default: \code{"furthest_sum"}). When a matrix is supplied it must
-have dimension \verb{K x ncol(data)}. Rows outside the \code{delta}-relaxed convex
-hull of \code{data} are projected into it with a warning; row names, when
+have dimension \verb{K x ncol(x)}. Rows outside the \code{delta}-relaxed convex
+hull of \code{x} are projected into it with a warning; row names, when
 present, are used as archetype names.}
 
 \item{init_args}{list of additional arguments for the initialization function}

@@ -1,11 +1,11 @@
 #' Archetypes Analysis using Projected Gradient Descent
 #'
-#' @param data data matrix (rows = samples, columns = dimensions)
+#' @param x data matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes
 #' @param init function, method string, or numeric coordinate matrix to initialize
 #'   archetypes (default: `"furthest_sum"`). When a matrix is supplied it must
-#'   have dimension `K x ncol(data)`. Rows outside the `delta`-relaxed convex
-#'   hull of `data` are projected into it with a warning; row names, when
+#'   have dimension `K x ncol(x)`. Rows outside the `delta`-relaxed convex
+#'   hull of `x` are projected into it with a warning; row names, when
 #'   present, are used as archetype names.
 #' @param init_args list of additional arguments for the initialization function
 #' @param weights optional vector of sample weights (default: NULL)
@@ -48,7 +48,7 @@
 #' *Neurocomputing*, 80, 54-63. \url{https://dx.doi.org/10.1016/j.neucom.2011.06.033}
 #'
 #' @export
-archetypes_pgd <- function(data,
+archetypes_pgd <- function(x,
                            K,
                            init = "furthest_sum",
                            init_args = list(),
@@ -61,9 +61,9 @@ archetypes_pgd <- function(data,
                            tol = 1e-6,
                            tol_r2 = 0.9999,
                            max_kappa = 1000,
-                           eps = ifelse(inherits(data, "sparseMatrix"), 0, 1e-8),
+                           eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                            verbose = FALSE,
-                           missing = any(is.na(data)),
+                           missing = any(is.na(x)),
                            # PGD specific
                            delta = 0,
                            pseudo_pgd = TRUE,
@@ -71,9 +71,9 @@ archetypes_pgd <- function(data,
                            max_iter_optimizer = 10L,
                            step_shrinkage = 0.5,
                            max_no_update = 5L) {
-    .aa_run_aa_default(
+    .aa_fit_engine(
         call = match.call(),
-        data = data,
+        x = x,
         K = K,
         method = "pgd",
         init = init,
@@ -96,6 +96,72 @@ archetypes_pgd <- function(data,
         max_iter_optimizer = max_iter_optimizer,
         step_shrinkage = step_shrinkage,
         max_no_update = max_no_update
+    )
+}
+
+.aa_pgd_block <- function(ctx,
+                          delta = 0,
+                          pseudo_pgd = TRUE,
+                          step_size = 1.0,
+                          max_iter_optimizer = 10L,
+                          step_shrinkage = 0.5,
+                          max_no_update = 5L) {
+    loss_fun <- if (ctx[["robust"]]) .aa_pgd_weighted_loss_terms else .aa_pgd_loss_terms
+    fit_fun <- if (ctx[["missing"]]) .aa_fit_pgd_missing else .aa_fit_pgd
+
+    list(
+        check = function(ctx) {
+            .aa_euclidean_check(ctx)
+            .aa_check_projected_gradient_controls(
+                step_size = step_size,
+                max_iter_optimizer = max_iter_optimizer,
+                step_shrinkage = step_shrinkage,
+                max_no_update = max_no_update
+            )
+            stopifnot("delta must be single non-negative number" =
+                          length(delta) == 1 && delta >= 0)
+            stopifnot("pseudo_pgd must be TRUE or FALSE" =
+                          is.logical(pseudo_pgd) && length(pseudo_pgd) == 1L &&
+                              !is.na(pseudo_pgd))
+            invisible(TRUE)
+        },
+        preprocess = function(ctx) .aa_euclidean_preprocess(ctx, bigM = 0),
+        edge_case = .aa_euclidean_edge_case,
+        init = function(ctx, prep) .aa_euclidean_init(ctx, prep, delta = delta),
+        fit = function(ctx, prep, init_vars) {
+            common_args <- list(
+                X = prep[["X"]],
+                weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["tukey_c"]]),
+                max_iter = ctx[["max_iter"]],
+                tol = ctx[["tol"]],
+                tol_r2 = ctx[["tol_r2"]],
+                max_kappa = ctx[["max_kappa"]],
+                eps = ctx[["eps"]],
+                verbose = ctx[["verbose"]]
+            )
+            if (ctx[["missing"]]) {
+                common_args[["M"]] <- prep[["M"]]
+            } else {
+                common_args[["loss_fun"]] <- loss_fun
+            }
+            do.call(
+                fit_fun,
+                c(
+                    common_args,
+                    init_vars,
+                    list(
+                        delta = delta,
+                        pseudo_pgd = pseudo_pgd,
+                        step_size = step_size,
+                        max_iter_optimizer = as.integer(max_iter_optimizer),
+                        step_shrinkage = step_shrinkage,
+                        max_no_update = as.integer(max_no_update)
+                    )
+                )
+            )
+        },
+        final_loss = .aa_final_loss,
+        prepare_output = .aa_euclidean_output
     )
 }
 
