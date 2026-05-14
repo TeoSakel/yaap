@@ -15,7 +15,11 @@ test_that("archetypes_directional fits spherical data with expected invariants",
     expect_true(all(is.finite(fit[["loss"]][["loss"]])))
     expect_true(all(is.finite(fitted(fit))))
     expect_true(all(is.finite(residuals(fit))))
-    expect_matrix_dim(predict(fit, X[1:5, ], max_iter = 3L), 5L, 3L)
+    S_pred <- predict(fit, X[1:5, ], max_iter = 3L)
+    Y_pred <- predict(fit, X[1:5, ], type = "reconstruction", max_iter = 3L)
+    expect_matrix_dim(S_pred, 5L, 3L)
+    expect_matrix_dim(Y_pred, 5L, ncol(X))
+    expect_equal(as.vector(rowSums(Y_pred^2)), rep(1, nrow(Y_pred)), tolerance = 1e-6)
     expect_error(AIC(fit), "not defined")
 })
 

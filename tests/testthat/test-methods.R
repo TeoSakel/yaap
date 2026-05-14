@@ -31,11 +31,21 @@ test_that("S3 methods return expected values", {
     expect_equal(coefficients(fit), fit[["coefficients"]])
     expect_equal(fitted(fit), fit[["compositions"]] %*% fit[["coordinates"]])
     expect_equal(residuals(fit), X - fitted(fit))
+    expect_equal(residuals(fit, type = "response"), X - fitted(fit))
+    expect_equal(residuals(fit, type = "pearson"), X - fitted(fit))
     fit_no_data <- fit
     fit_no_data[["data"]] <- NULL
     expect_error(residuals(fit_no_data), "Original data")
     expect_output(print(fit), "Archetypes Summary")
     expect_true(is.numeric(AIC(fit)))
+})
+
+test_that("pearson residuals apply stored sample weights", {
+    fit <- manual_fit()
+    w <- c(1, 4, 1, 0)
+    fit[["weights"]] <- w
+    res <- residuals(fit, type = "response")
+    expect_equal(residuals(fit, type = "pearson"), sqrt(w) * res)
 })
 
 test_that("adapted AIC returns NA outside covariance assumptions", {
@@ -57,9 +67,10 @@ test_that("adapted AIC returns NA outside covariance assumptions", {
         data = cbind(seq_len(4), 2 * seq_len(4))
     )
     expect_warning(
-        expect_true(is.na(AIC(singular))),
-        "cov\\(X\\) is singular"
+        aic <- AIC(singular),
+        "pseudo-inverse"
     )
+    expect_true(is.finite(aic))
 })
 
 test_that("predict returns row-stochastic compositions for new data", {
@@ -68,7 +79,12 @@ test_that("predict returns row-stochastic compositions for new data", {
     fit <- archetypes_nnls(as.matrix(X), K = 3L, max_iter = 5L, tol_r2 = 0.95)
 
     pred <- predict(fit, X[1:5, ])
+    pred_default <- predict(fit, X[1:5, ], type = "compositions")
+    rec <- predict(fit, X[1:5, ], type = "reconstruction")
 
     expect_matrix_dim(pred, 5L, 3L)
     expect_row_stochastic(pred)
+    expect_equal(pred, pred_default)
+    expect_matrix_dim(rec, 5L, ncol(X))
+    expect_equal(rec, pred %*% fit[["coordinates"]], tolerance = 1e-8)
 })

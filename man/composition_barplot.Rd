@@ -22,9 +22,13 @@ composition_barplot(
 \item{x}{Numeric matrix or data frame. Rows are samples and columns are
 archetypes. Rows should contain non-negative composition weights.}
 
-\item{cluster_rows, cluster_cols}{Logical values or \code{hclust} objects. When
-\code{TRUE}, rows or columns are reordered by hierarchical clustering. Row
-clustering is computed on \code{compositions::cdt(compositions::acomp(x))}.}
+\item{cluster_rows, cluster_cols}{Logical values, one of \code{"PC1"} or
+\code{"AOP"}, or \code{hclust} objects. When \code{TRUE}, rows or columns are
+reordered by hierarchical clustering. \code{"PC1"} orders rows by their first
+principal component score and columns by their first principal component
+loading. \code{"AOP"} (angle of projection) orders rows by the angle of their
+PC1/PC2 scores and columns by the angle of their PC1/PC2 loadings. Row
+clustering is computed on an internal centered log-ratio (\code{clr}) transform.}
 
 \item{distance}{Optional distance metric used for both row and column
 clustering when \code{distance_rows} or \code{distance_cols} are not supplied.}

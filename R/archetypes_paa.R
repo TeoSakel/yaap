@@ -363,6 +363,8 @@ archetypes_paa <- function(x,
     Y <- S %*% A
     obj <- spec[["objective"]](X, Y)
     step_S <- step_size
+    converged <- FALSE
+    eps2 <- 1e-16  #  small constant to prevent division by zero in convergence check
     for (i in seq_len(max_iter)) {
         grad_Y <- spec[["gradient"]](X, Y)
         grad_S <- tcrossprod(grad_Y, A)
@@ -375,16 +377,15 @@ archetypes_paa <- function(x,
             if (obj_new < obj) {
                 S <- S_new
                 Y <- Y_new
-                if (abs(obj - obj_new) < tol * max(obj, .Machine$double.eps))
-                    accepted <- FALSE
                 obj <- obj_new
                 step_S <- step_S / step_shrinkage
                 accepted <- TRUE
+                converged <- (obj - obj_new) < tol * max(obj, eps2)
                 break
             }
             step_S <- step_S * step_shrinkage
         }
-        if (!accepted) break
+        if (!accepted || converged) break
     }
     colnames(S) <- rownames(A)
     rownames(S) <- rownames(X)

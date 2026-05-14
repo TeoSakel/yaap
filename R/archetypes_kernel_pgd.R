@@ -190,6 +190,7 @@ archetypes_kernel_pgd <- function(x,
                 i = fit[["i"]],
                 loss = fit[["loss"]],
                 converged = fit[["converged"]],
+                weights = fit[["row_weights"]],
                 max_iter = ctx[["max_iter"]],
                 verbose = ctx[["verbose"]],
                 row_names = rownames(prep[["gram"]])
@@ -390,6 +391,7 @@ archetypes_kernel_pgd <- function(x,
         delta = delta,
         i = i,
         loss = loss,
+        row_weights = row_weights,
         converged = converged
     )
 }
@@ -627,6 +629,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
 
 .aa_prepare_kernel_output <- function(call, data, gram, kernel, kernel_args, init,
                                       B, S, delta, i, loss, converged,
+                                      weights = NULL,
                                       max_iter, verbose, row_names = NULL) {
     j <- i + 1L
     loss <- as.data.frame(loss)[seq_len(j), , drop = FALSE]
@@ -672,7 +675,8 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
         data = data,
         init = init,
         kernel = kernel,
-        kernel_args = kernel_args
+        kernel_args = kernel_args,
+        weights = weights
     )
 }
 

@@ -327,6 +327,43 @@ test_that("scale preprocessing supports TRUE, FALSE, vector, and matrix transfor
     expect_equal(pre_raw[["undo_scale"]](pre_raw[["X"]][1:2, ], pre_raw[["X"]]), X[1:2, ])
 })
 
+test_that("euclidean preprocessing applies sqrt-normalized sample weights", {
+    X <- toy_matrix()
+    weights <- rep(1, nrow(X))
+    weights[2] <- 4
+
+    pre <- .aa_test_euclidean_preprocess(X, scale = FALSE, weights = weights)
+    w_norm <- weights / mean(weights)
+    X_expected <- X * sqrt(w_norm)
+
+    expect_equal(pre[["X"]], X_expected, ignore_attr = TRUE)
+    expect_equal(attr(pre[["X"]], "weights"), w_norm)
+})
+
+test_that("euclidean preprocessing warns when sample weights include zeros", {
+    X <- toy_matrix()
+    weights <- rep(1, nrow(X))
+    weights[1] <- 0
+
+    pre <- NULL
+    expect_warning(
+        pre <- .aa_test_euclidean_preprocess(X, scale = FALSE, weights = weights),
+        "Some sample weights are zero"
+    )
+
+    w_norm <- weights / mean(weights)
+    X_expected <- X * sqrt(w_norm)
+    expect_equal(pre[["X"]], X_expected, ignore_attr = TRUE)
+})
+
+test_that("euclidean preprocessing rejects all-zero sample weights", {
+    X <- toy_matrix()
+    expect_error(
+        .aa_test_euclidean_preprocess(X, weights = rep(0, nrow(X))),
+        "at least one weight must be positive"
+    )
+})
+
 test_that("automatic bigM preserves old default on z-scored data and scales raw data", {
     X <- toy_matrix()
 
@@ -416,6 +453,48 @@ test_that("NNLS warns when raw coefficients are far from simplex", {
         ),
         "not close to simplex"
     )
+})
+
+test_that("non-convergence warning reports realized iteration count", {
+    X <- matrix(seq_len(40), nrow = 10L, ncol = 4L)
+    A <- matrix(seq_len(12), nrow = 3L, ncol = 4L)
+    B <- matrix(1 / nrow(X), nrow = 3L, ncol = nrow(X))
+    S <- matrix(1 / 3, nrow = nrow(X), ncol = 3L)
+    loss <- data.frame(
+        loss = seq(400, 369),
+        r2 = seq(0.2, 0.7, length.out = 32L),
+        k_S = NA_real_,
+        k_A = NA_real_
+    )
+
+    ctx <- list(
+        call = quote(run_aa(X, K = 3L, method = "nnls")),
+        x = X,
+        max_iter = 100L,
+        verbose = FALSE
+    )
+    prep <- list(
+        X = X,
+        undo_scale = function(A, X) A,
+        family = "gaussian"
+    )
+    fit <- list(
+        A0 = A,
+        A = A,
+        B = B,
+        S = S,
+        delta = 0,
+        i = 31L,
+        loss = loss,
+        converged = FALSE
+    )
+
+    expect_warning(
+        out <- .aa_euclidean_output(ctx, prep, fit),
+        "Algorithm did not converge after 31 iterations",
+        fixed = TRUE
+    )
+    expect_equal(nrow(out[["loss"]]), 32L)
 })
 
 test_that("sparse preprocessing preserves sparse structure without centering", {

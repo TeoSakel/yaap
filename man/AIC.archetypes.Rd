@@ -27,9 +27,9 @@ penalty based on the full parameter count
 for comparing Euclidean Gaussian archetype fits on the same data, especially
 across different numbers of archetypes.
 Following the assumptions in Suleman (2017), the criterion is undefined when
-the number of samples is not larger than the number of features, or when the
-covariance matrix of \code{X} is singular; in these cases \code{NA_real_} is returned
-with a warning.
+the number of samples is not larger than the number of features. If the
+covariance matrix of \code{X} is singular otherwise, the efficiency term is
+computed with a Moore-Penrose pseudo-inverse and a warning is emitted.
 }
 \references{
 A. Suleman, "Validation of archetypal analysis,"

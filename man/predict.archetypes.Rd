@@ -2,9 +2,9 @@
 % Please edit documentation in R/archetype_class.R
 \name{predict.archetypes}
 \alias{predict.archetypes}
-\title{Predict compositions for new data from an archetypes model}
+\title{Predict compositions or reconstructions for new data from an archetypes model}
 \usage{
-\method{predict}{archetypes}(object, newdata, ...)
+\method{predict}{archetypes}(object, newdata, type = c("compositions", "reconstruction"), ...)
 }
 \arguments{
 \item{object}{An object of class \code{archetypes}.}
@@ -12,15 +12,28 @@
 \item{newdata}{New data to fit. Must contain the features (columns) used to
 fit \code{object}; fd-backed fits may pass an \code{fda::fd} object.}
 
-\item{...}{Passed to \code{\link{fit_simplex}}.}
+\item{type}{Prediction output type. \code{"compositions"} (default) returns
+\code{S}; \code{"reconstruction"} returns \code{X_hat = S \%*\% A}.}
+
+\item{...}{Passed to \code{\link{fit_simplex}} and family-specific
+prediction routines.}
 }
 \value{
-A numeric matrix (N_new x K) of non-negative composition weights for \code{newdata}.
+If \code{type = "compositions"}, a numeric matrix (N_new x K) with non-negative
+row-stochastic composition weights. If \code{type = "reconstruction"}, a
+reconstruction matrix (N_new x M) in the same feature space as
+\code{object$coordinates}.
 }
 \description{
-Projects new samples onto the archetype space by solving
-non-negative least squares (NNLS) for the composition weights
-given fixed archetype coordinates.
+Projects new samples onto the archetype space by solving for composition
+weights with fixed archetype coordinates. By default the method returns
+compositions (\code{S}). With \code{type = "reconstruction"} it returns
+\code{X_hat = S \%*\% A}, where \code{A = object$coordinates}.
+
+For non-Gaussian families (\code{bernoulli}, \code{poisson}, \code{multinomial}),
+coordinates live in parameter space. In particular, multinomial
+reconstructions preserve existing package behavior by scaling each row of
+\code{S \%*\% A} by the corresponding row total of \code{newdata}.
 }
 \seealso{
 \code{\link[=archetypes]{archetypes()}}, \code{\link[=fit_simplex]{fit_simplex()}}

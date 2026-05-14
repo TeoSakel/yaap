@@ -10,6 +10,8 @@
   samples = NULL,
   data = NULL,
   projection = c("none", "pca"),
+  show_anames = TRUE,
+  args.archetypes = list(),
   ...
 )
 }
@@ -33,11 +35,16 @@ vector. Subsetting is applied before clustering or projection.}
 project data with more than two dimensions to the first two principal
 component scores before plotting.}
 
+\item{show_anames}{Logical; for \code{what = "coordinates"}, whether
+to draw archetype names next to archetype points.}
+
+\item{args.archetypes}{Optional named list of graphical arguments used for
+archetype points/paths in \code{what = "coordinates"}. Useful for styling
+archetypes separately when \code{...} aesthetics (e.g., \code{col}) are mapped to
+observation-level vectors.}
+
 \item{...}{Additional graphical parameters passed to the underlying plotting
-functions. For \code{what = "coordinates"}, \code{col}, \code{pch}, and \code{cex} may be
-length-two vectors: the first value is used for observations and the second
-value is used for archetypes. If only one color is supplied, observations
-use that color and archetypes are drawn in red.}
+functions.}
 }
 \description{
 Draws diagnostic and geometric plots for a fitted archetypal analysis model.

@@ -13,6 +13,25 @@ test_that("plot.archetypes smoke tests supported plot modes", {
     expect_identical(plot(fit, "coordinates"), fit)
 })
 
+test_that("plot.archetypes profiles uses fixed height but accepts other barplot args", {
+    fit <- manual_fit()
+    pdf(NULL)
+    on.exit(dev.off(), add = TRUE)
+
+    bad_height <- matrix(1, nrow = 2L, ncol = 2L)
+    expect_identical(
+        plot(
+            fit,
+            "profiles",
+            height = bad_height,
+            col = c("red", "blue", "green"),
+            horiz = TRUE,
+            border = NA
+        ),
+        fit
+    )
+})
+
 test_that("composition_barplot supports matrix-like inputs and clustering", {
     fit <- manual_fit()
     pdf(NULL)
@@ -75,6 +94,59 @@ test_that("composition_barplot exposes clustering distance and linkage", {
     expect_identical(both[["col_hclust"]][["method"]], "single")
 })
 
+test_that("composition_barplot supports PC1 and AOP ordering", {
+    S <- matrix(
+        c(
+            0.70, 0.20, 0.10,
+            0.55, 0.35, 0.10,
+            0.15, 0.70, 0.15,
+            0.10, 0.25, 0.65,
+            0.25, 0.50, 0.25
+        ),
+        ncol = 3L,
+        byrow = TRUE
+    )
+
+    pca <- stats::prcomp(S, center = TRUE, scale. = FALSE)
+
+    pdf(NULL)
+    on.exit(dev.off(), add = TRUE)
+
+    pc1 <- composition_barplot(
+        S,
+        cluster_rows = "PC1",
+        cluster_cols = "PC1",
+        legend = FALSE
+    )
+    expect_equal(pc1[["row_order"]], order(pca[["x"]][, 1L]))
+    expect_equal(pc1[["col_order"]], order(pca[["rotation"]][, 1L]))
+    expect_equal(pc1[["row_hclust"]][["order"]], pc1[["row_order"]])
+    expect_equal(pc1[["col_hclust"]][["order"]], pc1[["col_order"]])
+
+    aop <- composition_barplot(
+        S,
+        cluster_rows = "AOP",
+        cluster_cols = "AOP",
+        legend = FALSE
+    )
+    expect_equal(aop[["row_order"]], order(atan2(pca[["x"]][, 2L], pca[["x"]][, 1L])))
+    expect_equal(
+        aop[["col_order"]],
+        order(atan2(pca[["rotation"]][, 2L], pca[["rotation"]][, 1L]))
+    )
+    expect_equal(aop[["row_hclust"]][["order"]], aop[["row_order"]])
+    expect_equal(aop[["col_hclust"]][["order"]], aop[["col_order"]])
+
+    expect_error(
+        composition_barplot(S, cluster_rows = "bad", legend = FALSE),
+        "cluster_rows"
+    )
+    expect_error(
+        composition_barplot(S, cluster_cols = "bad", legend = FALSE),
+        "cluster_cols"
+    )
+})
+
 test_that("plot.archetypes handles higher-dimensional coordinate projections", {
     fit <- manual_fit()
     X <- cbind(fit[["data"]], z = c(0, 1, 1, 0.2), w = c(1, 0, 1, 0.4))
@@ -85,6 +157,32 @@ test_that("plot.archetypes handles higher-dimensional coordinate projections", {
 
     expect_identical(plot(fit, "coordinates"), fit)
     expect_identical(plot(fit, "coordinates", projection = "pca"), fit)
+    expect_identical(plot(fit, "coordinates", show_anames = FALSE), fit)
+    expect_identical(
+        plot(fit, "coordinates", projection = "pca", show_anames = FALSE),
+        fit
+    )
+})
+
+test_that("plot.archetypes coordinates supports data vectors with args.archetypes", {
+    fit <- manual_fit()
+    group <- c("g1", "g2", "g1", "g2")
+    data_col <- c(g1 = "#1b9e77", g2 = "#d95f02")[group]
+
+    pdf(NULL)
+    on.exit(dev.off(), add = TRUE)
+
+    expect_identical(
+        plot(
+            fit,
+            "coordinates",
+            col = data_col,
+            pch = c(1, 2, 3, 4),
+            cex = rep(0.8, 4),
+            args.archetypes = list(col = "black", pch = 17, cex = 1.4)
+        ),
+        fit
+    )
 })
 
 test_that("plot.archetypes can subset samples in observation-level plots", {

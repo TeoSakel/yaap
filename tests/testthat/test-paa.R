@@ -97,8 +97,13 @@ test_that("PAA fitted and predict are family-aware", {
     expect_equal(unname(rowSums(X_hat)), unname(rowSums(X)), tolerance = 1e-6)
 
     pred <- predict(fit, X[1:3, , drop = FALSE], max_iter = 3L)
+    pred_default <- predict(fit, X[1:3, , drop = FALSE], type = "compositions", max_iter = 3L)
+    rec <- predict(fit, X[1:3, , drop = FALSE], type = "reconstruction", max_iter = 3L)
     expect_matrix_dim(pred, 3L, 3L)
     expect_row_stochastic(pred)
+    expect_equal(pred, pred_default)
+    expect_matrix_dim(rec, 3L, ncol(X))
+    expect_equal(unname(rowSums(rec)), unname(rowSums(X[1:3, , drop = FALSE])), tolerance = 1e-6)
 })
 
 test_that("archetypes default family is gaussian", {

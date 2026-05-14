@@ -102,7 +102,8 @@ run_aa.formula <- function(formula,
 #'   are projected into it with a warning; row names, when present, are used as
 #'   archetype names.
 #' @param init_args list of additional arguments for the initialization function
-#' @param weights optional vector of sample weights (default: NULL)
+#' @param weights optional vector of sample weights (default: NULL). Weights are
+#'   internally scaled to have mean 1 and then are square-rooted.
 #' @param scale scaling or metric embedding used before fitting. `TRUE` applies
 #'   the default z-score preprocessing, `FALSE` leaves columns on their original
 #'   scale, a positive numeric vector divides columns by user-supplied scale
@@ -478,9 +479,12 @@ run_aa.fd <- function(x, K, ...) {
         }
         stopifnot("Weights contain NA values" = !any(is.na(weights)))
         stopifnot("Weights must be non-negative" = all(weights >= 0))
+        stopifnot("at least one weight must be positive" = any(weights > 0))
+        if (any(weights == 0))
+            warning("Some sample weights are zero.", call. = FALSE)
         weights <- weights / mean(weights)
         x_attrs <- attributes(X)
-        X <- X * weights
+        X <- X * sqrt(weights)  # sqrt will be undone during square loss computation
         attributes(X) <- utils::modifyList(attributes(X), x_attrs)
         attr(X, "weights") <- weights
     }
@@ -584,7 +588,7 @@ run_aa.fd <- function(x, K, ...) {
 
     if (!fit[["converged"]]) {
         fmt <- "Algorithm did not converge after %d iterations"
-        warning(sprintf(fmt, ctx[["max_iter"]]), call. = FALSE)
+        warning(sprintf(fmt, fit[["i"]]), call. = FALSE)
     }
 
     if (ctx[["verbose"]]) {
@@ -598,6 +602,7 @@ run_aa.fd <- function(x, K, ...) {
     archetypes(
         call         = ctx[["call"]],
         data         = ctx[["x"]],
+        weights      = if (!is.null(fit[["row_weights"]])) fit[["row_weights"]] else attr(prep[["X"]], "weights"),
         init         = A0,
         coordinates  = A,
         coefficients = fit[["B"]],

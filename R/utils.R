@@ -29,6 +29,17 @@
     invisible(TRUE)
 }
 
+# Centered log-ratio transform after row closure, with zero replacement.
+.aa_clr <- function(X, zero_replace = sqrt(.Machine$double.eps)) {
+    totals <- rowSums(X)
+    if (any(totals <= 0))
+        stop("Cannot apply clr transform to rows with non-positive total", call. = FALSE)
+    closed <- X / totals
+    closed <- pmax(closed, zero_replace)
+    log_closed <- log(closed)
+    log_closed - rowMeans(log_closed)
+}
+
 # Scale data without forcing sparse inputs through dense centering.
 scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
     is_sparse <- inherits(X, "sparseMatrix")
@@ -133,26 +144,19 @@ scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
 # (based on the cluster means)
 effic <- function(X, Y) {
     # X, Y: data matrices (N×M), rows = samples, cols = features
-    N <- nrow(X)
-    M <- ncol(X)
     Sx <- stats::cov(X)  # (M×M)
+    Sy <- stats::cov(Y)
 
     # Try using Cholesky to invert PD matrix
     cx <- tryCatch(chol(Sx), error = function(e) NULL)
-    if (is.null(cx))  # FALLBACK to general solution
-        return(sum(diag(solve(Sx, stats::cov(Y)))))
-
-
-    # Edge Case: # of samples smaller than the # of features
-    if (N < M) {
-        # avoid computing Sy and use the Mahalanobis approach instead.
-        Yc <- sweep(Y, 2L, colMeans(Y), FUN = "-", check.margin = FALSE)
-        Z  <- backsolve(cx, t(Yc))
-        # remember cov(Y) uses denominator (N−1)
-        return(norm(Z, type = "F")^2 / (N - 1))
+    if (is.null(cx)) {
+        warning("cov(X) is singular; using Moore-Penrose pseudo-inverse for efficiency.",
+                call. = FALSE)
+        return(sum(diag(MASS::ginv(Sx) %*% Sy)))
     }
+
     # since trace(AB) = sum(A * t(B)) = sum(A * B) when symmetric
-    sum(stats::cov(Y) * chol2inv(cx))
+    sum(Sy * chol2inv(cx))
 }
 
 # Archetypes Fitting Subroutines -----------------------------------------------------
@@ -178,6 +182,11 @@ effic <- function(X, Y) {
     invisible(TRUE)
 }
 
+# TODO: add more metrics Some ideas:A
+#  - A_drift = norm(A_new - A) / norm(A): stability of solution
+#  - min(dist(A)): detect near duplicates warning about K too large
+#  - S_drift similarly, B_drift only if delta > 0
+#  - A restart A_drift for nrep > 1 (only the final solutions are compared after aligning the archetypes with Hungarian algorithm)
 .aa_new_loss <- function(L) {
     list(loss = rep(NA_real_, L),
          r2   = rep(NA_real_, L),
@@ -249,6 +258,7 @@ effic <- function(X, Y) {
     archetypes(
         call         = NULL,
         data         = X,
+        weights      = attr(X, "weights"),
         init         = A,
         coordinates  = A,
         coefficients = B,
@@ -287,6 +297,7 @@ effic <- function(X, Y) {
     archetypes(
         call         = NULL,
         data         = X,
+        weights      = attr(X, "weights"),
         init         = A,
         coordinates  = A,
         coefficients = B,

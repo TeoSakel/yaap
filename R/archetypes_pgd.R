@@ -640,6 +640,7 @@ archetypes_pgd <- function(x,
         delta = delta,
         i = i,
         loss = loss,
+        row_weights = row_weights,
         converged = converged
     )
 }

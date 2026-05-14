@@ -182,6 +182,9 @@ test_that("kernel archetypes methods expose names, residuals, and proxy plots", 
     expect_length(res, nrow(X))
     expect_true(all(is.finite(res)))
     expect_error(fitted(fit), "not defined")
+    expect_error(predict(fit, X), "not currently defined")
+    expect_error(predict(fit, X, type = "compositions"), "not currently defined")
+    expect_error(predict(fit, X, type = "reconstruction"), "not currently defined")
 
     grDevices::pdf(tempfile(fileext = ".pdf"))
     expect_silent(plot(fit, what = "loss"))
