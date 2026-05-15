@@ -1,47 +1,100 @@
 #' Kernel Archetypal Analysis using Projected Gradient Descent
 #'
-#' Fits kernel archetypal analysis from a kernel computed on `x`, or from a
-#' precomputed Gram matrix when `kernel = "precomputed"`. When original data are
-#' available, `coordinates` are the input-space convex combination
-#' `coefficients %*% data`, matching the plotting convention used by Mørup and
-#' Hansen for Figure 5. They are visualization coordinates, not exact
-#' Hilbert-space archetypes.
+#' Fits archetypal analysis (AA) in a reproducing kernel Hilbert space (RKHS)
+#' using projected gradient descent (PGD) to minimise the kernel reconstruction
+#' error \eqn{\|K - SA\|_F^2}, where \eqn{K} is the kernel Gram matrix, \eqn{S}
+#' is the composition matrix, and \eqn{A} is the archetype representation in the
+#' RKHS.
 #'
-#' @param x Data matrix with rows as samples, or an `N x N` Gram matrix when
+#' @param x data matrix (rows = samples) or an `N x N` Gram matrix when
 #'   `kernel = "precomputed"`.
-#' @param K Number of archetypes.
-#' @param kernel Kernel specification. One of `"linear"`, `"rbf"`,
+#' @param K number of archetypes.
+#' @param kernel kernel specification. One of `"linear"`, `"rbf"`,
 #'   `"laplace"`, `"polynomial"`, `"precomputed"`, or a function returning an
 #'   `N x N` Gram matrix.
-#' @param kernel_args List of arguments passed to the kernel.
-#' @param data Optional original data matrix attached to precomputed-kernel fits
+#' @param kernel_args list of arguments passed to the kernel.
+#' @param data optional original data matrix attached to precomputed-kernel fits
 #'   so input-space `coordinates` can be returned.
-#' @param init Initialization method, row indices/names, or a `K x N`
-#'   coefficient matrix.
-#' @param init_args List of additional arguments for the initialization method.
-#' @param robust Whether to use Tukey bisquare row reweighting.
-#' @param tukey_c Tuning constant for Tukey bisquare weights.
-#' @param max_iter Maximum number of outer iterations.
-#' @param tol Convergence tolerance based on residual sum of squares.
-#' @param tol_r2 Convergence tolerance based on R-squared.
-#' @param max_kappa Maximum condition number warning threshold.
-#' @param eps Small positive number to ensure numerical stability.
-#' @param verbose Whether to print progress messages.
-#' @param delta Maximum allowed relaxation of archetype convexity constraint.
-#' @param pseudo_pgd Whether to use pseudo projected gradient descent.
-#' @param step_size Initial line-search step size.
-#' @param max_iter_optimizer Maximum line-search iterations per update.
-#' @param step_shrinkage Factor used to shrink rejected line-search steps.
-#' @param max_no_update Maximum consecutive outer iterations with no accepted
-#'   line-search update before stopping as stalled.
+#' @param init initialization method; see [run_aa()] for available options.
+#' @param init_args list of additional arguments for the initialization function.
+#' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
+#' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
+#' @param max_iter maximum number of outer iterations (default: 100)
+#' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
+#' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
+#' @param max_kappa maximum condition number warning threshold (default: 1000)
+#' @param eps small positive number to ensure numerical stability (default: 1e-8)
+#' @param verbose whether to print progress messages (default: FALSE)
+#' @param delta maximum allowed relaxation of archetype convexity constraint (default: 0)
+#' @param pseudo_pgd whether to use pseudo projected gradient descent (default: TRUE)
+#' @param step_size initial line-search step size (default: 1.0)
+#' @param max_iter_optimizer maximum line-search iterations per update (default: 10)
+#' @param step_shrinkage factor used to shrink rejected line-search steps (default: 0.5)
+#' @param max_no_update maximum consecutive outer iterations with no accepted
+#'   line-search update before stopping as stalled (default: 5)
 #'
-#' @returns An object of class `kernel_archetypes`.
+#' @details
+#' ## Kernels and the Gram matrix
+#'
+#' A kernel function \eqn{k(x_i, x_j)} measures pairwise similarity between
+#' samples in some transformed feature space. The \eqn{N \times N} Gram matrix
+#' with entries \eqn{G_{ij} = k(x_i, x_j)} is the only input the solver needs.
+#' Built-in kernels and their `kernel_args`:
+#'
+#' \describe{
+#'   \item{`linear`}{`tcrossprod(X)`.}
+#'   \item{`rbf`}{Gaussian RBF: `exp(-0.5 * dist(X)^2 / sigma^2)`.}
+#'   \item{`laplace`}{Laplace: `exp(-dist(X, method = "manhattan") / sigma)`.}
+#'   \item{`polynomial`}{`(gamma * tcrossprod(X) + coef0)^degree`.}
+#' }
+#'
+#' Kernel parameters passed via `kernel_args`:
+#' - `sigma`: bandwidth for `rbf` and `laplace`; auto-selected when `NULL`.
+#' - `gamma`: scale for `polynomial` (default `1/ncol(x)`).
+#' - `degree`: polynomial degree (default 3).
+#' - `coef0`: polynomial intercept (default 1).
+#'
+#' Note: a "linear" kernel is equivalent to standard pgd AA on the original
+#' data but less efficient.
+#'
+#' To use a precomputed Gram matrix, compute it externally, pass it as `x`,
+#' and set `kernel = "precomputed"`. Supply the original data as the `data`
+#' argument if you want input-space `coordinates` in the output.
+#'
+#' ## Archetype coordinates
+#'
+#' Because the space where the similarities are measured is implicitly defined
+#' by the kernel, the coordinates of the archetypes cannot be directly computed.
+#' In order to visualize the results and facilitate interpretation, the resulting
+#' `kernel_archetypes` object does have a `coordinates` slot which is constructed
+#' according to the standard AA convention of representing archetypes as convex
+#' combinations of the original data points $A = BX$ since $B$ is computed during
+#' the optimization. However, these coordinates should not be misinterpreted as the
+#' the actual positions of the archetypes in the original space but only as proxies.
+#' Other assumptions would produce different coordinate representations; for
+#' example, `plot.kernel_archetypes()` with `projection = "pca"` projects the
+#' archetype compositions onto the kernel PCA components of the data, giving an
+#' alternative view of their positions in the feature space.
+#'
+#' @returns An object of class \code{\link{kernel_archetypes}}, extending
+#'   \code{\link{archetypes}}.
+#'
+#' @seealso [run_aa()] for the common entry point and full parameter documentation.
+#'
+#' @examples
+#' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+#' archetypes_kernel_pgd(as.matrix(toy), K = 3)
+#'
+#' @references
+#' Mørup, M., & Hansen, L. K. (2012).
+#' Archetypal analysis for machine learning and data mining.
+#' *Neurocomputing*, 80, 54-63. \url{https://dx.doi.org/10.1016/j.neucom.2011.06.033}
 #'
 #' @export
 archetypes_kernel_pgd <- function(x,
                                   K,
-                                  kernel = c("linear", "rbf", "laplace",
-                                             "polynomial", "precomputed"),
+                                  kernel = c("rbf", "laplace", "polynomial",
+                                             "linear", "precomputed"),
                                   kernel_args = list(),
                                   data = NULL,
                                   init = "furthest_sum",
@@ -393,6 +446,7 @@ archetypes_kernel_pgd <- function(x,
     )
 }
 
+# TODO: extend to use kernlab or kerntools methods
 .aa_kernel_prepare <- function(x, kernel, kernel_args, data = NULL) {
     if (!is.list(kernel_args))
         stop("`kernel_args` must be a list.", call. = FALSE)
@@ -416,7 +470,6 @@ archetypes_kernel_pgd <- function(x,
         return(list(gram = as.matrix(G), data = X, kernel = kernel, kernel_args = kernel_args))
     }
 
-    # TODO: extend to use kernlab or kerntools methods
     if (!is.character(kernel) || length(kernel) != 1L)
         stop("`kernel` must be a single string or a function.", call. = FALSE)
     kernel <- match.arg(kernel, c("linear", "rbf", "laplace", "polynomial", "precomputed"))

@@ -24,6 +24,5 @@ of the archetypes fit as \code{compositions \%*\% coordinates}.
 
 }
 \seealso{
-\code{\link[=archetypes]{archetypes()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}},
-\code{\link[=predict.archetypes]{predict.archetypes()}}, \code{\link[=coefficients.archetypes]{coefficients.archetypes()}}
+\code{\link[=residuals.archetypes]{residuals.archetypes()}}, \code{\link[=predict.archetypes]{predict.archetypes()}}, \code{\link[=coefficients.archetypes]{coefficients.archetypes()}}
 }

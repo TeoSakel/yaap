@@ -7,7 +7,7 @@
 archetypes_kernel_pgd(
   x,
   K,
-  kernel = c("linear", "rbf", "laplace", "polynomial", "precomputed"),
+  kernel = c("rbf", "laplace", "polynomial", "linear", "precomputed"),
   kernel_args = list(),
   data = NULL,
   init = "furthest_sum",
@@ -29,62 +29,121 @@ archetypes_kernel_pgd(
 )
 }
 \arguments{
-\item{x}{Data matrix with rows as samples, or an \verb{N x N} Gram matrix when
+\item{x}{data matrix (rows = samples) or an \verb{N x N} Gram matrix when
 \code{kernel = "precomputed"}.}
 
-\item{K}{Number of archetypes.}
+\item{K}{number of archetypes.}
 
-\item{kernel}{Kernel specification. One of \code{"linear"}, \code{"rbf"},
+\item{kernel}{kernel specification. One of \code{"linear"}, \code{"rbf"},
 \code{"laplace"}, \code{"polynomial"}, \code{"precomputed"}, or a function returning an
 \verb{N x N} Gram matrix.}
 
-\item{kernel_args}{List of arguments passed to the kernel.}
+\item{kernel_args}{list of arguments passed to the kernel.}
 
-\item{data}{Optional original data matrix attached to precomputed-kernel fits
+\item{data}{optional original data matrix attached to precomputed-kernel fits
 so input-space \code{coordinates} can be returned.}
 
-\item{init}{Initialization method, row indices/names, or a \verb{K x N}
-coefficient matrix.}
+\item{init}{initialization method; see \code{\link[=run_aa]{run_aa()}} for available options.}
 
-\item{init_args}{List of additional arguments for the initialization method.}
+\item{init_args}{list of additional arguments for the initialization function.}
 
-\item{robust}{Whether to use Tukey bisquare row reweighting.}
+\item{robust}{whether to use Tukey bisquare row reweighting (default: FALSE)}
 
-\item{tukey_c}{Tuning constant for Tukey bisquare weights.}
+\item{tukey_c}{tuning constant for Tukey bisquare weights (default: 4.685)}
 
-\item{max_iter}{Maximum number of outer iterations.}
+\item{max_iter}{maximum number of outer iterations (default: 100)}
 
-\item{tol}{Convergence tolerance based on residual sum of squares.}
+\item{tol}{convergence tolerance based on residual sum of squares (default: 1e-6)}
 
-\item{tol_r2}{Convergence tolerance based on R-squared.}
+\item{tol_r2}{convergence tolerance based on R\eqn{^2} (default: 0.9999)}
 
-\item{max_kappa}{Maximum condition number warning threshold.}
+\item{max_kappa}{maximum condition number warning threshold (default: 1000)}
 
-\item{eps}{Small positive number to ensure numerical stability.}
+\item{eps}{small positive number to ensure numerical stability (default: 1e-8)}
 
-\item{verbose}{Whether to print progress messages.}
+\item{verbose}{whether to print progress messages (default: FALSE)}
 
-\item{delta}{Maximum allowed relaxation of archetype convexity constraint.}
+\item{delta}{maximum allowed relaxation of archetype convexity constraint (default: 0)}
 
-\item{pseudo_pgd}{Whether to use pseudo projected gradient descent.}
+\item{pseudo_pgd}{whether to use pseudo projected gradient descent (default: TRUE)}
 
-\item{step_size}{Initial line-search step size.}
+\item{step_size}{initial line-search step size (default: 1.0)}
 
-\item{max_iter_optimizer}{Maximum line-search iterations per update.}
+\item{max_iter_optimizer}{maximum line-search iterations per update (default: 10)}
 
-\item{step_shrinkage}{Factor used to shrink rejected line-search steps.}
+\item{step_shrinkage}{factor used to shrink rejected line-search steps (default: 0.5)}
 
-\item{max_no_update}{Maximum consecutive outer iterations with no accepted
-line-search update before stopping as stalled.}
+\item{max_no_update}{maximum consecutive outer iterations with no accepted
+line-search update before stopping as stalled (default: 5)}
 }
 \value{
-An object of class \code{kernel_archetypes}.
+An object of class \code{\link{kernel_archetypes}}, extending
+\code{\link{archetypes}}.
 }
 \description{
-Fits kernel archetypal analysis from a kernel computed on \code{x}, or from a
-precomputed Gram matrix when \code{kernel = "precomputed"}. When original data are
-available, \code{coordinates} are the input-space convex combination
-\code{coefficients \%*\% data}, matching the plotting convention used by Mørup and
-Hansen for Figure 5. They are visualization coordinates, not exact
-Hilbert-space archetypes.
+Fits archetypal analysis (AA) in a reproducing kernel Hilbert space (RKHS)
+using projected gradient descent (PGD) to minimise the kernel reconstruction
+error \eqn{\|K - SA\|_F^2}, where \eqn{K} is the kernel Gram matrix, \eqn{S}
+is the composition matrix, and \eqn{A} is the archetype representation in the
+RKHS.
+}
+\details{
+\subsection{Kernels and the Gram matrix}{
+
+A kernel function \eqn{k(x_i, x_j)} measures pairwise similarity between
+samples in some transformed feature space. The \eqn{N \times N} Gram matrix
+with entries \eqn{G_{ij} = k(x_i, x_j)} is the only input the solver needs.
+Built-in kernels and their \code{kernel_args}:
+
+\describe{
+\item{\code{linear}}{\code{tcrossprod(X)}.}
+\item{\code{rbf}}{Gaussian RBF: \code{exp(-0.5 * dist(X)^2 / sigma^2)}.}
+\item{\code{laplace}}{Laplace: \code{exp(-dist(X, method = "manhattan") / sigma)}.}
+\item{\code{polynomial}}{\code{(gamma * tcrossprod(X) + coef0)^degree}.}
+}
+
+Kernel parameters passed via \code{kernel_args}:
+\itemize{
+\item \code{sigma}: bandwidth for \code{rbf} and \code{laplace}; auto-selected when \code{NULL}.
+\item \code{gamma}: scale for \code{polynomial} (default \code{1/ncol(x)}).
+\item \code{degree}: polynomial degree (default 3).
+\item \code{coef0}: polynomial intercept (default 1).
+}
+
+Note: a "linear" kernel is equivalent to standard pgd AA on the original
+data but less efficient.
+
+To use a precomputed Gram matrix, compute it externally, pass it as \code{x},
+and set \code{kernel = "precomputed"}. Supply the original data as the \code{data}
+argument if you want input-space \code{coordinates} in the output.
+}
+
+\subsection{Archetype coordinates}{
+
+Because the space where the similarities are measured is implicitly defined
+by the kernel, the coordinates of the archetypes cannot be directly computed.
+In order to visualize the results and facilitate interpretation, the resulting
+\code{kernel_archetypes} object does have a \code{coordinates} slot which is constructed
+according to the standard AA convention of representing archetypes as convex
+combinations of the original data points $A = BX$ since $B$ is computed during
+the optimization. However, these coordinates should not be misinterpreted as the
+the actual positions of the archetypes in the original space but only as proxies.
+Other assumptions would produce different coordinate representations; for
+example, \code{plot.kernel_archetypes()} with \code{projection = "pca"} projects the
+archetype compositions onto the kernel PCA components of the data, giving an
+alternative view of their positions in the feature space.
+}
+}
+\examples{
+toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+archetypes_kernel_pgd(as.matrix(toy), K = 3)
+
+}
+\references{
+Mørup, M., & Hansen, L. K. (2012).
+Archetypal analysis for machine learning and data mining.
+\emph{Neurocomputing}, 80, 54-63. \url{https://dx.doi.org/10.1016/j.neucom.2011.06.033}
+}
+\seealso{
+\code{\link[=run_aa]{run_aa()}} for the common entry point and full parameter documentation.
 }

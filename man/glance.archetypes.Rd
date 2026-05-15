@@ -16,13 +16,13 @@
 }
 \value{
 A one-row tibble with columns:
-\itemize{
-\item \code{K} — number of archetypes
-\item \code{converged} — did the optimizer converge?
-\item \code{loss} — final residual sum of squares
-\item \code{r2} — final R²
-\item \code{n_iter} — number of iterations run (excluding initialisation row)
-\item \code{family} — observation family (\code{archetypes} only)
+\describe{
+\item{\code{K}}{number of archetypes.}
+\item{\code{converged}}{logical; did the optimizer converge?}
+\item{\code{loss}}{final residual sum of squares.}
+\item{\code{r2}}{final R\eqn{^2}.}
+\item{\code{n_iter}}{number of iterations run (excluding the initialisation row).}
+\item{\code{family}}{observation family (for \code{archetypes} fits only).}
 }
 }
 \description{

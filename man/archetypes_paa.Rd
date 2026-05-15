@@ -23,47 +23,79 @@ archetypes_paa(
 )
 }
 \arguments{
-\item{x}{Data matrix with rows as samples.}
+\item{x}{data matrix (rows = samples, columns = dimensions).}
 
-\item{K}{Number of archetypes.}
+\item{K}{number of archetypes.}
 
-\item{family}{Observation family. One of \code{"gaussian"}, \code{"bernoulli"},
-\code{"poisson"}, or \code{"multinomial"}.}
+\item{family}{observation family. One of \code{"gaussian"}, \code{"bernoulli"},
+\code{"poisson"}, or \code{"multinomial"} (default: \code{"gaussian"}).}
 
-\item{init}{Initialization method, function, or coordinate matrix.}
+\item{init}{initialization method; see \code{\link[=run_aa]{run_aa()}} for available options.}
 
-\item{init_args}{List of additional arguments for the initialization method.}
+\item{init_args}{list of additional arguments for the initialization function.}
 
-\item{max_iter}{Maximum number of outer iterations.}
+\item{max_iter}{maximum number of outer iterations (default: 100)}
 
-\item{tol}{Convergence tolerance based on objective loss.}
+\item{tol}{convergence tolerance based on objective loss (default: 1e-6)}
 
-\item{tol_r2}{Convergence tolerance based on relative objective improvement.}
+\item{tol_r2}{convergence tolerance based on R\eqn{^2} (default: 0.9999)}
 
-\item{max_kappa}{Maximum condition number warning threshold.}
+\item{max_kappa}{maximum condition number warning threshold (default: 1000)}
 
-\item{eps}{Small positive number for numerical stability.}
+\item{eps}{small positive number for numerical stability (default: 1e-8)}
 
-\item{verbose}{Whether to print progress messages.}
+\item{verbose}{whether to print progress messages (default: FALSE)}
 
-\item{step_size}{Initial line-search step size.}
+\item{step_size}{initial line-search step size (default: 1.0)}
 
-\item{max_iter_optimizer}{Maximum line-search iterations per update.}
+\item{max_iter_optimizer}{maximum line-search iterations per update (default: 10)}
 
-\item{step_shrinkage}{Factor used to shrink rejected line-search steps.}
+\item{step_shrinkage}{factor used to shrink rejected line-search steps (default: 0.5)}
 
-\item{max_no_update}{Maximum consecutive outer iterations with no accepted
-line-search update before stopping as stalled.}
+\item{max_no_update}{maximum consecutive outer iterations with no accepted
+line-search update before stopping as stalled (default: 5)}
 }
 \value{
 An object of class \code{\link{archetypes}}.
 }
 \description{
-Fits probabilistic archetypal analysis (PAA) with one projected-gradient
-optimizer shared across likelihood families. Archetypes are convex
-combinations of family-specific parameter profiles derived from the data.
+Fits probabilistic archetypal analysis (PAA) by minimising the
+log-likelihood of the data of several exponential-family model via
+projected gradient descent (PGD).
+}
+\details{
+\subsection{Observation families}{
+
+PAA models each observation as drawn from an exponential-family distribution
+whose natural parameter is a convex combination of K archetypal profiles.
+Before optimisation begins, each data point is mapped to a fixed profile by
+computing its per-sample MLE parameter under the chosen family (e.g. the raw
+values for \code{"gaussian"}, normalised row totals for \code{"multinomial"}). The
+archetypes are then found as convex combinations of these fixed profiles.
+Built-in families and their data requirements:
+
+\describe{
+\item{\code{gaussian}}{Squared reconstruction error; data can be any real matrix.}
+\item{\code{bernoulli}}{Binary cross-entropy; each entry must lie in [0, 1].}
+\item{\code{poisson}}{Poisson log-likelihood; all entries must be non-negative.}
+\item{\code{multinomial}}{Multinomial log-likelihood; entries must be non-negative
+with positive row sums, treated as count vectors.}
+}
+
+Note: \code{gaussian} PAA is equivalent to standard AA; use \code{\link[=archetypes_pgd]{archetypes_pgd()}}
+instead for a more efficient solver with support for missing data, sample
+weights, and metric scaling.
+}
+}
+\examples{
+toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+archetypes_paa(as.matrix(toy), K = 3)
+
 }
 \references{
 Seth, S., & Eugster, M. J. A. (2014). Probabilistic archetypal analysis.
 arXiv:1312.7604.
+}
+\seealso{
+\code{\link[=run_aa]{run_aa()}} for the common entry point and full parameter documentation.
 }

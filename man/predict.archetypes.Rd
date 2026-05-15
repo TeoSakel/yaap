@@ -38,5 +38,7 @@ reconstructions preserve existing package behavior by scaling each row of
 \code{S \%*\% A} by the corresponding row total of \code{newdata}.
 }
 \seealso{
-\code{\link[=archetypes]{archetypes()}}, \code{\link[=fit_simplex]{fit_simplex()}}
+\code{\link[=fit_simplex]{fit_simplex()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}}, \code{\link[=fitted.archetypes]{fitted.archetypes()}}.
+For class-specific overrides see \code{\link[=predict.directional_archetypes]{predict.directional_archetypes()}} and
+\code{\link[=predict.kernel_archetypes]{predict.kernel_archetypes()}}.
 }

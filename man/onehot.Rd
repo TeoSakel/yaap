@@ -26,9 +26,9 @@ onehot(ind, sparse = FALSE, ...)
 }
 \value{
 A one-hot encoded matrix:
-\itemize{
-\item dense \code{matrix} when \code{sparse = FALSE}
-\item sparse \code{Matrix::dgCMatrix} when \code{sparse = TRUE}
+\describe{
+\item{\code{sparse = FALSE}}{a dense \code{matrix}.}
+\item{\code{sparse = TRUE}}{a sparse \code{Matrix::dgCMatrix}.}
 }
 }
 \description{

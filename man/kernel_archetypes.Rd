@@ -29,9 +29,11 @@ combination of kernel archetypes.}
 
 \item{gram}{Training Gram matrix.}
 
-\item{coordinates}{Optional input-space coordinates \code{coefficients \%*\% data}.
-For nonlinear kernels these are visualization coordinates, not exact
-Hilbert-space archetypes.}
+\item{coordinates}{Optional input-space proxy coordinates, typically
+\code{coefficients \%*\% data}. For linear kernels these equal the true
+Hilbert-space archetypes; for nonlinear kernels they are Euclidean
+approximations only — distances in coordinate plots carry no
+kernel-metric meaning. Pass \code{NULL} to suppress coordinate plots.}
 
 \item{slack}{Non-negative coefficient row-sum relaxation.}
 

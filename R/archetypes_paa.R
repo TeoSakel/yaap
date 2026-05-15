@@ -1,28 +1,57 @@
 #' Probabilistic Archetypal Analysis using Projected Gradient Descent
 #'
-#' Fits probabilistic archetypal analysis (PAA) with one projected-gradient
-#' optimizer shared across likelihood families. Archetypes are convex
-#' combinations of family-specific parameter profiles derived from the data.
+#' Fits probabilistic archetypal analysis (PAA) by minimising the
+#' log-likelihood of the data of several exponential-family model via
+#' projected gradient descent (PGD).
 #'
-#' @param x Data matrix with rows as samples.
-#' @param K Number of archetypes.
-#' @param family Observation family. One of `"gaussian"`, `"bernoulli"`,
-#'   `"poisson"`, or `"multinomial"`.
-#' @param init Initialization method, function, or coordinate matrix.
-#' @param init_args List of additional arguments for the initialization method.
-#' @param max_iter Maximum number of outer iterations.
-#' @param tol Convergence tolerance based on objective loss.
-#' @param tol_r2 Convergence tolerance based on relative objective improvement.
-#' @param max_kappa Maximum condition number warning threshold.
-#' @param eps Small positive number for numerical stability.
-#' @param verbose Whether to print progress messages.
-#' @param step_size Initial line-search step size.
-#' @param max_iter_optimizer Maximum line-search iterations per update.
-#' @param step_shrinkage Factor used to shrink rejected line-search steps.
-#' @param max_no_update Maximum consecutive outer iterations with no accepted
-#'   line-search update before stopping as stalled.
+#' @param x data matrix (rows = samples, columns = dimensions).
+#' @param K number of archetypes.
+#' @param family observation family. One of `"gaussian"`, `"bernoulli"`,
+#'   `"poisson"`, or `"multinomial"` (default: `"gaussian"`).
+#' @param init initialization method; see [run_aa()] for available options.
+#' @param init_args list of additional arguments for the initialization function.
+#' @param max_iter maximum number of outer iterations (default: 100)
+#' @param tol convergence tolerance based on objective loss (default: 1e-6)
+#' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
+#' @param max_kappa maximum condition number warning threshold (default: 1000)
+#' @param eps small positive number for numerical stability (default: 1e-8)
+#' @param verbose whether to print progress messages (default: FALSE)
+#' @param step_size initial line-search step size (default: 1.0)
+#' @param max_iter_optimizer maximum line-search iterations per update (default: 10)
+#' @param step_shrinkage factor used to shrink rejected line-search steps (default: 0.5)
+#' @param max_no_update maximum consecutive outer iterations with no accepted
+#'   line-search update before stopping as stalled (default: 5)
+#'
+#' @details
+#' ## Observation families
+#'
+#' PAA models each observation as drawn from an exponential-family distribution
+#' whose natural parameter is a convex combination of K archetypal profiles.
+#' Before optimisation begins, each data point is mapped to a fixed profile by
+#' computing its per-sample MLE parameter under the chosen family (e.g. the raw
+#' values for `"gaussian"`, normalised row totals for `"multinomial"`). The
+#' archetypes are then found as convex combinations of these fixed profiles.
+#' Built-in families and their data requirements:
+#'
+#' \describe{
+#'   \item{`gaussian`}{Squared reconstruction error; data can be any real matrix.}
+#'   \item{`bernoulli`}{Binary cross-entropy; each entry must lie in \[0, 1\].}
+#'   \item{`poisson`}{Poisson log-likelihood; all entries must be non-negative.}
+#'   \item{`multinomial`}{Multinomial log-likelihood; entries must be non-negative
+#'                        with positive row sums, treated as count vectors.}
+#' }
+#'
+#' Note: `gaussian` PAA is equivalent to standard AA; use [archetypes_pgd()]
+#' instead for a more efficient solver with support for missing data, sample
+#' weights, and metric scaling.
 #'
 #' @returns An object of class \code{\link{archetypes}}.
+#'
+#' @seealso [run_aa()] for the common entry point and full parameter documentation.
+#'
+#' @examples
+#' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+#' archetypes_paa(as.matrix(toy), K = 3)
 #'
 #' @references
 #' Seth, S., & Eugster, M. J. A. (2014). Probabilistic archetypal analysis.

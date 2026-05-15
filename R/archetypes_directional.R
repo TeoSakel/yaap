@@ -1,52 +1,75 @@
 #' Directional Archetypal Analysis
 #'
-#' Fits a matrix-first directional archetypal analysis model. Directional AA
-#' models observations by their direction rather than Euclidean magnitude:
-#' archetypes are convex combinations of row-normalized input data, optionally
-#' flipped onto a common hemisphere, and sample reconstructions are evaluated by
-#' a Watson-style polarity-invariant angular loss.
+#' Fits directional archetypal analysis (DAA) via projected gradient descent,
+#' modelling observations by their orientation rather than Euclidean magnitude.
 #'
-#' @param x Dense numeric data matrix (rows = samples, columns = dimensions).
-#' @param K Number of archetypes.
-#' @param init Initialization method. Defaults to `"dirichlet"`; see [aa_init()]
-#'   for the full list of available methods. A numeric `K x ncol(data)` matrix
-#'   may also be supplied as initial archetype directions.
-#' @param init_args List of additional arguments for the initialization method.
-#' @param weights Optional non-negative sample weights.
-#' @param max_iter Maximum number of outer iterations.
-#' @param tol Convergence tolerance based on directional residual loss.
-#' @param tol_r2 Convergence tolerance based on directional R-squared.
-#' @param max_kappa Accepted for consistency with other fitters. Directional AA
-#'   does not solve by matrix inversion, so condition numbers are not computed.
-#' @param eps Small positive number for numerical stability.
-#' @param verbose Whether to print progress messages.
-#' @param hemisphere Hemisphere handling. `"pca"` flips generator rows onto the
-#'   dominant PCA hemisphere; `"none"` leaves signs unchanged.
-#' @param precision Precision weighting. `"row_norm"` keeps row magnitudes in
+#' @param x dense numeric data matrix (rows = samples, columns = dimensions).
+#' @param K number of archetypes.
+#' @param init initialization method; see [run_aa()] for available options.
+#' @param init_args list of additional arguments for the initialization function.
+#' @param weights optional non-negative sample weights (default: NULL)
+#' @param max_iter maximum number of outer iterations (default: 100)
+#' @param tol convergence tolerance based on directional residual loss (default: 1e-6)
+#' @param tol_r2 convergence tolerance based on directional R\eqn{^2} (default: 0.9999)
+#' @param max_kappa accepted for consistency with other fitters; directional AA
+#'   does not solve by matrix inversion, so condition numbers are not computed
+#'   (default: 1000)
+#' @param eps small positive number for numerical stability (default: 1e-8)
+#' @param verbose whether to print progress messages (default: FALSE)
+#' @param hemisphere hemisphere handling. `"pca"` flips generator rows onto the
+#'   dominant PCA hemisphere; `"none"` leaves signs unchanged (default: `"pca"`)
+#' @param precision precision weighting. `"row_norm"` keeps row magnitudes in
 #'   the Watson loss, matching Olsen et al.; `"unit"` gives every row equal
-#'   precision.
-#' @param step_size Initial projected-gradient step size.
-#' @param max_iter_optimizer Maximum line-search iterations per update.
-#' @param step_shrinkage Factor used to shrink rejected line-search steps.
-#' @param max_no_update Maximum consecutive outer iterations with no accepted
-#'   line-search update before stopping as stalled.
-#'
-#' @returns An object of class `directional_archetypes`, extending
-#'   \code{\link{archetypes}}.
+#'   precision (default: `"row_norm"`)
+#' @param step_size initial projected-gradient step size (default: 1.0)
+#' @param max_iter_optimizer maximum line-search iterations per update (default: 10)
+#' @param step_shrinkage factor used to shrink rejected line-search steps (default: 0.5)
+#' @param max_no_update maximum consecutive outer iterations with no accepted
+#'   line-search update before stopping as stalled (default: 5)
 #'
 #' @details
+#' ## Directional AA
+#'
+#' Standard AA minimises squared Euclidean reconstruction error, which conflates
+#' direction and magnitude. Directional AA row-normalises the input so archetypes
+#' are convex combinations of unit vectors, and evaluates reconstructions via a
+#' Watson-style angular loss that is polarity-invariant: a sample and its antipodal
+#' reflection contribute equally. This makes the method suitable for data where only
+#' orientation matters, such as neuroimaging source vectors or unit-sphere embeddings.
+#'
+#' ## Hemisphere alignment
+#'
+#' The Watson loss treats a unit vector and its negation as identical. Without
+#' alignment, opposing signs can produce phantom "average direction" archetypes
+#' near the equator.
+#'
+#' `hemisphere = "pca"` (default) projects each row onto the first principal
+#' component and flips rows with a negative dot product, so all generators lie
+#' on the same side. `hemisphere = "none"` leaves signs unchanged; use this
+#' when the data are already hemispherically consistent.
+#'
+#' ## Precision weighting
+#'
+#' The Watson loss weights each sample's angular residual by the squared norm
+#' of its reconstruction. `precision = "row_norm"` (default) retains the
+#' original row magnitudes, giving naturally larger observations higher influence
+#' matching the formulation in Olsen et al. (2022). `precision = "unit"`
+#' normalises every row to unit length before computing the loss, treating all
+#' samples as equally reliable.
+#'
 #' ## Initialization
 #'
-#' The default `"dirichlet"` initialization draws the generator matrix
-#' `B` (K \u00d7 N) as a Dirichlet(1, \u2026, 1) sample \u2014 equivalently, exponential random
-#' weights normalized to sum to one \u2014 so archetypes start as random convex
-#' combinations over the row-normalized data. `S` is then fitted from the
-#' resulting `A` via [fit_simplex()], exactly as all other initialization
-#' methods do.
+#' The default `dirichlet` initialization draws the `coefficient` matrix
+#' as a $\text{Dirichlet}\(1, \..., 1\)$, which is the simplex equivalent
+#' of the uniform distribution. This differs from `random` (the [aa_init()]
+#' method that selects K rows of the data uniformly at random), which initializes
+#' `B` as a one-hot matrix so that archetypes start at actual data points
+#' on the hemisphere.
 #'
-#' This differs from `"random"` (the [aa_init()] method that selects K rows
-#' of the data uniformly at random), which initializes `B` as a one-hot matrix
-#' so that archetypes start at actual data points on the hemisphere.
+#' @returns An object of class \code{\link{directional_archetypes}}, extending
+#'   \code{\link{archetypes}}.
+#'
+#' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'
 #' @references
 #' Olsen, A. S., Høegh, R. M. T., Hinrich, J. L., Madsen, K. H., & Mørup, M.

@@ -20,10 +20,10 @@ samples), or \code{"compositions"} (N x K weights of samples over archetypes).}
 }
 \value{
 A tibble. Column names depend on \code{matrix}:
-\itemize{
-\item \code{"coordinates"}: \code{archetype}, \code{term}, \code{value} (K * M rows)
-\item \code{"coefficients"}: \code{archetype}, \code{sample}, \code{value} (K * N rows)
-\item \code{"compositions"}: \code{sample}, \code{archetype}, \code{value} (N * K rows)
+\describe{
+\item{\code{"coordinates"}}{\code{archetype}, \code{term}, \code{value} columns (K * M rows).}
+\item{\code{"coefficients"}}{\code{archetype}, \code{sample}, \code{value} columns (K * N rows).}
+\item{\code{"compositions"}}{\code{sample}, \code{archetype}, \code{value} columns (N * K rows).}
 }
 }
 \description{

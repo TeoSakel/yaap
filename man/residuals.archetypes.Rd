@@ -21,3 +21,7 @@ Residuals in the same representation as \code{data}.
 \description{
 Residuals for archetypes objects
 }
+\seealso{
+\code{\link[=fitted.archetypes]{fitted.archetypes()}}, \code{\link[=predict.archetypes]{predict.archetypes()}}.
+For kernel fits see \code{\link[=residuals.kernel_archetypes]{residuals.kernel_archetypes()}}.
+}

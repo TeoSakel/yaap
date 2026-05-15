@@ -1,24 +1,22 @@
-#' Perform Archetypal Analysis using NNLS
+#' Archetypal Analysis using Non-Negative Least Squares
+#'
+#' Fits archetypal analysis (AA) by alternating between a non-negative
+#' least-squares (NNLS) step for sample compositions and an ordinary
+#' least-squares (OLS) step for archetype coordinates.
 #'
 #' @param x data matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes
-#' @param init function, method string, or numeric coordinate matrix to initialize
-#'   archetypes (default: `"furthest_sum"`). When a matrix is supplied it must
-#'   have dimension `K x ncol(x)`. Rows outside the convex hull of `x` are
-#'   projected into it with a warning; row names, when present, are used as
-#'   archetype names.
-#' @param init_args list of additional arguments for the initialization function
+#' @param init initialization method; see [run_aa()] for available options.
+#' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional vector of sample weights (default: NULL)
-#' @param scale behaves like the `scale.` argument in base R `scale` function.
-#'   with the additional option to specify a custom positive-semidefine matrix
-#'   for metric embedding (default: TRUE, i.e. column-wise unit variance)
+#' @param scale scaling or metric embedding used before fitting; see
+#'   [archetypes_pgd()] for details (default: TRUE).
 #' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
 #' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
-#' @param sd_threshold threshold for feature standard deviation to filter
-#'   low-variance features (default: 1e-6)
+#' @param sd_threshold threshold for feature standard deviation to filter low-variance features (default: 1e-6).
 #' @param max_iter maximum number of iterations (default: 100)
 #' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
-#' @param tol_r2 convergence tolerance based on R^2 (default: 0.9999)
+#' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
 #' @param max_kappa maximum condition number for archetypes (default: 1000)
 #' @param eps small positive number to ensure numerical stability
 #'   (default: 0 for sparse input 1e-8 for dense)
@@ -28,7 +26,35 @@
 #' @param max_no_update maximum consecutive iterations without improvement before
 #'   considering NNLS stalled (default: 5)
 #'
-#' @returns An object of class \code{\link{archetypes}}
+#' @details
+#' ## NNLS solver
+#'
+#' Standard AA alternates between updating the composition matrix S (holding
+#' archetypes fixed) and the archetype coordinates A (holding compositions fixed).
+#' The NNLS solver reformulates each S-update as a non-negative least-squares
+#' problem with a simplex-constraint row appended (the "big-M" trick), making it
+#' well-suited for settings where NNLS is more numerically stable than projected
+#' gradient descent, such as sparse inputs.
+#'
+#' ## OLS and big-M
+#'
+#' The A-update solves `min_A ||X - SA||_F^2` as an unconstrained least-squares
+#' problem. Three solvers are available via `ols_solver`:
+#'
+#' \describe{
+#'   \item{`"qr"`}{QR factorisation via `qr.solve()`; fast and numerically stable (default).}
+#'   \item{`"ginv"`}{Moore-Penrose pseudoinverse via `MASS::ginv()`; use when S is rank-deficient.}
+#'   \item{`"BFGS"`}{Gradient-based optimisation; slow, provided for reference.}
+#' }
+#'
+#' `bigM` is the weight of the row appended to enforce the sum-to-one constraint.
+#' When `NULL` (default) it is set automatically from the data scale. Increase it
+#' if compositions drift from the simplex; decrease it if the solver is slow or
+#' numerically unstable.
+#'
+#' @returns An object of class \code{\link{archetypes}}.
+#'
+#' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'
 #' @examples
 #' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))

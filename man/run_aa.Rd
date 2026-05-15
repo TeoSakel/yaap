@@ -37,28 +37,20 @@ run_aa(x, ...)
 \method{run_aa}{fd}(x, K, ...)
 }
 \arguments{
-\item{x}{data matrix (rows = samples, columns = dimensions), or an object
+\item{x}{numeric matrix (rows = samples, columns = features), or an object
 with a class-specific \code{run_aa()} method.}
 
-\item{...}{method-specific arguments. For \code{"pgd"}, these are \code{delta},
-\code{missing}, \code{pseudo_pgd}, \code{step_size}, \code{max_iter_optimizer},
-\code{step_shrinkage}, and \code{max_no_update}. For \code{"nnls"}, these are
-\code{ols_solver}, \code{bigM}, and \code{max_no_update}. For \code{"kernel"}, these include
-\code{kernel}, \code{kernel_args}, \code{delta}, \code{pseudo_pgd}, \code{step_size},
-\code{max_iter_optimizer}, \code{step_shrinkage}, and \code{max_no_update}. For
-\code{"directional"}, these include \code{hemisphere}, \code{precision}, \code{step_size},
-\code{max_iter_optimizer}, \code{step_shrinkage}, and \code{max_no_update}. For \code{"paa"},
-these include \code{step_size}, \code{max_iter_optimizer}, \code{step_shrinkage}, and
-\code{max_no_update}.}
+\item{...}{additional arguments passed to the selected solver. See
+\code{\link[=archetypes_pgd]{archetypes_pgd()}}, \code{\link[=archetypes_nnls]{archetypes_nnls()}}, \code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}},
+\code{\link[=archetypes_directional]{archetypes_directional()}}, and \code{\link[=archetypes_paa]{archetypes_paa()}} for method-specific
+parameters.}
 
-\item{formula}{formula selecting variables from \code{data} or the formula
-environment for formula input. The response, when present, is ignored.}
+\item{formula}{formula selecting variables from \code{data}. The response, when
+present, is ignored.}
 
-\item{data}{data matrix (rows = samples, columns = dimensions), an optional
-data frame for formula input, or an object with a class-specific \code{run_aa()}
-method.}
+\item{data}{optional data frame supplying variables for formula input.}
 
-\item{K}{number of archetypes}
+\item{K}{number of archetypes.}
 
 \item{subset}{optional expression selecting rows before fitting formula input.}
 
@@ -68,61 +60,84 @@ input. Defaults to \code{\link[stats:na.omit]{stats::na.omit()}}.}
 \item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, \code{"kernel"},
 \code{"directional"}, or \code{"paa"} (default: \code{"pgd"}).}
 
-\item{family}{observation family for \code{method = "paa"}. Defaults to
+\item{family}{observation family passed to \code{method = "paa"}. Defaults to
 \code{"gaussian"}.}
 
-\item{init}{function, method string, or numeric coordinate matrix to initialize
-archetypes. \code{NULL} uses \code{"furthest_sum"} except for \code{method = "directional"}, where it uses \code{"random"}. When a matrix is supplied it
-must have dimension \verb{K x ncol(x)}. Rows outside the allowed data hull
-are projected into it with a warning; row names, when present, are used as
-archetype names.}
+\item{init}{initialization method for archetype starting coordinates.
+Accepts a function, a method name string, or a numeric (K x M) coordinate
+matrix. \code{NULL} selects \code{"furthest_sum"} for all methods except
+\code{"directional"}, which defaults to \code{"dirichlet"}. When a matrix is
+supplied it must have dimension \verb{K x ncol(x)}; row names are used as
+archetype names. Available method strings:
+\describe{
+\item{\code{"furthest_sum"}}{greedily maximises the sum of distances from the
+current archetype set (Mørup & Hansen 2012). Default for most methods.}
+\item{\code{"furthest_first"}}{greedy farthest-point selection.}
+\item{\code{"kmeans_pp"}}{probabilistic farthest-point selection (soft
+furthest-first).}
+\item{\code{"random"}}{uniformly random sample of K rows.}
+\item{\code{"dirichlet"}}{random convex combinations sampled from a
+Dirichlet distribution. Default for \code{"directional"}.}
+\item{\code{"aa_pp"} / \code{"aa_pp_mc"}}{AA++ and its MCMC approximation
+(Mair & Sjölund 2023).}
+\item{\code{"coreset_initfn"}}{furthest-sum on a coreset subsample
+(Mair & Brefeld 2019).}
+\item{\code{"hull_outmost"}}{hull-candidate outmost-vote ranking.}
+}
+See \code{vignette("initialization", package = "YAAAP")} for a comparison.}
 
-\item{init_args}{list of additional arguments for the initialization function}
+\item{init_args}{list of additional arguments for the initialization function.}
 
-\item{weights}{optional vector of sample weights (default: NULL). Weights are
-internally scaled to have mean 1 and then are square-rooted.}
+\item{weights}{optional numeric vector of sample weights (default: \code{NULL}).
+Internally scaled to mean 1 and square-rooted before use.}
 
-\item{scale}{scaling or metric embedding used before fitting. \code{TRUE} applies
-the default z-score preprocessing, \code{FALSE} leaves columns on their original
-scale, a positive numeric vector divides columns by user-supplied scale
-factors, and a symmetric positive-definite matrix applies the corresponding
-feature metric embedding in the original data column space.}
+\item{scale}{pre-fitting scaling or metric embedding. \code{TRUE} applies z-score
+standardization; \code{FALSE} leaves columns on their original scale; a
+positive numeric vector divides by user-supplied scale factors; a symmetric
+positive-definite matrix applies the corresponding feature metric.}
 
-\item{robust}{whether to use Tukey bisquare row reweighting (default: FALSE)}
+\item{robust}{whether to use Tukey bisquare row reweighting (default: \code{FALSE}).}
 
-\item{tukey_c}{tuning constant for Tukey bisquare weights (default: 4.685)}
+\item{tukey_c}{tuning constant for Tukey bisquare weights (default: 4.685).}
 
-\item{sd_threshold}{threshold for feature standard deviation to filter
-low-variance features (default: 1e-6)}
+\item{sd_threshold}{threshold for feature standard deviation below which
+columns are dropped before fitting (default: 1e-6).}
 
-\item{max_iter}{maximum number of iterations (default: 100)}
+\item{max_iter}{maximum number of outer iterations (default: 100).}
 
-\item{tol}{convergence tolerance based on residual sum of squares (default: 1e-6)}
+\item{tol}{convergence tolerance on the residual sum of squares (default: 1e-6).}
 
-\item{tol_r2}{convergence tolerance based on R^2 (default: 0.9999)}
+\item{tol_r2}{convergence tolerance on R\eqn{^2} (default: 0.9999).}
 
-\item{max_kappa}{maximum condition number for archetypes (default: 1000)}
+\item{max_kappa}{maximum condition number for the archetype matrix (default: 1000).}
 
-\item{eps}{small positive number to ensure numerical stability
-(default: 0 for sparse input 1e-8 for dense)}
+\item{eps}{small positive number for numerical stability
+(default: 0 for sparse input, 1e-8 for dense).}
 
-\item{verbose}{whether to print progress messages (default: FALSE)}
+\item{verbose}{whether to print progress messages (default: \code{FALSE}).}
 
-\item{missing}{whether to fit the missing-data PGD objective. When \code{TRUE},
-only observed entries are optimized; dense \code{NA} values are treated as
-missing and sparse structural zeros are treated as missing.}
-
-\item{nrep}{number of random restarts. The optimizer is run \code{nrep} times
-from independent initializations and the fit with the lowest final loss
+\item{nrep}{number of random restarts; the best fit (lowest final loss)
 is returned (default: 1).}
 }
 \value{
-An object of class \code{\link{archetypes}}
+An object of class \code{archetypes} with components:
+\describe{
+\item{\code{coordinates}}{(K x M) archetype coordinates in the original feature space.}
+\item{\code{coefficients}}{(K x N) weights expressing each archetype as a convex combination of samples.}
+\item{\code{compositions}}{(N x K) row-stochastic weights expressing each sample as a convex combination of archetypes.}
+\item{\code{loss}}{data frame of per-iteration metrics (\code{loss}, \code{r2}, \code{k_S}, \code{k_A}).}
+\item{\code{converged}}{logical convergence flag.}
+\item{\code{data}}{original data passed to the fitter.}
+\item{\code{call}}{the matched call.}
+\item{\code{family}}{observation family string (e.g. \code{"gaussian"}).}
+\item{\code{init}}{initial archetype coordinates (when available).}
+\item{\code{slack}, \code{weights}}{optional relaxation and sample-weight parameters.}
+}
 }
 \description{
-\code{run_aa()} is the common entry point for fitting archetypal analysis models.
-It handles shared validation, preprocessing, initialization, and output
-formatting, then delegates the optimization loop to the selected method.
+Common entry point for fitting archetypal analysis models. Dispatches to the
+solver selected by \code{method}. For solver-specific arguments, theoretical
+background, and class-specific return slots, see the individual solver pages.
 }
 \details{
 \code{run_aa.fd()} fits archetypal analysis to the coefficient matrix of an
@@ -155,4 +170,12 @@ fit_fd <- run_aa(temp_fd, K = 3, max_iter = 20)
 arch_fd <- coordinates_fd(fit_fd)
 }
 
+}
+\seealso{
+Solvers: \code{\link[=archetypes_pgd]{archetypes_pgd()}}, \code{\link[=archetypes_nnls]{archetypes_nnls()}}, \code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}},
+\code{\link[=archetypes_directional]{archetypes_directional()}}, \code{\link[=archetypes_paa]{archetypes_paa()}}.
+Post-fit: \code{\link[=plot.archetypes]{plot.archetypes()}}, \code{\link[=predict.archetypes]{predict.archetypes()}},
+\code{\link[=fitted.archetypes]{fitted.archetypes()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}}, \code{\link[=anames]{anames()}}.
+Model selection: \code{\link[=AIC.archetypes]{AIC.archetypes()}}, \code{\link[=tune_archetypes]{tune_archetypes()}}.
+Tidy output: \code{\link[=tidy.archetypes]{tidy.archetypes()}}, \code{\link[=glance.archetypes]{glance.archetypes()}}, \code{\link[=augment.archetypes]{augment.archetypes()}}.
 }

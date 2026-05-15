@@ -25,6 +25,5 @@ linear, if constraint is relaxed) combination of samples.
 
 }
 \seealso{
-\code{\link[=archetypes]{archetypes()}}, \code{\link[=fitted.archetypes]{fitted.archetypes()}},
-\code{\link[=predict.archetypes]{predict.archetypes()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}}
+\code{\link[=fitted.archetypes]{fitted.archetypes()}}, \code{\link[=predict.archetypes]{predict.archetypes()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}}
 }

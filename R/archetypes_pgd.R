@@ -1,13 +1,13 @@
 #' Archetypes Analysis using Projected Gradient Descent
 #'
+#' Fits an archetypal analysis (AA) model by minimising the reconstruction error
+#' \eqn{\|X - SA\|_F^2}, where \eqn{S} is the composition matrix and \eqn{A} is
+#' the archetype coordinates via projected gradient descent (PGD).
+#'
 #' @param x data matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes
-#' @param init function, method string, or numeric coordinate matrix to initialize
-#'   archetypes (default: `"furthest_sum"`). When a matrix is supplied it must
-#'   have dimension `K x ncol(x)`. Rows outside the `delta`-relaxed convex
-#'   hull of `x` are projected into it with a warning; row names, when
-#'   present, are used as archetype names.
-#' @param init_args list of additional arguments for the initialization function
+#' @param init initialization method; see [run_aa()] for available options.
+#' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional vector of sample weights (default: NULL)
 #' @param scale scaling or metric embedding used before fitting. `TRUE` applies
 #'   the default z-score preprocessing, `FALSE` leaves columns on their original
@@ -35,6 +35,84 @@
 #' @param step_shrinkage factor to reduce step size if no improvement during line search (default: 0.5)
 #' @param max_no_update maximum consecutive outer iterations with no accepted
 #'   line-search update before PGD stops as stalled (default: 5)
+#'
+#' @details
+#' ## Model family
+#'
+#' Three arguments change *which* objective is optimised and therefore the
+#' statistical family of the fitted model:
+#'
+#' * **`delta`** relaxes the convexity constraint on the archetypes.  With the
+#'   default `delta = 0`, every archetype is a convex combination of observed
+#'   data points (i.e., it lies inside or on the boundary of the data convex
+#'   hull).  Setting `delta > 0` allows archetypes to step outside the hull by
+#'   up to a factor \eqn{1 + \delta} and inside by up to \eqn{1 - \delta} —
+#'   useful when the true extremes are absent from the data due to truncation or
+#'   censoring.  Use with care: large values remove the interpretability
+#'   guarantee that archetypes are representable as extreme prototypes, and the
+#'   uniqueness result of Theorem 1 in Mørup & Hansen (2012) no longer holds.
+#'
+#' * **`robust`** switches the loss from ordinary squared error to an
+#'   iteratively re-weighted version based on Tukey bisquare row weights.
+#'   Observations with large residuals receive reduced influence at each
+#'   iteration, so that outliers cannot monopolise archetypes.  The sensitivity
+#'   of the downweighting is controlled by `tukey_c`: smaller values are more
+#'   aggressive, the default of 4.685 is the standard choice for 95% asymptotic
+#'   efficiency under Gaussian noise.  Note that `robust = TRUE` is incompatible
+#'   with `missing = TRUE`.
+#'
+#' * **`missing`** activates the missing-data objective described in Section 3.5
+#'   of Mørup & Hansen (2012).  When `TRUE`, only observed entries contribute to
+#'   the loss and the archetype profiles are normalised entry-wise so that each
+#'   archetype is a weighted average of the *observed* values of the data points
+#'   that define it.  For dense matrices, `NA` marks missing entries; for sparse
+#'   \code{sparseMatrix} inputs, structural zeros are treated as missing.  The
+#'   default is `any(is.na(x))`, so missing-data mode is activated automatically
+#'   when the input contains `NA`s.  For kernel and probabilistic variants of AA
+#'   see \code{vignette("non-gaussian-aa", package = "YAAAP")}.
+#'
+#' ## Algorithm mechanics and tuning
+#'
+#' The solver alternates gradient steps for \eqn{S} and \eqn{B} with an inner
+#' line search of up to `max_iter_optimizer` steps (default 10) that shrinks the
+#' step size by `step_shrinkage` (default 0.5) until the objective decreases.
+#' The outer loop repeats for at most `max_iter` iterations (default 100).
+#'
+#' When `pseudo_pgd = TRUE` (the default), the gradients are projected onto the
+#' tangent space of the \eqn{\ell_1} unit sphere before the simplex projection
+#' step.  This is the "pseudo-PGD" variant of Mørup & Hansen (2012), which
+#' removes the radial gradient component and thereby prevents the step from
+#' increasing the \eqn{\ell_1} norm before projection.  In practice it leads to
+#' larger effective steps and faster convergence; set `pseudo_pgd = FALSE` to
+#' use the plain projected gradient if needed.
+#'
+#' `step_size` sets the initial step size for both \eqn{S} and \eqn{B} updates
+#' (and for \eqn{\alpha} when `delta > 0`).  If no step in the inner line
+#' search is accepted for `max_no_update` consecutive outer iterations (default
+#' 5), the solver declares the iterate stalled and stops early.  Step sizes are
+#' also reduced after a failed outer iteration, so in practice the solver
+#' self-tunes step sizes down as it approaches a local minimum; there is usually
+#' no need to change `step_size` unless the default is far from the optimal
+#' scale for a particular dataset.
+#'
+#' Convergence is declared when the relative decrease in RSS between successive
+#' accepted updates falls below `tol` (default 1e-6) *or* \eqn{R^2} exceeds
+#' `tol_r2` (default 0.9999).  If `max_kappa` is exceeded by the condition
+#' number of the archetype matrix, a warning is issued and the iteration is
+#' logged but optimisation continues.
+#'
+#' ## Preprocessing
+#'
+#' Before fitting, features with standard deviation below `sd_threshold`
+#' (default 1e-6) are dropped to avoid ill-conditioning; their values are
+#' restored as column means in the output.  The `scale` argument controls the
+#' feature metric: `TRUE` (default) applies column-wise z-scoring, `FALSE`
+#' leaves columns on their original scale, a positive numeric vector divides
+#' each column by the supplied factor, and a symmetric positive-definite matrix
+#' defines a full quadratic feature metric — see
+#' \code{vignette("non-gaussian-aa", package = "YAAAP")} for the metric-AA use
+#' case.  Sample-level `weights` re-weight rows in the loss but do not affect
+#' the preprocessing step.
 #'
 #' @returns An object of class \code{\link{archetypes}}
 #'

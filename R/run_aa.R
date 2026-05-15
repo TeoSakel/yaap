@@ -113,11 +113,28 @@ run_aa.formula <- function(formula,
 #'   `"directional"`, or `"paa"` (default: `"pgd"`).
 #' @param family observation family passed to `method = "paa"`. Defaults to
 #'   `"gaussian"`.
-#' @param init function name, method string, or numeric coordinate matrix used
-#'   to initialize archetypes. `NULL` uses `"furthest_sum"` for all methods
-#'   except `"directional"`, which uses `"random"`. When a matrix is supplied
-#'   it must have dimension `K x ncol(x)`; row names are used as archetype
-#'   names.
+#' @param init initialization method for archetype starting coordinates.
+#'   Accepts a function, a method name string, or a numeric (K x M) coordinate
+#'   matrix. `NULL` selects `"furthest_sum"` for all methods except
+#'   `"directional"`, which defaults to `"dirichlet"`. When a matrix is
+#'   supplied it must have dimension `K x ncol(x)`; row names are used as
+#'   archetype names. Available method strings:
+#' \describe{
+#'   \item{`"furthest_sum"`}{greedily maximises the sum of distances from the
+#'     current archetype set (Mørup & Hansen 2012). Default for most methods.}
+#'   \item{`"furthest_first"`}{greedy farthest-point selection.}
+#'   \item{`"kmeans_pp"`}{probabilistic farthest-point selection (soft
+#'     furthest-first).}
+#'   \item{`"random"`}{uniformly random sample of K rows.}
+#'   \item{`"dirichlet"`}{random convex combinations sampled from a
+#'     Dirichlet distribution. Default for `"directional"`.}
+#'   \item{`"aa_pp"` / `"aa_pp_mc"`}{AA++ and its MCMC approximation
+#'     (Mair & Sjölund 2023).}
+#'   \item{`"coreset_initfn"`}{furthest-sum on a coreset subsample
+#'     (Mair & Brefeld 2019).}
+#'   \item{`"hull_outmost"`}{hull-candidate outmost-vote ranking.}
+#' }
+#'   See `vignette("initialization", package = "YAAAP")` for a comparison.
 #' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional numeric vector of sample weights (default: `NULL`).
 #'   Internally scaled to mean 1 and square-rooted before use.
@@ -328,6 +345,7 @@ run_aa.fd <- function(x, K, ...) {
     fit[["loss"]][["loss"]][fit[["i"]] + 1L]
 }
 
+# TODO: refactor to work like MASS::rlm()
 .aa_weight_fun <- function(robust, tukey_c) {
     if (!robust)
         return(NULL)
