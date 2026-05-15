@@ -52,7 +52,7 @@ test_that("archetypes_paa fits supported families with shared invariants", {
         expect_matrix_dim(fit[["compositions"]], nrow(cases[[family]]), 3L)
         expect_row_stochastic(fit[["coefficients"]])
         expect_row_stochastic(fit[["compositions"]])
-        expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+        expect_true(is_all_finite(fit[["loss"]][["loss"]]))
         expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
     }
 })
@@ -69,7 +69,7 @@ test_that("run_aa dispatches to PAA", {
 
     expect_s3_class(fit, "archetypes")
     expect_identical(fit[["family"]], "bernoulli")
-    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+    expect_true(is_all_finite(fit[["loss"]][["loss"]]))
 })
 
 test_that("PAA validates family-specific inputs", {

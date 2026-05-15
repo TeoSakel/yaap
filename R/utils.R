@@ -15,11 +15,49 @@
     defaults
 }
 
+# Scalar / Vector Predicates -------------------------------------------------------------------
+
+# A single TRUE or FALSE value.
+is_logical <- function(x) isTRUE(x) || isFALSE(x)
+
+# A single finite numeric value.
+is_number <- function(x) is.numeric(x) && length(x) == 1L && is.finite(x)
+
+# A single finite numeric value strictly greater than zero.
+is_positive <- function(x) is_number(x) && x > 0
+
+# A single finite numeric value greater than or equal to zero.
+is_non_negative <- function(x) is_number(x) && x >= 0
+
+# A single positive whole number (length-1, finite, integer-valued, >= 1).
+is_count <- function(x, start_from = 1L) is_number(x) && x == as.integer(x) && x >= start_from
+
+# A numeric vector or matrix with no non-finite values (NA, NaN, Inf, -Inf).
+is_all_finite <- function(x) is.numeric(x) && all(is.finite(x))
+
+is_all_positive <- function(x) is_all_finite(x) && all(x > 0)
+
+is_all_non_negative <- function(x) is_all_finite(x) && all(x >= 0)
+
+is_row_stochastic <- function(x, tol = sqrt(.Machine$double.eps)) {
+    Sx <- tryCatch(rowSums(x), error = function(e) NULL)
+    if (is.null(Sx)) return(FALSE)
+    vals <- if (inherits(x, "Matrix")) methods::slot(x, "x") else as.numeric(x)
+    non_negative <- all(is.finite(vals)) && all(vals >= -tol)
+    non_negative && isTRUE(all.equal(Sx, rep(1, length(Sx)), check.attributes = FALSE, tolerance = tol))
+}
+
+# A single character string.
+is_single_string <- function(x) is.character(x) && length(x) == 1L
+
+# A single non-empty character string.
+is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
+
 # Weighting Function for Robust Archetypal Analysis ---------------------------------------------
 
 # Tukey's bisquare row weights from squared row residual norms.
 .aa_bisquare_weights <- function(row_rss, c = 4.685) {
-    stopifnot("`c` must be positive" = length(c) == 1L && is.finite(c) && c > 0)
+    stopifnot("`c` must be positive" = is_positive(c))
     row_resid <- sqrt(pmax(row_rss, 0))
     scale <- stats::mad(row_resid, center = 0)
     if (!is.finite(scale) || scale <= .Machine$double.eps)
@@ -41,8 +79,7 @@
 
 .aa_check_row_weights <- function(row_weights, n) {
     stopifnot("row_weights must match rows in X" = length(row_weights) == n)
-    stopifnot("row_weights contain NA values" = !any(is.na(row_weights)))
-    stopifnot("row_weights must be non-negative" = all(row_weights >= 0))
+    stopifnot("row_weights must be finite and non-negative" = is_all_non_negative(row_weights))
     invisible(TRUE)
 }
 
@@ -176,26 +213,62 @@ effic <- function(X, Y) {
     sum(Sy * chol2inv(cx))
 }
 
+# Truncated symmetric eigendecomposition: top-k eigenvalues and eigenvectors of
+# S. Uses RSpectra or irlba when available, otherwise falls back to base eigen().
+# Returns list(d = eigenvalues, V = eigenvectors), with near-zero values pruned.
+.aa_sym_eigen <- function(S, k) {
+    if (requireNamespace("RSpectra", quietly = TRUE)) {
+        ev <- RSpectra::eigs_sym(S, k = k, which = "LM")
+        d  <- ev$values
+        V  <- ev$vectors
+    } else if (requireNamespace("irlba", quietly = TRUE)) {
+        ev <- irlba::partial_eigen(S, n = k)
+        d  <- ev$values
+        V  <- ev$vectors
+    } else {
+        ev <- eigen(S, symmetric = TRUE)
+        d  <- ev$values[seq_len(k)]
+        V  <- ev$vectors[, seq_len(k), drop = FALSE]
+    }
+    pos <- d > .Machine$double.eps * max(abs(d))
+    list(d = d[pos], V = V[, pos, drop = FALSE])
+}
+
+# Kernel PCA from a Gram matrix G (N x N) using generator weights H (K x N).
+# Returns a list with $data (N x k training-sample projections) and
+# $archetypes (K x k archetype projections).
+.aa_kernel_kpca <- function(G, H, k = 2L) {
+    cm   <- colMeans(G)
+    gm   <- mean(G)
+    Gc   <- sweep(G - cm, 2L, cm, "-") + gm
+    ev   <- .aa_sym_eigen(Gc, k)
+    dsq  <- sqrt(ev$d)
+    V    <- ev$V
+    k    <- length(dsq)
+    cnames <- paste0("KPCA", seq_len(k))
+    X_proj <- sweep(V, 2L, dsq, "*")
+    rownames(X_proj) <- rownames(G)
+    colnames(X_proj) <- cnames
+    KH     <- H %*% G
+    KH     <- sweep(KH - rowMeans(KH), 2L, cm, "-") + gm
+    A_proj <- sweep(KH %*% V, 2L, dsq, "/")
+    rownames(A_proj) <- rownames(H)
+    colnames(A_proj) <- cnames
+    list(data = X_proj, archetypes = A_proj)
+}
+
 # Archetypes Fitting Subroutines -----------------------------------------------------
 
 .aa_check_fit_controls <- function(ctx, n = nrow(ctx[["x"]])) {
-    stopifnot("max_iter must be a non-negative integer" =
-                  ctx[["max_iter"]] == as.integer(ctx[["max_iter"]]) &&
-                      ctx[["max_iter"]] >= 0L)
-    stopifnot("tol must be positive" = ctx[["tol"]] > 0)
-    stopifnot("tol_r2 must be between (0, 1)" =
-                  ctx[["tol_r2"]] >= 0 && ctx[["tol_r2"]] <= 1)
-    stopifnot("K must be an integer" = ctx[["K"]] == as.integer(ctx[["K"]]))
-    stopifnot("K must be an integer greater or equal to 1" = ctx[["K"]] >= 1L)
-    stopifnot("K cannot be greater than number of samples" = ctx[["K"]] <= n)
-    stopifnot("max_kappa must be >=1" = ctx[["max_kappa"]] >= 1)
-    stopifnot("eps must be non-negative" = ctx[["eps"]] >= 0)
-    stopifnot("robust must be TRUE or FALSE" =
-                  is.logical(ctx[["robust"]]) && length(ctx[["robust"]]) == 1L &&
-                      !is.na(ctx[["robust"]]))
-    stopifnot("tukey_c must be positive" =
-                  length(ctx[["tukey_c"]]) == 1L && is.finite(ctx[["tukey_c"]]) &&
-                      ctx[["tukey_c"]] > 0)
+    stopifnot("max_iter must be a non-negative integer" = is_count(ctx[["max_iter"]], start_from = 0L))
+    stopifnot("tol must be positive" = is_positive(ctx[["tol"]]))
+    stopifnot("tol_r2 must be between (0, 1)" = ctx[["tol_r2"]] >= 0 && ctx[["tol_r2"]] <= 1)
+    stopifnot("K must be a positive integer less than or equal to the number of samples" =
+                  is_count(ctx[["K"]]) && ctx[["K"]] <= n)
+    stopifnot("max_kappa must be >=1" = identical(ctx[["max_kappa"]], Inf) || (is_number(ctx[["max_kappa"]]) && ctx[["max_kappa"]] >= 1))
+    stopifnot("eps must be non-negative" = is_non_negative(ctx[["eps"]]))
+    stopifnot("robust must be TRUE or FALSE" = is_logical(ctx[["robust"]]))
+    stopifnot("tukey_c must be positive" = is_positive(ctx[["tukey_c"]]))
     invisible(TRUE)
 }
 
@@ -212,14 +285,11 @@ effic <- function(X, Y) {
 }
 
 .aa_check_scale <- function(scale, p) {
-    if (isTRUE(scale) || identical(scale, FALSE))
-        return(invisible(TRUE))
+    if (is_logical(scale)) return(invisible(TRUE))
 
     if (is.numeric(scale) && is.null(dim(scale))) {
         stopifnot("vector scale must have one value per feature" = length(scale) == p)
-        stopifnot("vector scale contains missing or non-finite values" =
-                      !any(is.na(scale)) && all(is.finite(scale)))
-        stopifnot("vector scale must be positive" = all(scale > 0))
+        stopifnot("vector scale must be finite positive" = is_all_positive(scale))
         return(invisible(TRUE))
     }
 
@@ -234,9 +304,7 @@ effic <- function(X, Y) {
     } else {
         as.vector(scale)
     }
-    stopifnot("matrix scale must be numeric" = is.numeric(values))
-    stopifnot("matrix scale contains missing or non-finite values" =
-                  !any(is.na(values)) && all(is.finite(values)))
+    stopifnot("matrix scale contains missing or non-finite values" = is_all_finite(values))
     is_symmetric <- if (inherits(scale, "Matrix")) {
         Matrix::isSymmetric(scale)
     } else {

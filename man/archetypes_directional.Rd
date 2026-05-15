@@ -29,10 +29,9 @@ archetypes_directional(
 
 \item{K}{Number of archetypes.}
 
-\item{init}{Initialization method. \code{"dirichlet"} samples exponential generator
-weights as in the reference implementation; any method accepted by
-\code{\link[=aa_init]{aa_init()}} is also supported. A numeric \verb{K x ncol(data)} matrix may be
-supplied as initial archetype directions.}
+\item{init}{Initialization method. Defaults to \code{"dirichlet"}; see \code{\link[=aa_init]{aa_init()}}
+for the full list of available methods. A numeric \verb{K x ncol(data)} matrix
+may also be supplied as initial archetype directions.}
 
 \item{init_args}{List of additional arguments for the initialization method.}
 
@@ -77,6 +76,21 @@ models observations by their direction rather than Euclidean magnitude:
 archetypes are convex combinations of row-normalized input data, optionally
 flipped onto a common hemisphere, and sample reconstructions are evaluated by
 a Watson-style polarity-invariant angular loss.
+}
+\details{
+\subsection{Initialization}{
+
+The default \code{"dirichlet"} initialization draws the generator matrix
+\code{B} (K \u00d7 N) as a Dirichlet(1, \u2026, 1) sample \u2014 equivalently, exponential random
+weights normalized to sum to one \u2014 so archetypes start as random convex
+combinations over the row-normalized data. \code{S} is then fitted from the
+resulting \code{A} via \code{\link[=fit_simplex]{fit_simplex()}}, exactly as all other initialization
+methods do.
+
+This differs from \code{"random"} (the \code{\link[=aa_init]{aa_init()}} method that selects K rows
+of the data uniformly at random), which initializes \code{B} as a one-hot matrix
+so that archetypes start at actual data points on the hemisphere.
+}
 }
 \examples{
 theta <- seq(0, pi / 2, length.out = 50)

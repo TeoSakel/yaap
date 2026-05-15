@@ -22,7 +22,7 @@ test_that("tune_archetypes expands K, replicates, and atomic tuning arguments", 
     expect_equal(sort(unique(ens[["grid"]][["delta"]])), c(0, 0.05))
     expect_equal(ens[["prefer_metric"]], "score")
     expect_equal(ens[["prefer_direction"]], "minimize")
-    expect_true(all(is.finite(ens[["metrics"]][["score"]])))
+    expect_true(is_all_finite(ens[["metrics"]][["score"]]))
 })
 
 test_that("tune_archetypes expands multiple initialization methods", {
@@ -41,7 +41,7 @@ test_that("tune_archetypes expands multiple initialization methods", {
     expect_equal(nrow(ens[["grid"]]), 2L)
     expect_equal(sort(ens[["grid"]][["init"]]), c("furthest_sum", "random"))
     expect_equal(ens[["prefer_metric"]], "AIC")
-    expect_true(all(is.finite(ens[["metrics"]][["AIC"]])))
+    expect_true(is_all_finite(ens[["metrics"]][["AIC"]]))
 })
 
 test_that("summary and best use existing ensemble metrics", {
@@ -102,7 +102,7 @@ test_that("composition consistency is symmetric with unit diagonal", {
 
     score <- consistency(ens, "compositions")
 
-    expect_true(all(is.finite(score)))
+    expect_true(is_all_finite(score))
     expect_equal(score, t(score))
     expect_equal(unname(diag(score)), c(1, 1), tolerance = 1e-8)
     expect_error(.nmi(fit[["compositions"]] * 2, fit[["compositions"]]), "row-stochastic")

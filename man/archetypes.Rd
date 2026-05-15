@@ -6,8 +6,6 @@
 \alias{anames<-}
 \alias{anames.archetypes}
 \alias{anames<-.archetypes}
-\alias{anames.kernel_archetypes}
-\alias{anames<-.kernel_archetypes}
 \title{Archetype Analysis Result Object}
 \usage{
 archetypes(
@@ -31,10 +29,6 @@ anames(x) <- value
 \method{anames}{archetypes}(x)
 
 \method{anames}{archetypes}(x) <- value
-
-\method{anames}{kernel_archetypes}(x)
-
-\method{anames}{kernel_archetypes}(x) <- value
 }
 \arguments{
 \item{coordinates}{Numeric matrix (K x M) giving the archetype coordinates

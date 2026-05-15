@@ -28,9 +28,11 @@ Suggests:
     compositions,
     fda,
     geometry,
+    irlba,
     knitr,
     recipes (>= 1.0.0),
     rmarkdown,
+    RSpectra,
     testthat (>= 3.0.0),
     tune (>= 1.0.0),
     withr (>= 2.5.0)

@@ -91,9 +91,7 @@ archetypes_nnls <- function(x,
         check = function(ctx) {
             .aa_euclidean_check(ctx)
             if (!is.null(bigM)) {
-                stopifnot("`bigM` must be NULL or a positive number" =
-                              is.numeric(bigM) && length(bigM) == 1L &&
-                                  is.finite(bigM) && bigM > 0)
+                stopifnot("`bigM` must be NULL or a positive number" = is_positive(bigM))
             }
             .aa_check_max_no_update(max_no_update)
             invisible(TRUE)

@@ -1,7 +1,7 @@
 test_that("tidy.archetypes returns correct long-form for 'coordinates'", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
 
     td <- tidy(fit)  # default: matrix = "coordinates"
 
@@ -16,7 +16,7 @@ test_that("tidy.archetypes returns correct long-form for 'coordinates'", {
 test_that("tidy.archetypes returns correct long-form for 'coefficients'", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
 
     td <- tidy(fit, matrix = "coefficients")
 
@@ -29,7 +29,7 @@ test_that("tidy.archetypes returns correct long-form for 'coefficients'", {
 test_that("tidy.archetypes returns correct long-form for 'compositions'", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
 
     td <- tidy(fit, matrix = "compositions")
 
@@ -44,7 +44,7 @@ test_that("tidy.archetypes returns correct long-form for 'compositions'", {
 test_that("tidy.archetypes uses anames as archetype labels", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
     anames(fit) <- c("Alpha", "Beta", "Gamma")
 
     td <- tidy(fit)
@@ -54,7 +54,7 @@ test_that("tidy.archetypes uses anames as archetype labels", {
 test_that("glance.archetypes returns a one-row tibble with correct fields", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, max_iter = 20L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 20L))
 
     gl <- glance(fit)
 
@@ -74,7 +74,7 @@ test_that("glance.archetypes returns a one-row tibble with correct fields", {
 test_that("augment.archetypes uses stored data when data = NULL", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
 
     aug <- augment(fit)
 
@@ -99,7 +99,7 @@ test_that("augment.archetypes errors when no data available", {
 test_that("augment.archetypes accepts explicit new data", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
 
     X_new <- X[1:10, ]
     aug   <- augment(fit, data = X_new)
@@ -118,7 +118,7 @@ test_that("tidy/glance/augment dispatch without attaching broom", {
     # only YAAAP loaded (broom is in Suggests only)
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 2L, max_iter = 5L)
+    fit <- suppressWarnings(run_aa(X, K = 2L, max_iter = 5L))
     expect_s3_class(tidy(fit),   "tbl_df")
     expect_s3_class(glance(fit), "tbl_df")
     expect_s3_class(augment(fit), "tbl_df")
@@ -129,7 +129,7 @@ test_that("tidy/glance/augment dispatch without attaching broom", {
 test_that("tidy.kernel_archetypes works for coordinates", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, method = "kernel", kernel = "linear", max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, method = "kernel", kernel = "linear", max_iter = 10L))
 
     td <- tidy(fit)
     expect_s3_class(td, "tbl_df")
@@ -141,7 +141,7 @@ test_that("tidy.kernel_archetypes warns and returns empty tibble when coordinate
     set.seed(1)
     X <- toy_matrix()
     G   <- exp(-as.matrix(dist(X))^2 / median(as.matrix(dist(X)))^2)
-    fit <- run_aa(G, K = 3L, method = "kernel", kernel = "precomputed", max_iter = 5L)
+    fit <- suppressWarnings(run_aa(G, K = 3L, method = "kernel", kernel = "precomputed", max_iter = 5L))
 
     expect_null(fit[["coordinates"]])
     expect_warning(td <- tidy(fit), "coordinates")
@@ -151,7 +151,7 @@ test_that("tidy.kernel_archetypes warns and returns empty tibble when coordinate
 test_that("tidy.kernel_archetypes returns correct compositions", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, method = "kernel", kernel = "linear", max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, method = "kernel", kernel = "linear", max_iter = 10L))
 
     td <- tidy(fit, matrix = "compositions")
     expect_named(td, c("sample", "archetype", "value"))
@@ -161,7 +161,7 @@ test_that("tidy.kernel_archetypes returns correct compositions", {
 test_that("glance.kernel_archetypes returns a one-row tibble without family", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, method = "kernel", kernel = "linear", max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, method = "kernel", kernel = "linear", max_iter = 10L))
 
     gl <- glance(fit)
     expect_s3_class(gl, "tbl_df")
@@ -174,7 +174,7 @@ test_that("glance.kernel_archetypes returns a one-row tibble without family", {
 test_that("augment.kernel_archetypes uses stored compositions", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, method = "kernel", kernel = "linear", max_iter = 10L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, method = "kernel", kernel = "linear", max_iter = 10L))
 
     aug <- augment(fit)
     expect_s3_class(aug, "tbl_df")

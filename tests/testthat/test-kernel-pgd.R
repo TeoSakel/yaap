@@ -64,7 +64,7 @@ test_that("kernel PGD fits an RBF kernel and returns coordinates", {
     expect_matrix_dim(fit[["compositions"]], nrow(X), 3L)
     expect_row_stochastic(fit[["coefficients"]])
     expect_row_stochastic(fit[["compositions"]])
-    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+    expect_true(is_all_finite(fit[["loss"]][["loss"]]))
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
     expect_equal(fit[["coordinates"]], fit[["coefficients"]] %*% X)
     expect_error(
@@ -180,7 +180,7 @@ test_that("kernel archetypes methods expose names, residuals, and proxy plots", 
 
     res <- residuals(fit)
     expect_length(res, nrow(X))
-    expect_true(all(is.finite(res)))
+    expect_true(is_all_finite(res))
     expect_error(fitted(fit), "not defined")
     expect_error(predict(fit, X), "not currently defined")
     expect_error(predict(fit, X, type = "compositions"), "not currently defined")

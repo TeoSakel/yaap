@@ -69,14 +69,14 @@ The following initialization methods are available:
 \itemize{
 \item \code{"random"}: selects uniformly at random \code{K} archetypes from \code{X}.
 \item \code{"dirichlet"}: draws each archetype as a random convex combination of all
-data points by sampling \\code{B} row-wise from a Dirichlet(alpha, ..., alpha)
-distribution (Gamma(alpha, 1) weights normalized to unit sum). \\code{alpha = 1}
-(default) gives a uniform distribution over the simplex; \\code{alpha < 1} concentrates
-mass near simplex vertices, yielding sparser rows; \\code{alpha > 1} concentrates mass
-toward the centroid. If \\code{eps > 0}, raw Gamma weights below \\code{eps} are zeroed
-out before normalization and \\code{B} is returned as a sparse matrix; \\code{eps = 0}
-(default) keeps all weights and returns a dense \\code{B}. Accepts optional \\code{alpha}
-and \\code{eps} arguments via \\code{...}.
+data points by sampling \code{B} row-wise from a Dirichlet(α, ..., α)
+distribution (Gamma(α, 1) weights normalized to unit sum). \code{alpha = 1}
+(default) gives a uniform distribution over the simplex; \code{alpha < 1}
+concentrates mass near simplex vertices, yielding sparser rows; \code{alpha > 1}
+concentrates mass toward the centroid. If \code{eps > 0}, raw Gamma weights
+below \code{eps} are zeroed out before normalization and \code{B} is returned as a
+sparse matrix; \code{eps = 0} (default) keeps all weights and returns a dense
+\code{B}. Accepts optional \code{alpha} and \code{eps} arguments via \code{...}.
 \item \code{"furthest_first"}: selects the first archetype randomly and then greedily
 selects the point furthest from the current set of archetypes.
 \item \code{"kmeans_pp"}: a soft version of \code{furthest_first} where points are sampled

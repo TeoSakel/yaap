@@ -118,11 +118,8 @@ archetypes_pgd <- function(x,
                 step_shrinkage = step_shrinkage,
                 max_no_update = max_no_update
             )
-            stopifnot("delta must be single non-negative number" =
-                          length(delta) == 1 && delta >= 0)
-            stopifnot("pseudo_pgd must be TRUE or FALSE" =
-                          is.logical(pseudo_pgd) && length(pseudo_pgd) == 1L &&
-                              !is.na(pseudo_pgd))
+            stopifnot("delta must be single non-negative number" = is_non_negative(delta))
+            stopifnot("pseudo_pgd must be TRUE or FALSE" = is_logical(pseudo_pgd))
             invisible(TRUE)
         },
         preprocess = function(ctx) .aa_euclidean_preprocess(ctx, bigM = 0),
@@ -582,8 +579,7 @@ archetypes_pgd <- function(x,
             # Refine step sizes for next iteration
             step_S <- step_S * step_shrinkage
             step_B <- step_B * step_shrinkage
-            if (update_alpha)
-                step_a <- step_a * step_shrinkage
+            step_a <- step_a * step_shrinkage
 
             if (verbose) {
                 fmt <- paste(
@@ -710,6 +706,7 @@ grad_S_trace <- function(S, AAt, XAt, row_weights = NULL) {
     .aa_weight_rows(S %*% AAt - XAt, row_weights)
 }
 
+# Keep B as argument for consistency with grad_aB_trace
 grad_aB_trace <- function(B, A, X, StS, StXXt) {
     # 2 * (StSBXXt - StXXt) = 2 * (StSAXt - StXXt)
     tcrossprod(StS %*% A, X) - StXXt
@@ -720,8 +717,8 @@ grad_alpha <- function(B, grad_aB) {
     rowSums(grad_aB * B)
 }
 
-# L1 gradients remove the radial component of the grad (the increase of the norm
-# induced by the grad itself) using the chain rule
+# L1 gradients remove the radial component of the grad
+# (the increase of the norm induced by the grad itself)
 grad_S_l1 <- function(S, ...) {
     grad <- grad_S_trace(S, ...) # (N x K)
     row_dot <- rowSums(S * grad)
@@ -735,11 +732,9 @@ grad_aB_l1 <- function(B, ...) {
 }
 
 # Gradient of functions using the whole residual matrix R = X - SA
-grad_S_matrix <- function(S, R, A) {
-    # d(R^2)/dS = 2 * R * dR/dS = -2RAt
-    grad <- R %*% t(A)  # the factor of 2 is absorbed in step size
-    grad
-}
+# Keep S as argument for consistency with pseudo version
+grad_S_matrix <- function(S, R, A) tcrossprod(R, A) # d(R^2)/dS = 2 * R * dR/dS = -2RAt
+
 
 grad_S_matrix_l1 <- function(S, R, A) {
     grad <- grad_S_matrix(S, R, A)

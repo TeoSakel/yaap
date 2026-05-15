@@ -70,7 +70,7 @@ test_that("adapted AIC returns NA outside covariance assumptions", {
         aic <- AIC(singular),
         "pseudo-inverse"
     )
-    expect_true(is.finite(aic))
+    expect_true(is_number(aic))
 })
 
 test_that("predict returns row-stochastic compositions for new data", {

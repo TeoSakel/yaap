@@ -120,11 +120,8 @@ archetypes_kernel_pgd <- function(x,
                 step_shrinkage = step_shrinkage,
                 max_no_update = max_no_update
             )
-            stopifnot("delta must be single non-negative number" =
-                          length(delta) == 1 && delta >= 0)
-            stopifnot("pseudo_pgd must be TRUE or FALSE" =
-                          is.logical(pseudo_pgd) && length(pseudo_pgd) == 1L &&
-                          !is.na(pseudo_pgd))
+            stopifnot("delta must be single non-negative number" = is_non_negative(delta))
+            stopifnot("pseudo_pgd must be TRUE or FALSE" = is_logical(pseudo_pgd))
             invisible(TRUE)
         },
         preprocess = function(ctx) {
@@ -471,8 +468,7 @@ archetypes_kernel_pgd <- function(x,
 rbf_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X)
     sigma <- sigma %||% .auto_rbf_sigma(D)
-    stopifnot("`sigma` must be a positive finite number" =
-                  length(sigma) == 1L && is.finite(sigma) && sigma > 0)
+    stopifnot("`sigma` must be a positive finite number" = is_positive(sigma))
     G <- exp(-0.5 * (D / sigma)^2)
     # convert to full symmetric matrix at the end to avoid redundant computations
     G <- as.matrix(G)
@@ -483,8 +479,7 @@ rbf_kernel <- function(X, sigma = NULL) {
 laplace_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X, method = "manhattan")
     sigma <- sigma %||% .auto_rbf_sigma(D)
-    stopifnot("`sigma` must be a positive finite number" =
-                  length(sigma) == 1L && is.finite(sigma) && sigma > 0)
+    stopifnot("`sigma` must be a positive finite number" = is_positive(sigma))
     G <- exp(-D / sigma)
     # convert to full symmetric matrix at the end to avoid redundant computations
     G <- as.matrix(G)
@@ -493,12 +488,10 @@ laplace_kernel <- function(X, sigma = NULL) {
 }
 
 polynomial_kernel <- function(X, gamma, degree, coef0) {
-    stopifnot("`degree` must be a positive finite number" =
-                  length(degree) == 1L && is.finite(degree) && degree > 0)
-    stopifnot("`coef0` must be a finite number" = length(coef0) == 1L && is.finite(coef0))
+    stopifnot("`degree` must be a positive finite number" = is_positive(degree))
+    stopifnot("`coef0` must be a finite number" = is_number(coef0))
     gamma <- gamma %||% (1 / ncol(X))
-    stopifnot("`gamma` must be a positive finite number" =
-                  length(gamma) == 1L && is.finite(gamma) && gamma > 0)
+    stopifnot("`gamma` must be a positive finite number" = is_positive(gamma))
     (gamma * tcrossprod(X) + coef0)^degree
 }
 
@@ -554,8 +547,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
         ))
     }
 
-    if (is.character(init) && length(init) == 1L &&
-            init %in% c("random", "furthest_first", "kmeans_pp", "furthest_sum")) {
+    if (is_single_string(init) && init %in% c("random", "furthest_first", "kmeans_pp", "furthest_sum")) {
         method <- match.arg(init, c("random", "furthest_first", "kmeans_pp", "furthest_sum"))
         ind <- do.call(
             .aa_kernel_init_indices,

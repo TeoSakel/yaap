@@ -403,8 +403,8 @@ test_that("PGD and NNLS accept matrix scale and return original-unit coordinates
         expect_s3_class(fit, "archetypes")
         expect_matrix_dim(fit[["coordinates"]], 3L, ncol(X))
         expect_equal(colnames(fit[["coordinates"]]), colnames(X))
-        expect_true(all(is.finite(fit[["coordinates"]])))
-        expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+        expect_true(is_all_finite(fit[["coordinates"]]))
+        expect_true(is_all_finite(fit[["loss"]][["loss"]]))
     }
 })
 
@@ -417,7 +417,7 @@ test_that("NNLS matrix scale keeps bigM outside returned coordinates", {
 
     expect_matrix_dim(fit[["coordinates"]], 3L, ncol(X))
     expect_false("bigM" %in% colnames(fit[["coordinates"]]))
-    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+    expect_true(is_all_finite(fit[["loss"]][["loss"]]))
 })
 
 test_that("NNLS reports best loss when final candidate does not improve", {
@@ -576,7 +576,7 @@ test_that("archetypes fitters accept sparse input with expected invariants", {
         expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
         expect_row_stochastic(fit[["coefficients"]])
         expect_row_stochastic(fit[["compositions"]])
-        expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+        expect_true(is_all_finite(fit[["loss"]][["loss"]]))
     }
 })
 
@@ -610,7 +610,7 @@ test_that("missing-data PGD defaults on for dense NA input", {
     expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
     expect_row_stochastic(fit[["coefficients"]])
     expect_row_stochastic(fit[["compositions"]])
-    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+    expect_true(is_all_finite(fit[["loss"]][["loss"]]))
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
 })
 
@@ -640,7 +640,7 @@ test_that("missing-data PGD supports zero optimizer iterations", {
     expect_s3_class(fit, "archetypes")
     expect_true(fit[["converged"]])
     expect_equal(nrow(fit[["loss"]]), 1L)
-    expect_true(is.finite(fit[["loss"]][["loss"]]))
+    expect_true(is_number(fit[["loss"]][["loss"]]))
 })
 
 test_that("missing-data PGD treats sparse structural zeros as missing", {
@@ -712,7 +712,7 @@ test_that("missing preprocessing scales observed entries", {
 
     expect_s4_class(pre_sparse[["M"]], "sparseMatrix")
     expect_equal(length(observed), length(entries[["i"]]))
-    expect_true(all(is.finite(observed)))
+    expect_true(is_all_finite(observed))
 })
 
 test_that("missing preprocessing sparsifies very sparse dense masks", {
@@ -775,7 +775,7 @@ test_that("robust archetypes fitters keep expected invariants", {
         expect_matrix_dim(fit[["compositions"]], 250L, 3L)
         expect_row_stochastic(fit[["coefficients"]])
         expect_row_stochastic(fit[["compositions"]])
-        expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+        expect_true(is_all_finite(fit[["loss"]][["loss"]]))
     }
 })
 
@@ -866,9 +866,9 @@ test_that("PGD coordinate matrix initialization honors delta-relaxed hull", {
 test_that("run_aa with nrep = 1 returns same structure as default", {
     set.seed(42)
     X <- toy_matrix()
-    fit_default <- run_aa(X, K = 3L, max_iter = 10L)
+    fit_default <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
     set.seed(42)
-    fit_nrep1 <- run_aa(X, K = 3L, max_iter = 10L, nrep = 1L)
+    fit_nrep1 <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L, nrep = 1L))
 
     expect_s3_class(fit_nrep1, "archetypes")
     expect_equal(fit_default[["coordinates"]], fit_nrep1[["coordinates"]])
@@ -877,7 +877,7 @@ test_that("run_aa with nrep = 1 returns same structure as default", {
 test_that("run_aa with nrep > 1 returns a single archetypes object", {
     set.seed(1)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, max_iter = 10L, nrep = 5L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L, nrep = 5L))
 
     expect_s3_class(fit, "archetypes")
     expect_false(is.list(fit) && !inherits(fit, "archetypes"))
@@ -890,12 +890,12 @@ test_that("run_aa with nrep > 1 returns a fit no worse than each single run", {
     X <- toy_matrix()
     final_loss <- function(fit) tail(fit[["loss"]][["loss"]], 1L)
 
-    fit_nrep <- run_aa(X, K = 3L, max_iter = 15L, nrep = 10L)
+    fit_nrep <- suppressWarnings(run_aa(X, K = 3L, max_iter = 15L, nrep = 10L))
     nrep_loss <- final_loss(fit_nrep)
 
-    single_losses <- replicate(10L, {
+    single_losses <- suppressWarnings(replicate(10L, {
         final_loss(run_aa(X, K = 3L, max_iter = 15L))
-    })
+    }))
     expect_lte(nrep_loss, max(single_losses) + .Machine$double.eps)
 })
 
@@ -909,7 +909,7 @@ test_that("run_aa nrep validation rejects invalid values", {
 test_that("run_aa nrep works with method = 'nnls'", {
     set.seed(3)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, method = "nnls", max_iter = 10L, nrep = 3L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, method = "nnls", max_iter = 10L, nrep = 3L))
 
     expect_s3_class(fit, "archetypes")
     expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
@@ -919,8 +919,8 @@ test_that("run_aa nrep works with method = 'kernel'", {
     set.seed(5)
     X <- toy_matrix()
     G <- tcrossprod(X)
-    fit <- run_aa(G, K = 3L, method = "kernel", kernel = "precomputed",
-                  data = X, max_iter = 10L, nrep = 3L)
+    fit <- suppressWarnings(run_aa(G, K = 3L, method = "kernel", kernel = "precomputed",
+                  data = X, max_iter = 10L, nrep = 3L))
 
     expect_s3_class(fit, "kernel_archetypes")
 })
@@ -928,7 +928,7 @@ test_that("run_aa nrep works with method = 'kernel'", {
 test_that("run_aa nrep works with method = 'paa'", {
     set.seed(9)
     X <- toy_matrix()
-    fit <- run_aa(X, K = 3L, method = "paa", max_iter = 10L, nrep = 3L)
+    fit <- suppressWarnings(run_aa(X, K = 3L, method = "paa", max_iter = 10L, nrep = 3L))
 
     expect_s3_class(fit, "archetypes")
 })

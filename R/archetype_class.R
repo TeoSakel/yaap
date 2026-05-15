@@ -1,81 +1,10 @@
-#' Archetype Analysis Result Object
-#'
-#' Creates an S3 object of class `archetypes` holding the fitted archetypes,
-#' their decomposition of the data, and diagnostic information from the fitting
-#' process.
-#'
-#' @param coordinates Numeric matrix (K x M) giving the archetype coordinates
-#'   in the original feature space. `K` is the number of archetypes, `M` is the
-#'   number of features.
-#' @param coefficients Numeric matrix (K x N) giving the weights that express
-#'   each archetype as a linear combination of the N samples in the input data.
-#' @param compositions Numeric matrix (N x K) giving the barycentric
-#'   coordinates of each sample in the archetype space (how much each archetype
-#'   contributes to each sample).
-#' @param slack Non-negative numeric scalar or vector giving the allowed
-#'   relaxation of coefficient row sums away from 1.
-#' @param loss Data frame containing per-iteration metrics
-#' @param converged Logical. Whether the optimization converged.
-#' @param data Original data used for fitting. Usually a numeric matrix (N x M),
-#'   but class-specific entry points may store the original input object. If
-#'   supplied, residuals are computed against fitted values.
-#' @param call The matched function call that created the object (defaults to `match.call()`).
-#' @param init Optional numeric matrix (K x M) with the initial archetype
-#'   coordinates before optimization.
-#' @param family Observation family. Defaults to `"gaussian"`.
-#' @param weights Optional numeric vector of sample weights used during
-#'   fitting. When present, it is used by `residuals(..., type = "pearson")`.
-#'
-#' @details
-#' Let `X` be the original data matrix (N x M).
-#'
-#' The fitted values are:
-#'
-#' ```
-#'   X_hat = compositions %*% coordinates
-#'   coordinates = coefficients %*% X
-#' ```
-#' `compositions` is always a row-stochastic matrix (each row sums to 1).
-#' `coefficients` is typically a row-stochastic matrix as well unless the
-#' constraint is relaxed (`slack` > 0) in which case the archetypes can lay
-#' outside the convex hull of the data.
-#'
-#' ## Invariants and Dimensions
-#'
-#' * `nrow(coordinates) == ncol(compositions) == nrow(coefficients) == K`
-#' * `nrow(compositions) == ncol(coefficients) == N`
-#' * `rowSums(compositions) == 1`
-#' * If `data` is supplied: `dim(data) == c(N, M)` where `M = ncol(coordinates)`
-#'
-#' ## Archetype names
-#'
-#' Archetype labels are stored as row names on `coordinates` and `coefficients`,
-#' and as column names on `compositions`. Use `anames()` and `anames<-()` to get
-#' or set them consistently:
-#'
-#' ```
-#' anames(fit)
-#' anames(fit) <- c("A", "B", "C")
-#' ```
-#'
-#' @return
-#' An object of class `archetypes`, which is a list with components:
-#'
-#' - `coordinates` - (K x M) archetype coordinates.
-#' - `coefficients` - (K x N) archetype weights on samples.
-#' - `compositions` - (N x K) sample weights on archetypes.
-#' - `init` - optional initial coordinates.
-#' - `loss` - data frame of per-iteration metrics.
-#' - `converged` - logical convergence flag.
-#' - `data` - optional original data.
-#' - `residuals` - `data - compositions %*% coordinates`
-#' - `call` - the matched call.
-#'
-#' @seealso
-#' [plot.archetypes()], [predict.archetypes()], [residuals.archetypes()], [fitted.archetypes()]
-#'
-#' @export
-archetypes <- function(coordinates,
+# archetype_class.R: Archetypes S3 class definition and methods
+
+# Base Archetypes Class -------------------------------------------------------
+
+# Internal constructor for archetypes S3 objects. Validates dimensions and
+# stochasticity constraints, then wraps the result in the `archetypes` class.
+archetypes <- function(coordinates = NULL,
                        coefficients,
                        compositions,
                        slack = 0,
@@ -87,61 +16,14 @@ archetypes <- function(coordinates,
                        family = "gaussian",
                        weights = NULL) {
     call <- call %||% match.call()
-    loss <- loss %||% data.frame(loss = NA_real_, r2  = NA_real_, k_S = NA_real_, k_A = NA_real_)
-
-    return(
-        new_archetypes(
-            coordinates  = coordinates,
-            coefficients = coefficients,
-            compositions = compositions,
-            slack        = slack,
-            loss         = loss,
-            converged    = converged,
-            call         = call,
-            data         = data,
-            init         = init,
-            family       = family,
-            weights      = weights
-        )
-    )
-}
-
-#' Archetypes object constructor
-#'
-#' @param coordinates Numeric matrix (K x M) giving archetype coordinates.
-#' @param coefficients Numeric matrix (K x N) giving archetype weights on samples.
-#' @param compositions Numeric matrix (N x K) giving sample weights on archetypes.
-#' @param slack Non-negative numeric scalar or vector giving allowed coefficient
-#'   row-sum relaxation.
-#' @param loss Data frame containing per-iteration metrics.
-#' @param converged Logical. Whether the optimization converged.
-#' @param call The matched function call that created the object.
-#' @param data Optional original data.
-#' @param init Optional initial archetype coordinates.
-#' @param family Observation family.
-#' @param weights Optional numeric vector of sample weights used during
-#'   fitting.
-new_archetypes <- function(coordinates,
-                           coefficients,
-                           compositions,
-                           slack,
-                           loss,
-                           converged,
-                           call = NULL,
-                           data = NULL,
-                           init = NULL,
-                           family = "gaussian",
-                           weights = NULL) {
-
+    loss <- loss %||% data.frame(loss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
 
     # Dimension checks
-    K <- nrow(coordinates)   # number of archetypes
-    # M <- ncol(coordinates)   # number of features
+    K <- if (!is.null(coordinates)) nrow(coordinates) else nrow(coefficients)
     N <- nrow(compositions)  # number of samples
 
-
     # Check Coordinates
-    if (!is.null(init) && any(dim(init) != dim(coordinates)))
+    if (!is.null(init) && !is.null(coordinates) && any(dim(init) != dim(coordinates)))
         stop("Initial archetypes must have the same number of columns as coordinates")
 
     # Check Coefficients
@@ -149,34 +31,16 @@ new_archetypes <- function(coordinates,
         fmt <- "nrow(coefficients) = %d does not match number of archetypes (%d)"
         stop(sprintf(fmt, nrow(coefficients), K))
     }
-
     if (ncol(coefficients) != N) {
         fmt <- "Inconsistent number of samples between compositions (%d) and coefficients (%d)"
         stop(sprintf(fmt, N, ncol(coefficients)))
     }
 
-    stopifnot("All slack values must be non-negative" = all(slack >= 0))
+    stopifnot("All slack values must be non-negative" = is_all_non_negative(slack))
     if (any(slack > 0)) {
         a <- rowSums(coefficients)
-        ix <- which(a > 1 + slack)
-        if (length(ix) > 0) {
-            fmt <- "Some rowSums(coefficients) are above allowed slack: %s"
-            if (length(ix) > 10) {
-                ix <- utils::head(ix, 10)
-                fmt <- paste(fmt, "... (truncated)")
-            }
-            stop(sprintf(fmt, paste(ix, collapse = ", ")))
-        }
-
-        ix <- which(a < 1 - slack)
-        if (length(ix) > 0) {
-            fmt <- "Some rowSums(coefficients) are below allowed slack: %s"
-            if (length(ix) > 10) {
-                ix <- utils::head(ix, 10)
-                fmt <- paste(fmt, "... (truncated)")
-            }
-            stop(sprintf(fmt, paste(ix, collapse = ", ")))
-        }
+        stopifnot("Some rowSums(coefficients) are above allowed slack" = all(a <= 1 + slack))
+        stopifnot("Some rowSums(coefficients) are below allowed slack" = all(a >= 1 - slack))
     } else if (!isTRUE(all.equal(rowSums(coefficients), rep(1, K), check.attributes = FALSE))) {
         stop("Coefficients must be row-stochastic (each row sums to 1) when slack = 0")
     }
@@ -186,19 +50,16 @@ new_archetypes <- function(coordinates,
         fmt <- "ncol(compositions) = %d does not match number of archetypes (%d)"
         stop(sprintf(fmt, ncol(compositions), K))
     }
-    if (!isTRUE(all.equal(rowSums(compositions), rep(1, N), check.attributes = FALSE)))
+    if (!is_row_stochastic(compositions))
         stop("Compositions must be row-stochastic (each row sums to 1)")
 
     # Check loss
-    if(!inherits(loss, "data.frame")) stop("loss must be compatible with data.frame")
+    if (!inherits(loss, "data.frame")) stop("loss must be compatible with data.frame")
     family <- family %||% "gaussian"
-    stopifnot("family must be a single non-empty string" =
-                  is.character(family) && length(family) == 1L && nzchar(family))
+    stopifnot("family must be a single non-empty string" = is_non_empty_string(family))
     if (!is.null(weights)) {
-        stopifnot("weights must be a numeric vector" = is.numeric(weights))
         stopifnot("weights must have one value per sample" = length(weights) == N)
-        stopifnot("weights must contain no missing values" = !any(is.na(weights)))
-        stopifnot("weights must be non-negative" = all(weights >= 0))
+        stopifnot("weights must be finite and non-negative" = is_all_non_negative(weights))
     }
 
     structure(
@@ -232,8 +93,7 @@ new_archetypes <- function(coordinates,
 #' A numeric matrix (K x N) where each row contains the weights
 #' over samples used to form one archetype.
 #'
-#' @seealso [archetypes()], [fitted.archetypes()],
-#'   [predict.archetypes()], [residuals.archetypes()]
+#' @seealso [fitted.archetypes()], [predict.archetypes()], [residuals.archetypes()]
 #'
 #' @examples
 #' # coefficients(fit)
@@ -271,13 +131,13 @@ anames <- function(x)
 #' @rdname archetypes
 #' @exportS3Method
 anames.archetypes <- function(x)
-    rownames(x[["coordinates"]])
+    rownames(x[["coefficients"]])
 
 #' @rdname archetypes
 #' @method anames<- archetypes
 #' @export
 `anames<-.archetypes` <- function(x, value) {
-    K <- nrow(x[["coordinates"]])
+    K <- nrow(x[["coefficients"]])
     if (length(value) != K) {
         fmt <- "Expected %d archetype names, got %d"
         stop(sprintf(fmt, K, length(value)))
@@ -286,7 +146,8 @@ anames.archetypes <- function(x)
     stopifnot("Archetype names must not be empty" = all(nzchar(value)))
     stopifnot("Archetype names must be unique" = !anyDuplicated(value))
 
-    rownames(x[["coordinates"]]) <- value
+    if (!is.null(x[["coordinates"]]))
+        rownames(x[["coordinates"]]) <- value
     rownames(x[["coefficients"]]) <- value
     colnames(x[["compositions"]]) <- value
     if (!is.null(x[["init"]]))
@@ -307,8 +168,7 @@ anames.archetypes <- function(x)
 #' Fitted values. Usually a numeric matrix (N x M); fd-backed fits return an
 #' `fda::fd` object.
 #'
-#' @seealso [archetypes()], [residuals.archetypes()],
-#'   [predict.archetypes()], [coefficients.archetypes()]
+#' @seealso [residuals.archetypes()], [predict.archetypes()], [coefficients.archetypes()]
 #'
 #' @examples
 #' # Xhat <- fitted(fit)
@@ -336,6 +196,10 @@ fitted.archetypes <- function(object, ...) {
 #'
 #' @return
 #' Residuals in the same representation as `data`.
+#'
+#' @seealso
+#' [fitted.archetypes()], [predict.archetypes()].
+#' For kernel fits see [residuals.kernel_archetypes()].
 #'
 #' @exportS3Method
 residuals.archetypes <- function(object,
@@ -386,7 +250,10 @@ residuals.archetypes <- function(object,
 #' reconstruction matrix (N_new x M) in the same feature space as
 #' `object$coordinates`.
 #'
-#' @seealso [archetypes()], [fit_simplex()]
+#' @seealso
+#' [fit_simplex()], [residuals.archetypes()], [fitted.archetypes()].
+#' For class-specific overrides see [predict.directional_archetypes()] and
+#' [predict.kernel_archetypes()].
 #'
 #' @exportS3Method
 predict.archetypes <- function(object,
@@ -450,7 +317,6 @@ print.archetypes <- function(x, ...) {
     cat("\n")
     invisible(x)
 }
-
 #' Plot method for archetypes objects
 #'
 #' Draws diagnostic and geometric plots for a fitted archetypal analysis model.
@@ -490,32 +356,11 @@ plot.archetypes <- function(x,
                             plot = TRUE,
                             ...) {
     stopifnot(inherits(x, "archetypes"))
-
-    what <- match.arg(
-        tolower(what[1L]),
-        c("compositions", "composition", "composision", "composisions",
-          "ternary", "simplex",
-          "loss", "coordinates", "profiles")
-    )
-    if (what %in% c("composition", "composision",  "composisions"))
-        what <- "compositions"
-
+    what <- .aa_plot_normalize_what(what)
     dots <- list(...)
-    subset_rows <- function(z) {
-        if (is.null(subset))
-            return(z)
-        if (is.logical(subset) && length(subset) != nrow(z))
-            stop("Logical `subset` must have one value per sample", call. = FALSE)
-        if (is.character(subset) && anyNA(match(subset, rownames(z))))
-            stop("Some `subset` values are not sample names", call. = FALSE)
-        out <- z[subset, , drop = FALSE]
-        if (nrow(out) == 0L)
-            stop("`subset` selects no samples", call. = FALSE)
-        out
-    }
 
     if (what == "compositions") {
-        S <- subset_rows(as.matrix(x[["compositions"]]))
+        S <- .aa_plot_subset_rows(as.matrix(x[["compositions"]]), subset)
         args <- list(plot = plot, cluster_rows = TRUE, cluster_cols = TRUE) %|p|% dots
         args[["compositions"]] <- S
         return(do.call(plot_archetypes_compositions, args))
@@ -529,7 +374,7 @@ plot.archetypes <- function(x,
                 call. = FALSE
             )
         }
-        S <- subset_rows(as.matrix(x[["compositions"]]))
+        S <- .aa_plot_subset_rows(as.matrix(x[["compositions"]]), subset)
         colnames(S) <- colnames(S) %||% paste0("A", seq_len(ncol(S)))
         main <- dots[["main"]]
         args <- list(x = compositions::acomp(S), axes = TRUE) %|p|% dots[setdiff(names(dots), "main")]
@@ -574,11 +419,78 @@ plot.archetypes <- function(x,
         } else {
             as.matrix(args[["data"]])
         }
-        args[["data"]] <- subset_rows(X)
+        args[["data"]] <- .aa_plot_subset_rows(X, subset)
     }
     args[["coordinates"]] <- x[["coordinates"]]
     do.call(plot_archetypes_coordinates, args)
 }
+
+#' AIC for archetypes objects
+#'
+#' Computes the AIC-like validity criterion for an `archetypes` object.
+#'
+#' This is not the classical likelihood-based Akaike Information Criterion
+#' \eqn{-2 \log L + 2k}. Instead, it implements the adapted archetypal-analysis
+#' criterion proposed by Suleman (2017), using the reconstruction variance
+#' \eqn{\|X - \hat X\|_F^2 / (N M)} and an efficiency-adjusted complexity
+#' penalty based on the full parameter count
+#' \eqn{K_\mu + K_\beta + 1 = N(K - 1) + K(N - 1) + 1}. The value is intended
+#' for comparing Euclidean Gaussian archetype fits on the same data, especially
+#' across different numbers of archetypes.
+#' Following the assumptions in Suleman (2017), the criterion is undefined when
+#' the number of samples is not larger than the number of features. If the
+#' covariance matrix of `X` is singular otherwise, the efficiency term is
+#' computed with a Moore-Penrose pseudo-inverse and a warning is emitted.
+#'
+#' @param object An object of class `archetypes`.
+#' @param ... Ignored.
+#' @return Numeric scalar with the adapted AIC-like criterion.
+#'
+#' @references
+#' A. Suleman, "Validation of archetypal analysis,"
+#' 2017 IEEE International Conference on Fuzzy Systems (FUZZ-IEEE),
+#' Naples, Italy, 2017, pp. 1-6, \url{www.doi.org/10.1109/FUZZ-IEEE.2017.8015385}
+#'
+#' @exportS3Method
+AIC.archetypes <- function(object, ...) {
+    if (any(object[["slack"]] > 0))
+        warning(paste("AIC computation assumes coefficients are row-stochastic;",
+                      "slack > 0 may violate this assumption."))
+
+    X <- object[["data"]]
+    if (is.null(X))
+        stop(paste("AIC requires original data `X`;",
+                   "provide it when constructing the archetypes object."))
+    X <- if (inherits(X, "fd")) .aa_fd_to_matrix(X) else X
+
+    # Compute AIC
+    K <- nrow(object[["coordinates"]]) # Number of Archetypes
+    N <- nrow(X)
+    M <- ncol(X)
+    nelem <- prod(dim(X)) # number of elements in X
+    family <- object[["family"]] %||% "gaussian"
+    if (!identical(family, "gaussian"))
+        stop("AIC is not defined for non-Gaussian archetypes objects.", call. = FALSE)
+    if (N <= M) {
+        warning(paste("Adapted AIC is undefined when the number of samples",
+                      "is not larger than the number of features; returning NA."),
+                call. = FALSE)
+        return(NA_real_)
+    }
+    # rss   <- object[["loss"]][["loss"]]
+    X_hat <- with(object, compositions %*% coordinates)
+    eta <- tryCatch(effic(X, X_hat), error = function(e) NA_real_)
+    if (!is.finite(eta) || eta <= 0) {
+        warning(paste("Adapted AIC is undefined because the efficiency term",
+                      "is non-positive or non-finite; returning NA."),
+                call. = FALSE)
+        return(NA_real_)
+    }
+    npar <- N * (K - 1) + K * (N - 1) + 1  # K_mu + K_beta + 1
+    rss  <- norm(X - X_hat, "F")^2  # "loss" is not necessarily the RSS on the original data
+    log(rss / nelem) + 2 * npar / (N * eta)
+}
+
 
 # Directional Archetypes Class -----------------------------------------------
 
@@ -719,6 +631,7 @@ AIC.directional_archetypes <- function(object, ...) {
     stop("AIC is not defined for Watson-loss directional archetypes.", call. = FALSE)
 }
 
+
 # Kernel Archetypes Class -----------------------------------------------------
 
 #' Kernel archetype analysis result object
@@ -728,9 +641,11 @@ AIC.directional_archetypes <- function(object, ...) {
 #' @param compositions Numeric matrix (`N x K`) giving each sample as a weighted
 #'   combination of kernel archetypes.
 #' @param gram Training Gram matrix.
-#' @param coordinates Optional input-space coordinates `coefficients %*% data`.
-#'   For nonlinear kernels these are visualization coordinates, not exact
-#'   Hilbert-space archetypes.
+#' @param coordinates Optional input-space proxy coordinates, typically
+#'   `coefficients %*% data`. For linear kernels these equal the true
+#'   Hilbert-space archetypes; for nonlinear kernels they are Euclidean
+#'   approximations only — distances in coordinate plots carry no
+#'   kernel-metric meaning. Pass `NULL` to suppress coordinate plots.
 #' @param slack Non-negative coefficient row-sum relaxation.
 #' @param loss Data frame containing per-iteration metrics.
 #' @param converged Logical convergence flag.
@@ -758,56 +673,28 @@ kernel_archetypes <- function(coefficients,
                               weights = NULL) {
     call <- call %||% match.call()
     loss <- loss %||% data.frame(loss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
-    K <- nrow(coefficients)
-    N <- ncol(coefficients)
-    stopifnot("nrow(compositions) must match number of samples" = nrow(compositions) == N)
-    stopifnot("ncol(compositions) must match number of archetypes" = ncol(compositions) == K)
     stopifnot("Gram matrix dimensions must match number of samples" =
-                  identical(dim(gram), c(N, N)))
-    stopifnot("All slack values must be non-negative" = all(slack >= 0))
-    if (any(slack > 0)) {
-        a <- rowSums(coefficients)
-        stopifnot("Some rowSums(coefficients) are above allowed slack" = all(a <= 1 + slack))
-        stopifnot("Some rowSums(coefficients) are below allowed slack" = all(a >= 1 - slack))
-    } else if (!isTRUE(all.equal(rowSums(coefficients), rep(1, K), check.attributes = FALSE))) {
-        stop("Coefficients must be row-stochastic (each row sums to 1) when slack = 0")
-    }
-    if (!isTRUE(all.equal(rowSums(compositions), rep(1, N), check.attributes = FALSE)))
-        stop("Compositions must be row-stochastic (each row sums to 1)")
-    if (!is.null(coordinates)) {
-        stopifnot("coordinates must have one row per archetype" =
-                      nrow(coordinates) == K)
-    }
-    if (!is.null(weights)) {
-        stopifnot("weights must be a numeric vector" = is.numeric(weights))
-        stopifnot("weights must have one value per sample" = length(weights) == N)
-        stopifnot("weights must contain no missing values" = !any(is.na(weights)))
-        stopifnot("weights must be non-negative" = all(weights >= 0))
-    }
-
-    structure(
-        list(
-            coefficients = coefficients,
-            compositions = compositions,
-            gram = gram,
-            coordinates = coordinates,
-            slack = slack,
-            init = init,
-            loss = loss,
-            converged = converged,
-            data = data,
-            kernel = kernel,
-            kernel_args = kernel_args,
-            weights = weights,
-            call = call
-        ),
-        class = "kernel_archetypes"
+                  identical(dim(gram), c(ncol(coefficients), ncol(coefficients))))
+    out <- archetypes(
+        coordinates = coordinates,
+        coefficients = coefficients,
+        compositions = compositions,
+        slack        = slack,
+        loss         = loss,
+        converged    = converged,
+        call         = call,
+        data         = data,
+        init         = NULL,   # kernel init is a coefficient matrix; add after
+        family       = "gaussian",
+        weights      = weights
     )
+    out[["init"]]        <- init
+    out[["gram"]]        <- gram
+    out[["kernel"]]      <- kernel
+    out[["kernel_args"]] <- kernel_args
+    class(out) <- c("kernel_archetypes", "archetypes")
+    out
 }
-
-#' @exportS3Method
-coefficients.kernel_archetypes <- function(object, ...)
-    object[["coefficients"]]
 
 #' Predict method for kernel archetypes
 #'
@@ -837,32 +724,6 @@ predict.kernel_archetypes <- function(object,
     )
 }
 
-#' @rdname archetypes
-#' @exportS3Method
-anames.kernel_archetypes <- function(x) rownames(x[["coefficients"]])
-
-#' @rdname archetypes
-#' @method anames<- kernel_archetypes
-#' @export
-`anames<-.kernel_archetypes` <- function(x, value) {
-    K <- nrow(x[["coefficients"]])
-    if (length(value) != K) {
-        fmt <- "Expected %d archetype names, got %d"
-        stop(sprintf(fmt, K, length(value)))
-    }
-    stopifnot("Archetype names must not be missing" = !any(is.na(value)))
-    stopifnot("Archetype names must not be empty" = all(nzchar(value)))
-    stopifnot("Archetype names must be unique" = !anyDuplicated(value))
-
-    rownames(x[["coefficients"]]) <- value
-    colnames(x[["compositions"]]) <- value
-    if (!is.null(x[["coordinates"]]))
-        rownames(x[["coordinates"]]) <- value
-    if (!is.null(x[["init"]]))
-        rownames(x[["init"]]) <- value
-    x
-}
-
 #' @exportS3Method
 fitted.kernel_archetypes <- function(object, ...) {
     stop(
@@ -873,16 +734,30 @@ fitted.kernel_archetypes <- function(object, ...) {
     )
 }
 
+#' Residuals for kernel archetypes objects
+#'
+#' Returns the per-sample squared Hilbert-space residual norm
+#' \eqn{\|x_i - \hat{x}_i\|_\mathcal{H}^2}, computed directly from the Gram
+#' matrix without explicitly mapping to feature space.
+#'
+#' @param object An object of class `kernel_archetypes`.
+#' @param ... Ignored.
+#'
+#' @return A named numeric vector of non-negative squared residual norms, one
+#'   per sample.
+#'
+#' @seealso [residuals.archetypes()] for Euclidean residuals on standard fits.
+#'
 #' @exportS3Method
 residuals.kernel_archetypes <- function(object, ...) {
     G <- object[["gram"]]
     H <- object[["coefficients"]]
     S <- object[["compositions"]]
-    AAt <- H %*% G %*% t(H)
-    XAt <- G %*% t(H)
-    out <- pmax(diag(G) - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
+    AAt <- tcrossprod(H %*% G, H)
+    XAt <- tcrossprod(G, H)
+    out <- diag(G) - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt))
     names(out) <- rownames(S)
-    out
+    pmax(out, 0)
 }
 
 #' @exportS3Method
@@ -890,6 +765,7 @@ print.kernel_archetypes <- function(x, ...) {
     call_str <- paste(deparse(x[["call"]]), sep = "\n", collapse = "\n")
     cat("\nCall:\n", call_str, "\n\n", sep = "")
     cat("Kernel Archetypes Summary:\n")
+    cat("Kernel type:", x[["kernel"]], "\n")
     cat("Number of Archetypes:", nrow(x[["coefficients"]]), "\n")
     cat("Number of Samples:", ncol(x[["coefficients"]]), "\n")
     if (!is.null(x[["coordinates"]]))
@@ -913,146 +789,38 @@ plot.kernel_archetypes <- function(x,
                                    subset = NULL,
                                    plot = TRUE,
                                    ...) {
-    what <- match.arg(
-        tolower(what[1L]),
-        c("compositions", "composition", "composision", "composisions",
-          "ternary", "simplex",
-          "loss", "coordinates", "profiles")
-    )
-    if (what %in% c("composition", "composision", "composisions"))
-        what <- "compositions"
+    what <- .aa_plot_normalize_what(what)
 
-    dots <- list(...)
-    subset_rows <- function(z) {
-        if (is.null(subset))
-            return(z)
-        if (is.logical(subset) && length(subset) != nrow(z))
-            stop("Logical `subset` must have one value per sample", call. = FALSE)
-        if (is.character(subset) && anyNA(match(subset, rownames(z))))
-            stop("Some `subset` values are not sample names", call. = FALSE)
-        out <- z[subset, , drop = FALSE]
-        if (nrow(out) == 0L)
-            stop("`subset` selects no samples", call. = FALSE)
-        out
-    }
-
-    if (what == "compositions") {
-        S <- subset_rows(as.matrix(x[["compositions"]]))
-        args <- list(
-            plot = plot, cluster_rows = TRUE, cluster_cols = TRUE, linkage = "ward.D2"
-        ) %|p|% dots
-        args[["compositions"]] <- S
-        return(do.call(plot_archetypes_compositions, args))
-    }
-    if (what %in% c("ternary", "simplex")) {
-        if (!requireNamespace("compositions", quietly = TRUE)) {
-            stop(
-                "Ternary/simplex plots require package `compositions`. ",
-                "Install it to use `plot(..., what = 'ternary'/'simplex')`.",
-                call. = FALSE
-            )
-        }
-        S <- subset_rows(as.matrix(x[["compositions"]]))
-        colnames(S) <- colnames(S) %||% paste0("A", seq_len(ncol(S)))
-        main <- dots[["main"]]
-        args <- list(x = compositions::acomp(S), axes = TRUE) %|p|% dots[setdiff(names(dots), "main")]
-        if (isTRUE(plot)) {
-            do.call(graphics::plot, args)
-            if (!is.null(main)) graphics::title(main = main)
-        }
-        return(invisible(list(compositions = S, plot_args = args)))
-    }
-    if (what == "loss") {
-        args <- list(plot = plot) %|p|% dots
-        args[["loss"]] <- x[["loss"]]
-        return(do.call(plot_archetypes_loss, args))
-    }
-    if (what == "profiles") {
+    if (what == "profiles")
         stop(
             "Profile plots are not defined for kernel archetypes because ",
             "their natural coordinates live in implicit Hilbert space.",
             call. = FALSE
         )
+
+    dots <- list(...)
+    if (what == "coordinates" && identical(dots[["projection"]], "pca")) {
+        kpca <- .aa_kernel_kpca(x[["gram"]], x[["coefficients"]])
+        dots[["projection"]] <- NULL
+        args <- list(
+            coordinates     = kpca[["archetypes"]],
+            data            = .aa_plot_subset_rows(kpca[["data"]], subset),
+            archetype_names = anames(x),
+            projection      = "none",
+            plot            = plot
+        ) %|p|% dots
+        return(do.call(plot_archetypes_coordinates, args))
     }
 
-    A <- x[["coordinates"]]
-    if (is.null(A)) {
-        stop(
-            "Coordinate plots for kernel archetypes require available coordinates.",
-            call. = FALSE
-        )
-    }
-    args <- list(data = x[["data"]], archetype_names = rownames(A), plot = plot) %|p|% dots
-    if (!is.null(args[["data"]]))
-        args[["data"]] <- subset_rows(as.matrix(args[["data"]]))
-    args[["coordinates"]] <- A
-    do.call(plot_archetypes_coordinates, args)
+    NextMethod()
 }
-#' AIC for archetypes objects
-#'
-#' Computes the AIC-like validity criterion for an `archetypes` object.
-#'
-#' This is not the classical likelihood-based Akaike Information Criterion
-#' \eqn{-2 \log L + 2k}. Instead, it implements the adapted archetypal-analysis
-#' criterion proposed by Suleman (2017), using the reconstruction variance
-#' \eqn{\|X - \hat X\|_F^2 / (N M)} and an efficiency-adjusted complexity
-#' penalty based on the full parameter count
-#' \eqn{K_\mu + K_\beta + 1 = N(K - 1) + K(N - 1) + 1}. The value is intended
-#' for comparing Euclidean Gaussian archetype fits on the same data, especially
-#' across different numbers of archetypes.
-#' Following the assumptions in Suleman (2017), the criterion is undefined when
-#' the number of samples is not larger than the number of features. If the
-#' covariance matrix of `X` is singular otherwise, the efficiency term is
-#' computed with a Moore-Penrose pseudo-inverse and a warning is emitted.
-#'
-#' @param object An object of class `archetypes`.
-#' @param ... Ignored.
-#' @return Numeric scalar with the adapted AIC-like criterion.
-#'
-#' @references
-#' A. Suleman, "Validation of archetypal analysis,"
-#' 2017 IEEE International Conference on Fuzzy Systems (FUZZ-IEEE),
-#' Naples, Italy, 2017, pp. 1-6, \url{www.doi.org/10.1109/FUZZ-IEEE.2017.8015385}
-#'
+
 #' @exportS3Method
-AIC.archetypes <- function(object, ...) {
-    if (any(object[["slack"]] > 0))
-        warning(paste("AIC computation assumes coefficients are row-stochastic;",
-                      "slack > 0 may violate this assumption."))
+AIC.kernel_archetypes <- function(object, ...)
+    stop("AIC is not defined for kernel archetypes.", call. = FALSE)
 
-    X <- object[["data"]]
-    if (is.null(X))
-        stop(paste("AIC requires original data `X`;",
-                   "provide it when constructing the archetypes object."))
-    X <- if (inherits(X, "fd")) .aa_fd_to_matrix(X) else X
 
-    # Compute AIC
-    K <- nrow(object[["coordinates"]]) # Number of Archetypes
-    N <- nrow(X)
-    M <- ncol(X)
-    nelem <- prod(dim(X)) # number of elements in X
-    family <- object[["family"]] %||% "gaussian"
-    if (!identical(family, "gaussian"))
-        stop("AIC is not defined for non-Gaussian archetypes objects.", call. = FALSE)
-    if (N <= M) {
-        warning(paste("Adapted AIC is undefined when the number of samples",
-                      "is not larger than the number of features; returning NA."),
-                call. = FALSE)
-        return(NA_real_)
-    }
-    # rss   <- object[["loss"]][["loss"]]
-    X_hat <- with(object, compositions %*% coordinates)
-    eta <- tryCatch(effic(X, X_hat), error = function(e) NA_real_)
-    if (!is.finite(eta) || eta <= 0) {
-        warning(paste("Adapted AIC is undefined because the efficiency term",
-                      "is non-positive or non-finite; returning NA."),
-                call. = FALSE)
-        return(NA_real_)
-    }
-    npar <- N * (K - 1) + K * (N - 1) + 1  # K_mu + K_beta + 1
-    rss  <- norm(X - X_hat, "F")^2  # "loss" is not necessarily the RSS on the original data
-    log(rss / nelem) + 2 * npar / (N * eta)
-}
+# Helper functions ------------------------------------------------------------
 
 .aa_fd_to_matrix <- function(x) {
     if (!requireNamespace("fda", quietly = TRUE))
@@ -1107,4 +875,31 @@ coordinates_fd <- function(object, data = object[["data"]], basis = NULL, fdname
     fdnames[["reps"]] <- rownames(A)
 
     fda::fd(t(A), basis, fdnames = fdnames)
+}
+
+# Normalises the `what` argument for archetype plot methods.
+.aa_plot_normalize_what <- function(what) {
+    what <- match.arg(
+        tolower(what[1L]),
+        c("compositions", "composition", "composision", "composisions",
+          "ternary", "simplex",
+          "loss", "coordinates", "profiles")
+    )
+    if (what %in% c("composition", "composision", "composisions"))
+        what <- "compositions"
+    what
+}
+
+# Subsets rows of a matrix by index, name, or logical vector.
+.aa_plot_subset_rows <- function(z, subset) {
+    if (is.null(subset))
+        return(z)
+    if (is.logical(subset) && length(subset) != nrow(z))
+        stop("Logical `subset` must have one value per sample", call. = FALSE)
+    if (is.character(subset) && anyNA(match(subset, rownames(z))))
+        stop("Some `subset` values are not sample names", call. = FALSE)
+    out <- z[subset, , drop = FALSE]
+    if (nrow(out) == 0L)
+        stop("`subset` selects no samples", call. = FALSE)
+    out
 }

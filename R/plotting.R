@@ -286,12 +286,9 @@ plot_archetypes_coordinates <- function(coordinates,
 
     pc <- NULL
     if (identical(projection, "pca")) {
-        combined <- rbind(X, A)
-        pc <- stats::prcomp(combined, center = TRUE, scale. = FALSE)
-        scores <- pc[["x"]][, seq_len(2L), drop = FALSE]
-        rownames(scores) <- rownames(combined)
-        X <- scores[seq_len(nrow(X)), , drop = FALSE]
-        A <- scores[nrow(X) + seq_len(nrow(A)), , drop = FALSE]
+        pc <- stats::prcomp(X, center = TRUE, scale. = FALSE, rank. = 2L)
+        X  <- pc[["x"]]
+        A  <- predict(pc, newdata = A)
         colnames(X) <- colnames(A) <- c("PC1", "PC2")
     }
 
@@ -350,12 +347,11 @@ plot_archetypes_coordinates <- function(coordinates,
             return(d)
         return(stats::as.dist(d))
     }
-    if (!is.character(distance) || length(distance) != 1L || !nzchar(distance))
-        stop("Clustering distance must be a non-empty string, function, or dist object", call. = FALSE)
-    if (distance == "correlation")
-        return(stats::as.dist(1 - stats::cor(t(data))))
-    if (distance == "spearman")
-        return(stats::as.dist(1 - stats::cor(t(data), method = "spearman")))
+
+    stopifnot("Clustering distance must be a non-empty string, function, or dist object" = is_non_empty_string(distance))
+    distance <- ifelse(distance == "correlation", "pearson", distance)
+    if (distance %in% c("pearson", "spearman", "kendall"))
+        return(stats::as.dist(1 - stats::cor(t(data), method = distance)))
     stats::dist(data, method = distance)
 }
 
@@ -371,7 +367,7 @@ plot_archetypes_coordinates <- function(coordinates,
     cluster_arg <- if (margin == "rows") "cluster_rows" else "cluster_cols"
     if (inherits(value, "hclust"))
         return(value)
-    if (is.character(value) && length(value) == 1L) {
+    if (is_single_string(value)) {
         mode <- toupper(value)
         if (!(mode %in% c("PC1", "AOP")))
             stop(

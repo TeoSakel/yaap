@@ -8,7 +8,7 @@ test_that("effic uses a pseudo-inverse when cov(X) is singular", {
         "pseudo-inverse"
     )
     expect_equal(eta, sum(diag(MASS::ginv(stats::cov(X)) %*% stats::cov(Y))))
-    expect_true(is.finite(eta))
+    expect_true(is_number(eta))
 })
 
 test_that("effic keeps Cholesky path for positive definite covariance", {

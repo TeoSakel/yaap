@@ -1,20 +1,38 @@
 #' Run Archetypal Analysis
 #'
-#' `run_aa()` is the common entry point for fitting archetypal analysis models.
-#' It handles shared validation, preprocessing, initialization, and output
-#' formatting, then delegates the optimization loop to the selected method.
+#' Common entry point for fitting archetypal analysis models. Dispatches to the
+#' solver selected by `method`. For solver-specific arguments, theoretical
+#' background, and class-specific return slots, see the individual solver pages.
 #'
-#' @param x data matrix (rows = samples, columns = dimensions), or an object
+#' @param x numeric matrix (rows = samples, columns = features), or an object
 #'   with a class-specific `run_aa()` method.
-#' @param formula formula selecting variables from `data` or the formula
-#'   environment for formula input. The response, when present, is ignored.
-#' @param data data matrix (rows = samples, columns = dimensions), an optional
-#'   data frame for formula input, or an object with a class-specific `run_aa()`
-#'   method.
-#' @param K number of archetypes
-#' @param ... arguments passed to methods.
+#' @param formula formula selecting variables from `data`. The response, when
+#'   present, is ignored.
+#' @param data optional data frame supplying variables for formula input.
+#' @param K number of archetypes.
+#' @param ... additional arguments passed to the selected solver.
 #'
-#' @returns An object of class \code{\link{archetypes}}
+#' @returns An object of class `archetypes` with components:
+#' \describe{
+#'   \item{`coordinates`}{(K x M) archetype coordinates in the original feature space.}
+#'   \item{`coefficients`}{(K x N) weights expressing each archetype as a convex combination of samples.}
+#'   \item{`compositions`}{(N x K) row-stochastic weights expressing each sample as a convex combination of archetypes.}
+#'   \item{`loss`}{data frame of per-iteration metrics (`loss`, `r2`, `k_S`, `k_A`).}
+#'   \item{`converged`}{logical convergence flag.}
+#'   \item{`data`}{original data passed to the fitter.}
+#'   \item{`call`}{the matched call.}
+#'   \item{`family`}{observation family string (e.g. `"gaussian"`).}
+#'   \item{`init`}{initial archetype coordinates (when available).}
+#'   \item{`slack`, `weights`}{optional relaxation and sample-weight parameters.}
+#' }
+#'
+#' @seealso
+#' Solvers: [archetypes_pgd()], [archetypes_nnls()], [archetypes_kernel_pgd()],
+#'   [archetypes_directional()], [archetypes_paa()].
+#' Post-fit: [plot.archetypes()], [predict.archetypes()],
+#'   [fitted.archetypes()], [residuals.archetypes()], [anames()].
+#' Model selection: [AIC.archetypes()], [tune_archetypes()].
+#' Tidy output: [tidy.archetypes()], [glance.archetypes()], [augment.archetypes()].
 #'
 #' @examples
 #' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
@@ -93,49 +111,37 @@ run_aa.formula <- function(formula,
 #' @rdname run_aa
 #' @param method fitting method. One of `"pgd"`, `"nnls"`, `"kernel"`,
 #'   `"directional"`, or `"paa"` (default: `"pgd"`).
-#' @param family observation family for `method = "paa"`. Defaults to
+#' @param family observation family passed to `method = "paa"`. Defaults to
 #'   `"gaussian"`.
-#' @param init function, method string, or numeric coordinate matrix to initialize
-#'   archetypes. `NULL` uses `"furthest_sum"` except for `method =
-#'   "directional"`, where it uses `"random"`. When a matrix is supplied it
-#'   must have dimension `K x ncol(x)`. Rows outside the allowed data hull
-#'   are projected into it with a warning; row names, when present, are used as
-#'   archetype names.
-#' @param init_args list of additional arguments for the initialization function
-#' @param weights optional vector of sample weights (default: NULL). Weights are
-#'   internally scaled to have mean 1 and then are square-rooted.
-#' @param scale scaling or metric embedding used before fitting. `TRUE` applies
-#'   the default z-score preprocessing, `FALSE` leaves columns on their original
-#'   scale, a positive numeric vector divides columns by user-supplied scale
-#'   factors, and a symmetric positive-definite matrix applies the corresponding
-#'   feature metric embedding in the original data column space.
-#' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
-#' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
-#' @param sd_threshold threshold for feature standard deviation to filter
-#'   low-variance features (default: 1e-6)
-#' @param max_iter maximum number of iterations (default: 100)
-#' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
-#' @param tol_r2 convergence tolerance based on R^2 (default: 0.9999)
-#' @param max_kappa maximum condition number for archetypes (default: 1000)
-#' @param eps small positive number to ensure numerical stability
-#'   (default: 0 for sparse input 1e-8 for dense)
-#' @param verbose whether to print progress messages (default: FALSE)
-#' @param missing whether to fit the missing-data PGD objective. When `TRUE`,
-#'   only observed entries are optimized; dense `NA` values are treated as
-#'   missing and sparse structural zeros are treated as missing.
-#' @param nrep number of random restarts. The optimizer is run `nrep` times
-#'   from independent initializations and the fit with the lowest final loss
+#' @param init function name, method string, or numeric coordinate matrix used
+#'   to initialize archetypes. `NULL` uses `"furthest_sum"` for all methods
+#'   except `"directional"`, which uses `"random"`. When a matrix is supplied
+#'   it must have dimension `K x ncol(x)`; row names are used as archetype
+#'   names.
+#' @param init_args list of additional arguments for the initialization function.
+#' @param weights optional numeric vector of sample weights (default: `NULL`).
+#'   Internally scaled to mean 1 and square-rooted before use.
+#' @param scale pre-fitting scaling or metric embedding. `TRUE` applies z-score
+#'   standardization; `FALSE` leaves columns on their original scale; a
+#'   positive numeric vector divides by user-supplied scale factors; a symmetric
+#'   positive-definite matrix applies the corresponding feature metric.
+#' @param robust whether to use Tukey bisquare row reweighting (default: `FALSE`).
+#' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685).
+#' @param sd_threshold threshold for feature standard deviation below which
+#'   columns are dropped before fitting (default: 1e-6).
+#' @param max_iter maximum number of outer iterations (default: 100).
+#' @param tol convergence tolerance on the residual sum of squares (default: 1e-6).
+#' @param tol_r2 convergence tolerance on R\eqn{^2} (default: 0.9999).
+#' @param max_kappa maximum condition number for the archetype matrix (default: 1000).
+#' @param eps small positive number for numerical stability
+#'   (default: 0 for sparse input, 1e-8 for dense).
+#' @param verbose whether to print progress messages (default: `FALSE`).
+#' @param nrep number of random restarts; the best fit (lowest final loss)
 #'   is returned (default: 1).
-#' @param ... method-specific arguments. For `"pgd"`, these are `delta`,
-#'   `missing`, `pseudo_pgd`, `step_size`, `max_iter_optimizer`,
-#'   `step_shrinkage`, and `max_no_update`. For `"nnls"`, these are
-#'   `ols_solver`, `bigM`, and `max_no_update`. For `"kernel"`, these include
-#'   `kernel`, `kernel_args`, `delta`, `pseudo_pgd`, `step_size`,
-#'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`. For
-#'   `"directional"`, these include `hemisphere`, `precision`, `step_size`,
-#'   `max_iter_optimizer`, `step_shrinkage`, and `max_no_update`. For `"paa"`,
-#'   these include `step_size`, `max_iter_optimizer`, `step_shrinkage`, and
-#'   `max_no_update`.
+#' @param ... additional arguments passed to the selected solver. See
+#'   [archetypes_pgd()], [archetypes_nnls()], [archetypes_kernel_pgd()],
+#'   [archetypes_directional()], and [archetypes_paa()] for method-specific
+#'   parameters.
 #'
 #' @exportS3Method
 run_aa.default <- function(x,
@@ -259,11 +265,8 @@ run_aa.fd <- function(x, K, ...) {
                            ...) {
     method <- match.arg(method, c("pgd", "nnls", "kernel", "directional", "paa"))
     init <- init %||% ifelse(identical(method, "directional"), "dirichlet", "furthest_sum")
-    stopifnot("`missing` must be TRUE or FALSE" =
-                  is.logical(missing) && length(missing) == 1L && !is.na(missing))
-    stopifnot("`nrep` must be a single positive integer" =
-                  is.numeric(nrep) && length(nrep) == 1L && is.finite(nrep) &&
-                  nrep >= 1L && nrep == as.integer(nrep))
+    stopifnot("`missing` must be TRUE or FALSE" = is_logical(missing))
+    stopifnot("`nrep` must be a single positive integer" = is_count(nrep))
     nrep <- as.integer(nrep)
     method_args <- list(...)
     precomputed_kernel <- identical(method, "kernel") &&
@@ -368,9 +371,7 @@ run_aa.fd <- function(x, K, ...) {
 }
 
 .aa_check_max_no_update <- function(max_no_update) {
-    stopifnot("max_no_update must be a positive integer" =
-                  max_no_update == as.integer(max_no_update) &&
-                      max_no_update >= 1L)
+    stopifnot("max_no_update must be a positive integer" = is_count(max_no_update))
     invisible(TRUE)
 }
 
@@ -378,12 +379,10 @@ run_aa.fd <- function(x, K, ...) {
                                                   max_iter_optimizer,
                                                   step_shrinkage,
                                                   max_no_update) {
-    stopifnot("step_size must be positive" = step_size > 0)
-    stopifnot("max_iter_optimizer must be a positive integer" =
-                  max_iter_optimizer == as.integer(max_iter_optimizer) &&
-                      max_iter_optimizer >= 1L)
+    stopifnot("step_size must be positive" = is_positive(step_size))
+    stopifnot("max_iter_optimizer must be a positive integer" = is_count(max_iter_optimizer))
     stopifnot("step_shrinkage must be between (0, 1)" =
-                  step_shrinkage > 0 && step_shrinkage < 1)
+                  is_number(step_shrinkage) && step_shrinkage > 0 && step_shrinkage < 1)
     .aa_check_max_no_update(max_no_update)
     invisible(TRUE)
 }
@@ -545,12 +544,11 @@ run_aa.fd <- function(x, K, ...) {
         return(.aa_matrix_init(X, ctx[["K"]], init, ctx[["eps"]], L, delta))
     }
 
-    if (is.character(init)) {
-        stopifnot("`init` must be a single string" = length(init) == 1L)
+    if (is_non_empty_string(init)) {
         init_args <- c(list(method = init), init_args)
         init <- aa_init
     } else if (!is.function(init)) {
-        stop("`init` must be a function, a single string, or archetypes coordinate matrix")
+        stop("`init` must be a function, a single non-empty string, or archetypes coordinate matrix")
     }
 
     init_vars <- do.call(init, args = c(list(X = X, K = ctx[["K"]]), init_args))

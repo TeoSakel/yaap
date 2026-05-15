@@ -31,7 +31,7 @@ NULL
 #' @rdname simplex_projection
 #' @export
 proj_simplex <- function(mat, eps = 0) {
-    stopifnot("eps must be non-negative" = eps >= 0)
+    stopifnot("eps must be non-negative" = is_non_negative(eps))
     proj_row <- function(v) {
         sv <- sum(v)
         if (abs(sv - 1) <= length(v) * eps) return(v / sv)
@@ -51,7 +51,7 @@ proj_simplex <- function(mat, eps = 0) {
 #' @rdname simplex_projection
 #' @export
 proj_l1 <- function(mat, eps = 0) {
-    stopifnot("eps must be non-negative" = eps >= 0)
+    stopifnot("eps must be non-negative" = is_non_negative(eps))
     out <- pmax(mat, eps)      # project to 1st orthant
     out <- out / rowSums(out)  # l1-normalize each row
     out
@@ -99,8 +99,8 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     A <- as.matrix(A)
 
     # Check inputs
-    stopifnot("eps must be non-negative" = eps >= 0)
-    stopifnot("lambda must be non-negative" = lambda >= 0)
+    stopifnot("eps must be non-negative" = is_non_negative(eps))
+    stopifnot("lambda must be non-negative" = is_non_negative(lambda))
     stopifnot("Incompatible dimensions between archetypes and new data" = ncol(A) == ncol(X))
 
     # Main
@@ -185,8 +185,10 @@ fit_qp <- function(A,
 #' @param ... Additional arguments passed to the specific input handler.
 #'
 #' @return A one-hot encoded matrix:
-#'   - dense `matrix` when `sparse = FALSE`
-#'   - sparse `Matrix::dgCMatrix` when `sparse = TRUE`
+#' \describe{
+#'   \item{`sparse = FALSE`}{a dense `matrix`.}
+#'   \item{`sparse = TRUE`}{a sparse `Matrix::dgCMatrix`.}
+#' }
 #'
 #' @examples
 #' # Numeric vector: columns correspond to indices 1..max(ind)

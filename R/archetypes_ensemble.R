@@ -36,17 +36,12 @@ tune_archetypes <- function(data,
         stop("`K` must be a positive integer vector.", call. = FALSE)
     }
     K <- as.integer(K)
-    if (!is.numeric(nrep) || length(nrep) != 1L || !is.finite(nrep) ||
-        nrep != as.integer(nrep) || nrep < 1L) {
-        stop("`nrep` must be a single positive integer.", call. = FALSE)
-    }
-    nrep <- as.integer(nrep)
+    stopifnot("`nrep` must be a single positive integer." = is_count(nrep))
     if (!is.function(eval))
         stop("`eval` must be a function.", call. = FALSE)
 
     eval_name <- eval_name %||% .aa_eval_name(substitute(eval))
-    stopifnot("`eval_name` must be a single non-empty string" =
-                  is.character(eval_name) && length(eval_name) == 1L && nzchar(eval_name))
+    stopifnot("`eval_name` must be a single non-empty string" = is_non_empty_string(eval_name))
     reserved_metrics <- c("model_id", "K", "replicate", "converged", "loss", "r2")
     if (eval_name %in% reserved_metrics)
         stop("`eval_name` must not overwrite an internal metrics column.", call. = FALSE)
@@ -161,10 +156,8 @@ best.archetypes_ensemble <- function(x,
                                      direction = NULL,
                                      ...) {
     metric <- metric %||% x[["prefer_metric"]]
-    stopifnot("`metric` must be a single non-empty string" =
-                  is.character(metric) && length(metric) == 1L && nzchar(metric))
-    if (!metric %in% names(x[["metrics"]]))
-        stop("`metric` must be a column in `x$metrics`.", call. = FALSE)
+    stopifnot("`metric` must be a single non-empty string" = is_non_empty_string(metric))
+    stopifnot("`metric` must be a column in `x$metrics`" = metric %in% names(x[["metrics"]]))
 
     direction <- direction %||% x[["prefer_direction"]]
     direction <- match.arg(direction, c("minimize", "maximize"))
@@ -175,11 +168,7 @@ best.archetypes_ensemble <- function(x,
     if (all(is.na(values)))
         stop("All values for `metric` are `NA`.", call. = FALSE)
 
-    which_best <- if (identical(direction, "minimize")) {
-        which.min(values)
-    } else {
-        which.max(values)
-    }
+    which_best <- if (identical(direction, "minimize")) which.min(values) else which.max(values)
 
     list(
         metrics = x[["metrics"]][which_best, , drop = FALSE],
@@ -262,7 +251,7 @@ consistency.archetypes_ensemble <- function(x,
                                             y,
                                             what = c("compositions", "coefficients", "coordinates"),
                                             ...) {
-    if (!missing(y) && is.character(y) && length(y) == 1L)
+    if (!missing(y) && is_single_string(y))
         what <- y
     else if (!missing(y))
         stop("`y` is not used when computing pairwise ensemble consistency.",
@@ -399,26 +388,9 @@ summary.archetypes_ensemble <- function(object, ...)
     x / row_total
 }
 
-.aa_check_row_stochastic <- function(x, tolerance = 1e-8) {
-    x <- as.matrix(x)
-    if (!is.numeric(x))
-        stop("Consistency matrices must be numeric.", call. = FALSE)
-    if (any(!is.finite(x)))
-        stop("Consistency matrices must contain only finite values.", call. = FALSE)
-    if (any(x < -tolerance))
-        stop("Consistency matrices must be non-negative.", call. = FALSE)
-    if (!isTRUE(all.equal(rowSums(x), rep(1, nrow(x)), tolerance = tolerance,
-                          check.attributes = FALSE))) {
-        stop("Consistency matrices must be row-stochastic.", call. = FALSE)
-    }
-    pmax(x, 0)
-}
-
 .nmi <- function(x, y) {
-    x <- .aa_check_row_stochastic(x)
-    y <- .aa_check_row_stochastic(y)
-    if (nrow(x) != nrow(y))
-        stop("Consistency matrices must have the same number of rows.", call. = FALSE)
+    stopifnot("Consistency matrices must have the same number of rows." = nrow(x) == nrow(y))
+    stopifnot("Consistency matrices must be row-stochastic." = is_row_stochastic(x) && is_row_stochastic(y))
     n <- nrow(x)
     pxy <- crossprod(x, y) / n  # joint distribution of archetype co-membership
     pxx <- crossprod(x) / n  # joint distribution of archetype co-membership in x

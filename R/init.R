@@ -103,12 +103,11 @@ aa_init <- function(X,
                     ...) {
 
     # Input checks -----------------------------------------------------------
-    stopifnot("K must be greater than 1" = K >= 1)
-    stopifnot("K must be an integer" = K == as.integer(K))
+    stopifnot("K must be a positive integer" = is_count(K))
     stopifnot("Number of samples must be at least K" = nrow(X) >= K)
 
 
-    stopifnot("`method` must be a single string" = is.character(method) && length(method) == 1L)
+    stopifnot("`method` must be a single string" = is_single_string(method))
     method <- match.arg(
         method,
         c(
@@ -125,34 +124,23 @@ aa_init <- function(X,
     )
 
     if (method == "coreset_initfn") {
-        stopifnot("`m` must be supplied for `coreset_initfn`" = !is.null(m))
-        stopifnot("`m` must be an integer" = m == as.integer(m))
-        stopifnot("`m` must be at least K" = m >= K)
+        stopifnot("`m` must be a positive integer at least K" = is_count(m, start_from = K))
         stopifnot("Number of samples must be at least `m`" = nrow(X) >= m)
     } else if (method == "aa_pp_mc") {
         batch_size <- ifelse(is.null(batch_size), m, batch_size)
-        stopifnot("`batch_size` must be supplied for `aa_pp_mc`" = !is.null(batch_size))
-        stopifnot("`batch_size` must be an integer" = batch_size == as.integer(batch_size))
-        stopifnot("`batch_size` must be at least K" = batch_size >= K)
+        stopifnot("`batch_size` must be a positive integer at least K" = is_count(batch_size, start_from = K))
         stopifnot("Number of samples must be at least `batch_size`" = nrow(X) >= batch_size)
     } else if (method == "hull_outmost") {
         hull_method <- match.arg(hull_method, c("full", "projected", "partitioned"))
 
-        stopifnot("`projected_dim` must be an integer" = projected_dim == as.integer(projected_dim))
-        stopifnot("`projected_dim` must be in [1, ncol(X)]" =
-                      projected_dim >= 1L && projected_dim <= ncol(X))
+        stopifnot("`projected_dim` must be between [1, ncol(X)]" =
+                      is_count(projected_dim) && projected_dim <= ncol(X))
+        stopifnot("`n_partitions` must be a positive integer" = is_count(n_partitions))
 
-        stopifnot("`n_partitions` must be an integer" = n_partitions == as.integer(n_partitions))
-        stopifnot("`n_partitions` must be greater than zero" = n_partitions >= 1L)
-
-        stopifnot("`use_unique_candidates` must be a single logical" =
-                      is.logical(use_unique_candidates) && length(use_unique_candidates) == 1L)
-        stopifnot("`use_unique_candidates` must not be NA" = !is.na(use_unique_candidates))
+        stopifnot("`use_unique_candidates` must be a single logical" = is_logical(use_unique_candidates))
 
         if (!is.null(n_projection_max)) {
-            stopifnot("`n_projection_max` must be an integer" =
-                          n_projection_max == as.integer(n_projection_max))
-            stopifnot("`n_projection_max` must be greater than zero" = n_projection_max >= 1L)
+            stopifnot("`n_projection_max` must be a positive integer" = is_count(n_projection_max))
         }
     }
 
@@ -228,13 +216,9 @@ kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"),
 
 furthest_sum <- function(X, K, distances = NULL, refinement_steps = 10L, ...) {
     stopifnot("`refinement_steps` must be a single non-negative integer" =
-                  length(refinement_steps) == 1L &&
-                      !is.na(refinement_steps) &&
-                      refinement_steps == as.integer(refinement_steps) &&
-                      refinement_steps >= 0L)
+                is_count(refinement_steps, start_from = 0L))
 
     N <- nrow(X)
-    refinement_steps <- as.integer(refinement_steps)
     effective_refinement_steps <- min(refinement_steps, max(N - K, 0L))
     n_iterations <- K + effective_refinement_steps
 
@@ -427,8 +411,7 @@ hull_outmost <- function(X,
                                                 projected_dim = 2L,
                                                 n_projection_max = NULL) {
     D <- ncol(X)
-    projected_dim <- as.integer(projected_dim)
-    stopifnot("`projected_dim` must be in [1, ncol(X)]" = projected_dim >= 1L && projected_dim <= D)
+    stopifnot("`projected_dim` must be an integer in [1, ncol(X)]" = is_count(projected_dim) && projected_dim <= D)
 
     if (projected_dim == D)
         return(.aa_build_hull_candidates_full(X))
@@ -578,10 +561,8 @@ hull_outmost <- function(X,
 }
 
 dirichlet <- function(X, K, alpha = 1, eps = 0, ...) {
-    stopifnot("`alpha` must be a single positive number" =
-                  is.numeric(alpha) && length(alpha) == 1L && is.finite(alpha) && alpha > 0)
-    stopifnot("`eps` must be a single non-negative number" =
-                  is.numeric(eps) && length(eps) == 1L && is.finite(eps) && eps >= 0)
+    stopifnot("`alpha` must be a single positive number" = is_positive(alpha))
+    stopifnot("`eps` must be a single non-negative number" = is_non_negative(eps))
     N <- nrow(X)
     nm <- paste0("A", seq_len(K))
     B <- matrix(stats::rgamma(K * N, shape = alpha), nrow = K, ncol = N)

@@ -18,9 +18,11 @@
 #'
 #' @return
 #' A tibble. Column names depend on `matrix`:
-#' * `"coordinates"`: `archetype`, `term`, `value` (K * M rows)
-#' * `"coefficients"`: `archetype`, `sample`, `value` (K * N rows)
-#' * `"compositions"`: `sample`, `archetype`, `value` (N * K rows)
+#' \describe{
+#'   \item{`"coordinates"`}{`archetype`, `term`, `value` columns (K * M rows).}
+#'   \item{`"coefficients"`}{`archetype`, `sample`, `value` columns (K * N rows).}
+#'   \item{`"compositions"`}{`sample`, `archetype`, `value` columns (N * K rows).}
+#' }
 #'
 #' @seealso [glance.archetypes()], [augment.archetypes()]
 #'
@@ -114,12 +116,14 @@ tidy.kernel_archetypes <- function(x, matrix = c("coordinates", "coefficients", 
 #'
 #' @return
 #' A one-row tibble with columns:
-#' * `K` — number of archetypes
-#' * `converged` — did the optimizer converge?
-#' * `loss` — final residual sum of squares
-#' * `r2` — final R²
-#' * `n_iter` — number of iterations run (excluding initialisation row)
-#' * `family` — observation family (`archetypes` only)
+#' \describe{
+#'   \item{`K`}{number of archetypes.}
+#'   \item{`converged`}{logical; did the optimizer converge?}
+#'   \item{`loss`}{final residual sum of squares.}
+#'   \item{`r2`}{final R\eqn{^2}.}
+#'   \item{`n_iter`}{number of iterations run (excluding the initialisation row).}
+#'   \item{`family`}{observation family (for `archetypes` fits only).}
+#' }
 #'
 #' @seealso [tidy.archetypes()], [augment.archetypes()]
 #'
