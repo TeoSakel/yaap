@@ -1,3 +1,20 @@
+# Infix Utilities -------------------------------------------------------------------------------
+
+# Null-coalescing operator: x %||% y returns x when non-NULL, otherwise y.
+# Imported from rlang; defined here only as documentation anchor.
+
+# List-patch operator: defaults %|p|% overrides fills in missing keys of
+# `defaults` with values from `overrides`, mirroring utils::modifyList but
+# with the opposite arg order (first arg wins where present).
+#
+# defaults[names(overrides)] <- overrides; defaults
+#
+# @keywords internal
+`%|p|%` <- function(defaults, overrides) {
+    defaults[names(overrides)] <- overrides
+    defaults
+}
+
 # Weighting Function for Robust Archetypal Analysis ---------------------------------------------
 
 # Tukey's bisquare row weights from squared row residual norms.
@@ -309,16 +326,14 @@ effic <- function(X, Y) {
 
 # Remove features (columns of X) with low variance
 .filter_low_variance <- function(X, sd_threshold) {
-    sd_vals <- attr(X, "scaled:scale")
-    if (is.null(sd_vals))
-        sd_vals <- matrixStats::colSds(X)
+    sd_vals <- attr(X, "scaled:scale") %||% matrixStats::colSds(X)
     mask <- sd_vals >= sd_threshold
     M <- sum(mask)
     attr(X, "scaled:scale") <- sd_vals
     if (M < ncol(X)) {
         # Throw Warning
         fmt <- "The following %d features are filtered out due to low variance: %s"
-        dropped_features <- if (is.null(colnames(X))) which(!mask) else colnames(X)[!mask]
+        dropped_features <- colnames(X)[!mask] %||% which(!mask)
         dropped_features <- paste(dropped_features, collapse = ", ")
         warning(sprintf(fmt, ncol(X) - M, dropped_features), call. = FALSE)
 

@@ -86,10 +86,8 @@ archetypes <- function(coordinates,
                        init = NULL,
                        family = "gaussian",
                        weights = NULL) {
-    if (is.null(call))
-        call <- match.call()
-    if (is.null(loss))
-        loss <- data.frame(loss = NA_real_, r2  = NA_real_, k_S = NA_real_, k_A = NA_real_)
+    call <- call %||% match.call()
+    loss <- loss %||% data.frame(loss = NA_real_, r2  = NA_real_, k_S = NA_real_, k_A = NA_real_)
 
     return(
         new_archetypes(
@@ -193,8 +191,7 @@ new_archetypes <- function(coordinates,
 
     # Check loss
     if(!inherits(loss, "data.frame")) stop("loss must be compatible with data.frame")
-    if (is.null(family))
-        family <- "gaussian"
+    family <- family %||% "gaussian"
     stopifnot("family must be a single non-empty string" =
                   is.character(family) && length(family) == 1L && nzchar(family))
     if (!is.null(weights)) {
@@ -319,9 +316,7 @@ anames.archetypes <- function(x)
 #' @exportS3Method
 fitted.archetypes <- function(object, ...) {
     X_hat <- with(object, compositions %*% coordinates)
-    family <- object[["family"]]
-    if (is.null(family))
-        family <- "gaussian"
+    family <- object[["family"]] %||% "gaussian"
     if (identical(family, "multinomial") && !is.null(object[["data"]])) {
         totals <- rowSums(as.matrix(object[["data"]]))
         X_hat <- totals * X_hat
@@ -414,9 +409,7 @@ predict.archetypes <- function(object,
         newdata
     }
 
-    family <- object[["family"]]
-    if (is.null(family))
-        family <- "gaussian"
+    family <- object[["family"]] %||% "gaussian"
 
     S <- if (identical(family, "gaussian")) {
         fit_simplex(A, X, ...)
@@ -458,196 +451,6 @@ print.archetypes <- function(x, ...) {
     invisible(x)
 }
 
-#' Stacked barplot of composition weights
-#'
-#' Draws a horizontal stacked barplot for a matrix-like set of composition
-#' weights, with rows interpreted as samples and columns interpreted as
-#' archetypes or other compositional parts.
-#'
-#' This display is intended for small composition matrices, roughly of tens of
-#' samples and/or archetypes. For many samples or many archetypes, a heatmap is
-#' usually easier to read.
-#'
-#' @param x Numeric matrix or data frame. Rows are samples and columns are
-#'   archetypes. Rows should contain non-negative composition weights.
-#' @param cluster_rows,cluster_cols Logical values, one of `"PC1"` or
-#'   `"AOP"`, or `hclust` objects. When `TRUE`, rows or columns are reordered
-#'   by hierarchical clustering. `"PC1"` orders rows by their first principal
-#'   component score and columns by their first principal component loading.
-#'   `"AOP"` (angle of projection) orders rows by the angle of their PC1/PC2
-#'   scores and columns by the angle of their PC1/PC2 loadings. Row clustering
-#'   is computed on an internal centered log-ratio (`clr`) transform.
-#' @param distance Optional distance metric used for both row and column
-#'   clustering when `distance_rows` or `distance_cols` are not supplied.
-#' @param distance_rows,distance_cols Distance metrics used when clustering
-#'   rows or columns. Values may be any method accepted by [stats::dist()],
-#'   `"correlation"`, a function that returns a `dist` object, or a precomputed
-#'   `dist` object. Row distances are computed after the cdt transform.
-#' @param linkage Linkage method passed to [stats::hclust()].
-#' @param col Optional vector of colors, one per archetype. Defaults to a
-#'   qualitative HCL palette.
-#' @param legend Logical. Should an archetype legend be drawn?
-#' @param border Border color for the stacked bar segments.
-#' @param ... Additional graphical parameters passed to [graphics::barplot()].
-#'
-#' @return Invisibly returns a list with the reordered matrix, row and column
-#'   orders, and clustering objects.
-#'
-#' @export
-composition_barplot <- function(x,
-                                cluster_rows = FALSE,
-                                cluster_cols = FALSE,
-                                distance = NULL,
-                                distance_rows = "euclidean",
-                                distance_cols = "euclidean",
-                                linkage = "complete",
-                                col = NULL,
-                                legend = TRUE,
-                                border = NA,
-                                ...) {
-    S <- as.matrix(x)
-    if (!is.numeric(S))
-        stop("`x` must be a numeric matrix or data frame", call. = FALSE)
-    if (!all(is.finite(S)))
-        stop("`x` must contain only finite values", call. = FALSE)
-    if (any(S < 0))
-        stop("`x` must contain non-negative composition weights", call. = FALSE)
-    if (nrow(S) == 0L || ncol(S) == 0L)
-        stop("`x` must have at least one row and one column", call. = FALSE)
-    if (is.null(rownames(S)))
-        rownames(S) <- seq_len(nrow(S))
-    if (is.null(colnames(S)))
-        colnames(S) <- paste0("A", seq_len(ncol(S)))
-    if (!is.null(distance)) {
-        if (missing(distance_rows))
-            distance_rows <- distance
-        if (missing(distance_cols))
-            distance_cols <- distance
-    }
-
-    make_dist <- function(data, distance) {
-        if (inherits(distance, "dist"))
-            return(distance)
-        if (is.function(distance)) {
-            d <- distance(data)
-            if (inherits(d, "dist"))
-                return(d)
-            return(stats::as.dist(d))
-        }
-        if (!is.character(distance) || length(distance) != 1L || !nzchar(distance))
-            stop("Clustering distance must be a non-empty string, function, or dist object", call. = FALSE)
-        if (distance == "correlation")
-            return(stats::as.dist(1 - stats::cor(t(data))))
-        if (distance == "spearman")
-            return(stats::as.dist(1 - stats::cor(t(data), method = "spearman")))
-        stats::dist(data, method = distance)
-    }
-
-    make_component_order <- function(components, mode) {
-        if (mode == "PC1")
-            return(order(components[, 1L]))
-        if (ncol(components) < 2L)
-            return(NULL)
-        order(atan2(components[, 2L], components[, 1L]))
-    }
-
-    make_hclust <- function(value, data, margin, distance) {
-        cluster_arg <- if (margin == "rows") "cluster_rows" else "cluster_cols"
-        if (inherits(value, "hclust"))
-            return(value)
-        if (is.character(value) && length(value) == 1L) {
-            mode <- toupper(value)
-            if (!(mode %in% c("PC1", "AOP")))
-                stop(
-                    sprintf("`%s` must be logical, 'PC1', 'AOP', or an hclust object", cluster_arg),
-                    call. = FALSE
-                )
-            pca <- stats::prcomp(
-                data,
-                center = TRUE,
-                scale. = FALSE,
-                rank. = if (mode == "AOP") 2L else 1L
-            )
-            components <- if (margin == "rows") pca[["x"]] else pca[["rotation"]]
-            order <- make_component_order(components, mode)
-            if (is.null(order))
-                return(NULL)
-            return(list(order = order))
-        }
-        if (!is.logical(value))
-            stop(
-                sprintf("`%s` must be logical, 'PC1', 'AOP', or an hclust object", cluster_arg),
-                call. = FALSE
-            )
-        if (!isTRUE(value))
-            return(NULL)
-        if (margin == "rows") {
-            if (nrow(data) < 2L)
-                return(NULL)
-            transformed <- .aa_clr(data)
-            return(stats::hclust(make_dist(transformed, distance), method = linkage))
-        }
-        if (ncol(data) < 2L)
-            return(NULL)
-        stats::hclust(make_dist(t(data), distance), method = linkage)
-    }
-
-    row_hclust <- make_hclust(cluster_rows, S, "rows", distance_rows)
-    col_hclust <- make_hclust(cluster_cols, S, "cols", distance_cols)
-    row_order <- if (is.null(row_hclust)) seq_len(nrow(S)) else row_hclust[["order"]]
-    col_order <- if (is.null(col_hclust)) seq_len(ncol(S)) else col_hclust[["order"]]
-    S_plot <- S[row_order, col_order, drop = FALSE]
-
-    if (is.null(col)) {
-        col <- grDevices::hcl.colors(ncol(S_plot), palette = "Dark 3")
-    } else if (!is.null(names(col)) && all(colnames(S_plot) %in% names(col))) {
-        col <- col[colnames(S_plot)]
-    }
-    col <- rep_len(col, ncol(S_plot))
-
-    dots <- list(...)
-    old_par <- graphics::par(no.readonly = TRUE)
-    on.exit(graphics::par(old_par), add = TRUE)
-    if (isTRUE(legend))
-        graphics::par(mar = old_par[["mar"]] + c(0, 0, 0, 4))
-
-    args <- list(
-        height = t(S_plot),
-        col = col,
-        border = border,
-        xlab = "Composition",
-        names.arg = rownames(S_plot),
-        horiz = TRUE,
-        las = 1L
-    )
-    args[names(dots)] <- dots
-    do.call(graphics::barplot, args)
-    if (isTRUE(legend)) {
-        usr <- graphics::par("usr")
-        legend_x <- usr[2L] + 0.03 * diff(usr[1:2])
-        graphics::legend(
-            x = legend_x,
-            y = usr[4L],
-            legend = colnames(S_plot),
-            fill = col,
-            border = border,
-            bty = "n",
-            cex = 0.8,
-            xpd = NA,
-            xjust = 0,
-            yjust = 1
-        )
-    }
-
-    invisible(list(
-        compositions = S_plot,
-        row_order = row_order,
-        col_order = col_order,
-        row_hclust = row_hclust,
-        col_hclust = col_hclust
-    ))
-}
-
 #' Plot method for archetypes objects
 #'
 #' Draws diagnostic and geometric plots for a fitted archetypal analysis model.
@@ -657,58 +460,36 @@ composition_barplot <- function(x,
 #'   `x$compositions`, with bars representing observations and colors
 #'   representing archetypes. Rows and columns are clustered by default.
 #' * `"ternary"` and `"simplex"` plot the rows of `x$compositions` as points in
-#'   simplex coordinates. For three archetypes this is a ternary plot: points
-#'   near a corner are dominated by one archetype, points near an edge mix two
-#'   archetypes, and points near the center mix all three.
+#'   simplex coordinates.
 #' * `"loss"` plots the objective value stored in `x$loss$loss` across
-#'   optimization iterations. This is useful for checking whether the fitting
-#'   algorithm reduced the fitted objective and whether the loss curve has plateaued.
-#' * `"profiles"` plots the fitted archetypes in their natural representation:
-#'   coefficient functions for `fd` fits, and archetype profiles for matrix and
-#'   probabilistic fits.
-#' * `"coordinates"` plots the original observations together with the fitted
-#'   archetype coordinates in feature space. In two dimensions the archetypes
-#'   are connected as a closed polygon. In more than two dimensions the method
-#'   draws pairwise scatterplots and connects archetypes with dashed closed
-#'   paths in each panel. With `projection = "pca"`, higher-dimensional data and
-#'   archetypes are first projected to the first two principal components.
+#'   optimization iterations.
+#' * `"profiles"` plots the fitted archetypes in their natural representation.
+#' * `"coordinates"` plots archetype coordinates, optionally over the original
+#'   observations when data are available.
 #'
 #' @param x An object of class `archetypes`
 #' @param what Character string naming the plot to draw. Supported values are
 #'   `"composition"`, `"compositions"`, `"ternary"`, `"simplex"`, `"loss"`,
 #'   `"profiles"`, and `"coordinates"`. `"composision"` and `"composisions"` are
 #'   accepted as aliases for `"compositions"`.
-#' @param samples Optional sample subset for plots that display observations:
+#' @param subset Optional sample subset for plots that display observations:
 #'   `"composition"`, `"compositions"`, `"ternary"`, `"simplex"`, and
 #'   `"coordinates"`. May be numeric row indices, sample names, or a logical
 #'   vector. Subsetting is applied before clustering or projection.
-#' @param data Optional numeric matrix with the original data. Required for
-#'   `what = "coordinates"` if the object does not store its original data.
-#' @param projection Projection to use for coordinate plots. Use `"pca"` to
-#'   project data with more than two dimensions to the first two principal
-#'   component scores before plotting.
-#' @param show_anames Logical; for `what = "coordinates"`, whether
-#'   to draw archetype names next to archetype points.
-#' @param args.archetypes Optional named list of graphical arguments used for
-#'   archetype points/paths in `what = "coordinates"`. Useful for styling
-#'   archetypes separately when `...` aesthetics (e.g., `col`) are mapped to
-#'   observation-level vectors.
-#' @param ... Additional graphical parameters passed to the underlying plotting
-#'   functions.
+#' @param plot Logical. Should the plot be drawn? If `FALSE`, only the prepared
+#'   plotting data is returned invisibly.
+#' @param ... Additional graphical parameters passed to the selected plotting helper.
+#'
+#' @return Invisibly returns the prepared data used by the selected plot.
 #'
 #' @importFrom graphics lines pairs plot points
 #' @exportS3Method
 plot.archetypes <- function(x,
                             what = c("compositions", "loss", "coordinates", "profiles"),
-                            samples = NULL,
-                            data = NULL,
-                            projection = c("none", "pca"),
-                            show_anames = TRUE,
-                            args.archetypes = list(),
+                            subset = NULL,
+                            plot = TRUE,
                             ...) {
     stopifnot(inherits(x, "archetypes"))
-    if (!is.list(args.archetypes))
-        stop("`args.archetypes` must be a list", call. = FALSE)
 
     what <- match.arg(
         tolower(what[1L]),
@@ -716,44 +497,29 @@ plot.archetypes <- function(x,
           "ternary", "simplex",
           "loss", "coordinates", "profiles")
     )
-
     if (what %in% c("composition", "composision",  "composisions"))
         what <- "compositions"
-    projection <- match.arg(projection)
 
     dots <- list(...)
-    plot_args <- function(defaults, dots) {
-        defaults[names(dots)] <- dots
-        defaults
-    }
-    arg_or <- function(name, default) {
-        value <- dots[[name]]
-        if (is.null(value)) default else value
-    }
-    subset_samples <- function(z) {
-        if (is.null(samples))
+    subset_rows <- function(z) {
+        if (is.null(subset))
             return(z)
-        if (is.logical(samples) && length(samples) != nrow(z))
-            stop("Logical `samples` must have one value per sample", call. = FALSE)
-        if (is.character(samples) && anyNA(match(samples, rownames(z))))
-            stop("Some `samples` are not sample names", call. = FALSE)
-        out <- z[samples, , drop = FALSE]
+        if (is.logical(subset) && length(subset) != nrow(z))
+            stop("Logical `subset` must have one value per sample", call. = FALSE)
+        if (is.character(subset) && anyNA(match(subset, rownames(z))))
+            stop("Some `subset` values are not sample names", call. = FALSE)
+        out <- z[subset, , drop = FALSE]
         if (nrow(out) == 0L)
-            stop("`samples` selects no samples", call. = FALSE)
+            stop("`subset` selects no samples", call. = FALSE)
         out
     }
 
     if (what == "compositions") {
-        S <- subset_samples(as.matrix(x[["compositions"]]))
-        args <- plot_args(
-            list(x = S, cluster_rows = TRUE, cluster_cols = TRUE),
-            dots
-        )
-        do.call(composition_barplot, args)
-        return(invisible(x))
+        S <- subset_rows(as.matrix(x[["compositions"]]))
+        args <- list(plot = plot, cluster_rows = TRUE, cluster_cols = TRUE) %|p|% dots
+        args[["compositions"]] <- S
+        return(do.call(plot_archetypes_compositions, args))
     }
-
-    # Composition Ternary/Simplex Plot ---------------------------------------
 
     if (what %in% c("ternary", "simplex")) {
         if (!requireNamespace("compositions", quietly = TRUE)) {
@@ -763,54 +529,36 @@ plot.archetypes <- function(x,
                 call. = FALSE
             )
         }
-        S <- subset_samples(as.matrix(x[["compositions"]]))
+        S <- subset_rows(as.matrix(x[["compositions"]]))
         if (is.null(colnames(S)))
             colnames(S) <- paste0("A", seq_len(ncol(S)))
         main <- dots[["main"]]
-        args <- plot_args(
-            list(x = compositions::acomp(S), axes = TRUE),
-            dots[setdiff(names(dots), "main")]
-        )
-        do.call(plot, args)
-        if (!is.null(main)) graphics::title(main = main)
-        return(invisible(x))
+        args <- list(x = compositions::acomp(S), axes = TRUE) %|p|% dots[setdiff(names(dots), "main")]
+        if (isTRUE(plot)) {
+            do.call(graphics::plot, args)
+            if (!is.null(main)) graphics::title(main = main)
+        }
+        return(invisible(list(compositions = S, plot_args = args)))
     }
-
-    # Loss Plot --------------------------------------------------------------
 
     if (what == "loss") {
-        loss <- x[["loss"]]
-        if (is.null(loss[["loss"]]))
-            stop("`x$loss` must contain a `loss` column for loss plots")
-        args <- plot_args(
-            list(
-                x = seq_len(nrow(loss)) - 1L,
-                y = loss[["loss"]],
-                type = "l",
-                xlab = "Iteration",
-                ylab = "Loss"
-            ),
-            dots
-        )
-        do.call(plot, args)
-        return(invisible(x))
+        args <- list(plot = plot) %|p|% dots
+        args[["loss"]] <- x[["loss"]]
+        return(do.call(plot_archetypes_loss, args))
     }
-
-    # Profile Plot ----------------------------------------------------------
 
     if (what == "profiles") {
-        if (inherits(x[["data"]], "fd")) {
-            plot(coordinates_fd(x), ...)
-            return(invisible(x))
-        }
-        .aa_plot_profiles(x, ...)
-        return(invisible(x))
+        coordinates <- if (inherits(x[["data"]], "fd")) coordinates_fd(x) else x[["coordinates"]]
+        args <- list(
+            family = x[["family"]] %||% "gaussian",
+            archetype_names = anames(x),
+            plot = plot
+        ) %|p|% dots
+        args[["coordinates"]] <- coordinates
+        return(do.call(plot_archetypes_profiles, args))
     }
 
-    # Coordinate Plot -------------------------------------------------------
-    family <- x[["family"]]
-    if (is.null(family))
-        family <- "gaussian"
+    family <- x[["family"]] %||% "gaussian"
     if (!(family %in% c("gaussian", "directional"))) {
         msg <- paste(
             "Coordinate plots are not defined when archetype coordinates live",
@@ -820,174 +568,17 @@ plot.archetypes <- function(x,
         stop(msg, call. = FALSE)
     }
 
-    X <- if (is.null(data)) x[["data"]] else data
-    if (is.null(X)) {
-        msg <- paste("Original data must be provided either when constructing",
-                     "the archetypes object or through `data` for coordinate plots")
-        stop(msg)
-    }
-
-    X <- if (inherits(X, "fd")) .aa_fd_to_matrix(X) else as.matrix(X)
-    X <- subset_samples(X)
-    A <- as.matrix(x[["coordinates"]])
-    if (ncol(X) != ncol(A)) {
-        fmt <- "`data` has %d columns but `x$coordinates` has %d columns"
-        stop(sprintf(fmt, ncol(X), ncol(A)))
-    }
-    if (ncol(X) < 2L)
-        stop("Coordinate plots require at least two dimensions")
-
-    if (projection == "pca" && ncol(X) > 2L) {
-        combined <- rbind(X, A)
-        pc <- stats::prcomp(combined, center = TRUE, scale. = FALSE)
-        scores <- pc[["x"]][, seq_len(2L), drop = FALSE]
-        rownames(scores) <- rownames(combined)
-        x_projected <- x
-        x_projected[["data"]] <- scores[seq_len(nrow(X)), , drop = FALSE]
-        x_projected[["coordinates"]] <- scores[nrow(X) + seq_len(nrow(A)), , drop = FALSE]
-        colnames(x_projected[["data"]]) <- colnames(x_projected[["coordinates"]]) <- c("PC1", "PC2")
-        plot(
-            x_projected,
-            what = "coordinates",
-            projection = "none",
-            show_anames = show_anames,
-            args.archetypes = args.archetypes,
-            ...
-        )
-        return(invisible(x))
-    }
-
-    split_style <- function(name, data_default, archetype_default) {
-        data_value <- dots[[name]]
-        archetype_value <- args.archetypes[[name]]
-        if (is.null(data_value))
-            data_value <- data_default
-        if (is.null(archetype_value))
-            archetype_value <- archetype_default
-        list(data = data_value, archetype = archetype_value)
-    }
-
-    col_style <- split_style("col", "black", "red")
-    pch_style <- split_style("pch", 1, 16)
-    cex_style <- split_style("cex", 1, 1.3)
-    lwd_style <- split_style("lwd", 1, 1)
-
-    data_col <- col_style[["data"]]
-    arch_col <- col_style[["archetype"]]
-    data_pch <- pch_style[["data"]]
-    arch_pch <- pch_style[["archetype"]]
-    data_cex <- cex_style[["data"]]
-    arch_cex <- cex_style[["archetype"]]
-    arch_lwd <- lwd_style[["archetype"]]
-    arch_lty_2d <- if (!is.null(args.archetypes[["lty"]])) args.archetypes[["lty"]] else 1
-    arch_lty_pairs <- if (!is.null(args.archetypes[["lty"]])) args.archetypes[["lty"]] else 2
-
-    dots[["col"]] <- data_col
-    dots[["pch"]] <- data_pch
-    dots[["cex"]] <- data_cex
-
-    if (is.null(colnames(X)))
-        colnames(X) <- paste0("V", seq_len(ncol(X)))
-    if (is.null(colnames(A)))
-        colnames(A) <- colnames(X)
-    archetype_names <- anames(x)
-
-    if (ncol(X) == 2L) {
-        args <- plot_args(
-            list(
-                x = X[, 1L],
-                y = X[, 2L],
-                xlab = colnames(X)[1L],
-                ylab = colnames(X)[2L],
-                asp = 1
-            ),
-            dots
-        )
-        do.call(plot, args)
-        A_closed <- A[c(seq_len(nrow(A)), 1L), , drop = FALSE]
-        lines(A_closed[, 1L], A_closed[, 2L], col = arch_col, lwd = arch_lwd, lty = arch_lty_2d)
-        points(A[, 1L], A[, 2L], col = arch_col, pch = arch_pch, cex = arch_cex)
-        if (isTRUE(show_anames) && !is.null(archetype_names)) {
-            graphics::text(
-                x = A[, 1L],
-                y = A[, 2L],
-                labels = archetype_names,
-                pos = 4,
-                cex = 0.8,
-                col = arch_col,
-                xpd = NA
-            )
+    args <- list(data = x[["data"]], archetype_names = anames(x), plot = plot) %|p|% dots
+    if (!is.null(args[["data"]])) {
+        X <- if (inherits(args[["data"]], "fd")) {
+            .aa_fd_to_matrix(args[["data"]])
+        } else {
+            as.matrix(args[["data"]])
         }
-        return(invisible(x))
+        args[["data"]] <- subset_rows(X)
     }
-
-    combined <- rbind(X, A)
-    n_data <- nrow(X)
-    n_total <- nrow(combined)
-    panel <- function(x, y, ...) {
-        data_ix <- seq_len(n_data)
-        arch_ix <- (n_data + 1L):n_total
-        arch_closed <- c(arch_ix, arch_ix[1L])
-        points(x[data_ix], y[data_ix],
-               col = data_col, pch = data_pch, cex = data_cex)
-         lines(x[arch_closed], y[arch_closed], col = arch_col, lwd = arch_lwd, lty = arch_lty_pairs)
-        points(x[arch_ix], y[arch_ix],
-               col = arch_col, pch = arch_pch, cex = arch_cex)
-        if (isTRUE(show_anames) && !is.null(archetype_names)) {
-            graphics::text(
-                x = x[arch_ix],
-                y = y[arch_ix],
-                labels = archetype_names,
-                pos = 4,
-                cex = 0.7,
-                col = arch_col,
-                xpd = NA
-            )
-        }
-    }
-    args <- plot_args(
-        list(x = combined, panel = panel, lower.panel = panel, upper.panel = panel),
-        dots
-    )
-    do.call(pairs, args)
-    invisible(x)
-}
-
-.aa_plot_profiles <- function(x, ...) {
-    A <- as.matrix(x[["coordinates"]])
-    if (ncol(A) < 1L)
-        stop("Profile plots require at least one feature.", call. = FALSE)
-
-    dots <- list(...)
-    arg_or <- function(name, default) {
-        value <- dots[[name]]
-        if (is.null(value)) default else value
-    }
-    family <- x[["family"]]
-    if (is.null(family))
-        family <- "gaussian"
-    ylab <- arg_or(
-        "ylab",
-        if (identical(family, "gaussian")) "Value" else sprintf("%s parameter", family)
-    )
-    xlab <- arg_or("xlab", "Feature")
-    col <- arg_or("col", NULL)
-    legend_text <- arg_or("legend.text", anames(x))
-    args_legend <- arg_or("args.legend", list(bty = "n"))
-
-    args <- list(
-        height = A,
-        beside = TRUE,
-        col = col,
-        legend.text = legend_text,
-        args.legend = args_legend,
-        xlab = xlab,
-        ylab = ylab
-    )
-    dots[["height"]] <- NULL
-    args[names(dots)] <- dots
-    do.call(graphics::barplot, args)
-    invisible(x)
+    args[["coordinates"]] <- x[["coordinates"]]
+    do.call(plot_archetypes_coordinates, args)
 }
 
 # Directional Archetypes Class -----------------------------------------------
@@ -1166,10 +757,8 @@ kernel_archetypes <- function(coefficients,
                               kernel = NULL,
                               kernel_args = list(),
                               weights = NULL) {
-    if (is.null(call))
-        call <- match.call()
-    if (is.null(loss))
-        loss <- data.frame(loss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
+    call <- call %||% match.call()
+    loss <- loss %||% data.frame(loss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
     K <- nrow(coefficients)
     N <- ncol(coefficients)
     stopifnot("nrow(compositions) must match number of samples" = nrow(compositions) == N)
@@ -1251,8 +840,7 @@ predict.kernel_archetypes <- function(object,
 
 #' @rdname archetypes
 #' @exportS3Method
-anames.kernel_archetypes <- function(x)
-    rownames(x[["coefficients"]])
+anames.kernel_archetypes <- function(x) rownames(x[["coefficients"]])
 
 #' @rdname archetypes
 #' @method anames<- kernel_archetypes
@@ -1323,8 +911,8 @@ print.kernel_archetypes <- function(x, ...) {
 #' @exportS3Method
 plot.kernel_archetypes <- function(x,
                                    what = c("compositions", "loss", "coordinates", "profiles"),
-                                   data = NULL,
-                                   projection = c("none", "pca"),
+                                   subset = NULL,
+                                   plot = TRUE,
                                    ...) {
     what <- match.arg(
         tolower(what[1L]),
@@ -1334,13 +922,28 @@ plot.kernel_archetypes <- function(x,
     )
     if (what %in% c("composition", "composision", "composisions"))
         what <- "compositions"
+
+    dots <- list(...)
+    subset_rows <- function(z) {
+        if (is.null(subset))
+            return(z)
+        if (is.logical(subset) && length(subset) != nrow(z))
+            stop("Logical `subset` must have one value per sample", call. = FALSE)
+        if (is.character(subset) && anyNA(match(subset, rownames(z))))
+            stop("Some `subset` values are not sample names", call. = FALSE)
+        out <- z[subset, , drop = FALSE]
+        if (nrow(out) == 0L)
+            stop("`subset` selects no samples", call. = FALSE)
+        out
+    }
+
     if (what == "compositions") {
-        S <- as.matrix(x[["compositions"]])
-        dots <- list(...)
-        args <- list(x = S, cluster_rows = TRUE, cluster_cols = TRUE, linkage = "ward.D2")
-        args[names(dots)] <- dots
-        do.call(composition_barplot, args)
-        return(invisible(x))
+        S <- subset_rows(as.matrix(x[["compositions"]]))
+        args <- list(
+            plot = plot, cluster_rows = TRUE, cluster_cols = TRUE, linkage = "ward.D2"
+        ) %|p|% dots
+        args[["compositions"]] <- S
+        return(do.call(plot_archetypes_compositions, args))
     }
     if (what %in% c("ternary", "simplex")) {
         if (!requireNamespace("compositions", quietly = TRUE)) {
@@ -1350,30 +953,21 @@ plot.kernel_archetypes <- function(x,
                 call. = FALSE
             )
         }
-        S <- as.matrix(x[["compositions"]])
+        S <- subset_rows(as.matrix(x[["compositions"]]))
         if (is.null(colnames(S)))
             colnames(S) <- paste0("A", seq_len(ncol(S)))
-        dots2 <- list(...)
-        main <- dots2[["main"]]
-        do.call(
-            graphics::plot,
-            c(list(compositions::acomp(S), axes = TRUE),
-              dots2[setdiff(names(dots2), "main")])
-        )
-        if (!is.null(main)) graphics::title(main = main)
-        return(invisible(x))
+        main <- dots[["main"]]
+        args <- list(x = compositions::acomp(S), axes = TRUE) %|p|% dots[setdiff(names(dots), "main")]
+        if (isTRUE(plot)) {
+            do.call(graphics::plot, args)
+            if (!is.null(main)) graphics::title(main = main)
+        }
+        return(invisible(list(compositions = S, plot_args = args)))
     }
     if (what == "loss") {
-        loss <- x[["loss"]]
-        graphics::plot(
-            seq_len(nrow(loss)) - 1L,
-            loss[["loss"]],
-            type = "l",
-            xlab = "Iteration",
-            ylab = "Loss",
-            ...
-        )
-        return(invisible(x))
+        args <- list(plot = plot) %|p|% dots
+        args[["loss"]] <- x[["loss"]]
+        return(do.call(plot_archetypes_loss, args))
     }
     if (what == "profiles") {
         stop(
@@ -1383,34 +977,19 @@ plot.kernel_archetypes <- function(x,
         )
     }
 
-    X <- if (is.null(data)) x[["data"]] else data
     A <- x[["coordinates"]]
-    if (is.null(X) || is.null(A)) {
+    if (is.null(A)) {
         stop(
-            "Coordinate plots for kernel archetypes require original `data` ",
-            "and available `coordinates`.",
+            "Coordinate plots for kernel archetypes require available coordinates.",
             call. = FALSE
         )
     }
-    proxy <- archetypes(
-        coordinates = A,
-        coefficients = x[["coefficients"]],
-        compositions = x[["compositions"]],
-        slack = x[["slack"]],
-        loss = x[["loss"]],
-        converged = x[["converged"]],
-        call = x[["call"]],
-        data = X,
-        init = if (!is.null(x[["init"]]) && !is.null(x[["data"]])) {
-            x[["init"]] %*% as.matrix(x[["data"]])
-        } else {
-            NULL
-        }
-    )
-    plot(proxy, what = "coordinates", data = X, projection = projection, ...)
-    invisible(x)
+    args <- list(data = x[["data"]], archetype_names = rownames(A), plot = plot) %|p|% dots
+    if (!is.null(args[["data"]]))
+        args[["data"]] <- subset_rows(as.matrix(args[["data"]]))
+    args[["coordinates"]] <- A
+    do.call(plot_archetypes_coordinates, args)
 }
-
 #' AIC for archetypes objects
 #'
 #' Computes the AIC-like validity criterion for an `archetypes` object.
@@ -1454,9 +1033,7 @@ AIC.archetypes <- function(object, ...) {
     N <- nrow(X)
     M <- ncol(X)
     nelem <- prod(dim(X)) # number of elements in X
-    family <- object[["family"]]
-    if (is.null(family))
-        family <- "gaussian"
+    family <- object[["family"]] %||% "gaussian"
     if (!identical(family, "gaussian"))
         stop("AIC is not defined for non-Gaussian archetypes objects.", call. = FALSE)
     if (N <= M) {
@@ -1523,16 +1100,12 @@ coordinates_fd <- function(object, data = object[["data"]], basis = NULL, fdname
     if (!is.null(data) && !inherits(data, "fd"))
         stop("`data` must be an `fda::fd` object.", call. = FALSE)
 
-    if (is.null(basis))
-        basis <- data[["basis"]]
+    basis   <- basis   %||% data[["basis"]]
     if (is.null(basis))
         stop("No fd basis found. Supply `data` or `basis` explicitly.", call. = FALSE)
 
     A <- object[["coordinates"]]
-    if (is.null(fdnames))
-        fdnames <- data[["fdnames"]]
-    if (is.null(fdnames))
-        fdnames <- list(args = "time", reps = rownames(A), funs = "values")
+    fdnames <- fdnames %||% data[["fdnames"]] %||% list(args = "time", reps = rownames(A), funs = "values")
     fdnames[["reps"]] <- rownames(A)
 
     fda::fd(t(A), basis, fdnames = fdnames)

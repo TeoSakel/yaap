@@ -7,11 +7,8 @@
 \method{plot}{archetypes}(
   x,
   what = c("compositions", "loss", "coordinates", "profiles"),
-  samples = NULL,
-  data = NULL,
-  projection = c("none", "pca"),
-  show_anames = TRUE,
-  args.archetypes = list(),
+  subset = NULL,
+  plot = TRUE,
   ...
 )
 }
@@ -23,28 +20,18 @@
 \code{"profiles"}, and \code{"coordinates"}. \code{"composision"} and \code{"composisions"} are
 accepted as aliases for \code{"compositions"}.}
 
-\item{samples}{Optional sample subset for plots that display observations:
+\item{subset}{Optional sample subset for plots that display observations:
 \code{"composition"}, \code{"compositions"}, \code{"ternary"}, \code{"simplex"}, and
 \code{"coordinates"}. May be numeric row indices, sample names, or a logical
 vector. Subsetting is applied before clustering or projection.}
 
-\item{data}{Optional numeric matrix with the original data. Required for
-\code{what = "coordinates"} if the object does not store its original data.}
+\item{plot}{Logical. Should the plot be drawn? If \code{FALSE}, only the prepared
+plotting data is returned invisibly.}
 
-\item{projection}{Projection to use for coordinate plots. Use \code{"pca"} to
-project data with more than two dimensions to the first two principal
-component scores before plotting.}
-
-\item{show_anames}{Logical; for \code{what = "coordinates"}, whether
-to draw archetype names next to archetype points.}
-
-\item{args.archetypes}{Optional named list of graphical arguments used for
-archetype points/paths in \code{what = "coordinates"}. Useful for styling
-archetypes separately when \code{...} aesthetics (e.g., \code{col}) are mapped to
-observation-level vectors.}
-
-\item{...}{Additional graphical parameters passed to the underlying plotting
-functions.}
+\item{...}{Additional graphical parameters passed to the selected plotting helper.}
+}
+\value{
+Invisibly returns the prepared data used by the selected plot.
 }
 \description{
 Draws diagnostic and geometric plots for a fitted archetypal analysis model.
@@ -56,20 +43,11 @@ The \code{what} argument controls which part of the fit is visualized:
 \code{x$compositions}, with bars representing observations and colors
 representing archetypes. Rows and columns are clustered by default.
 \item \code{"ternary"} and \code{"simplex"} plot the rows of \code{x$compositions} as points in
-simplex coordinates. For three archetypes this is a ternary plot: points
-near a corner are dominated by one archetype, points near an edge mix two
-archetypes, and points near the center mix all three.
+simplex coordinates.
 \item \code{"loss"} plots the objective value stored in \code{x$loss$loss} across
-optimization iterations. This is useful for checking whether the fitting
-algorithm reduced the fitted objective and whether the loss curve has plateaued.
-\item \code{"profiles"} plots the fitted archetypes in their natural representation:
-coefficient functions for \code{fd} fits, and archetype profiles for matrix and
-probabilistic fits.
-\item \code{"coordinates"} plots the original observations together with the fitted
-archetype coordinates in feature space. In two dimensions the archetypes
-are connected as a closed polygon. In more than two dimensions the method
-draws pairwise scatterplots and connects archetypes with dashed closed
-paths in each panel. With \code{projection = "pca"}, higher-dimensional data and
-archetypes are first projected to the first two principal components.
+optimization iterations.
+\item \code{"profiles"} plots the fitted archetypes in their natural representation.
+\item \code{"coordinates"} plots archetype coordinates, optionally over the original
+observations when data are available.
 }
 }
