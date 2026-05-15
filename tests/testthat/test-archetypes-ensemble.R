@@ -32,14 +32,14 @@ test_that("tune_archetypes expands multiple initialization methods", {
     ens <- tune_archetypes(
         X,
         K = 2L,
-        init = c("uniform_archetypes", "furthest_sum"),
+        init = c("random", "furthest_sum"),
         max_iter = 1L,
         tol_r2 = 0,
         max_kappa = Inf
     )
 
     expect_equal(nrow(ens[["grid"]]), 2L)
-    expect_equal(sort(ens[["grid"]][["init"]]), c("furthest_sum", "uniform_archetypes"))
+    expect_equal(sort(ens[["grid"]][["init"]]), c("furthest_sum", "random"))
     expect_equal(ens[["prefer_metric"]], "AIC")
     expect_true(all(is.finite(ens[["metrics"]][["AIC"]])))
 })

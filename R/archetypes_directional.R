@@ -8,10 +8,9 @@
 #'
 #' @param x Dense numeric data matrix (rows = samples, columns = dimensions).
 #' @param K Number of archetypes.
-#' @param init Initialization method. `"random"` samples exponential generator
-#'   weights as in the reference implementation; any method accepted by
-#'   [aa_init()] is also supported. A numeric `K x ncol(data)` matrix may be
-#'   supplied as initial archetype directions.
+#' @param init Initialization method. Defaults to `"dirichlet"`; see [aa_init()]
+#'   for the full list of available methods. A numeric `K x ncol(data)` matrix
+#'   may also be supplied as initial archetype directions.
 #' @param init_args List of additional arguments for the initialization method.
 #' @param weights Optional non-negative sample weights.
 #' @param max_iter Maximum number of outer iterations.
@@ -35,6 +34,20 @@
 #' @returns An object of class `directional_archetypes`, extending
 #'   \code{\link{archetypes}}.
 #'
+#' @details
+#' ## Initialization
+#'
+#' The default `"dirichlet"` initialization draws the generator matrix
+#' `B` (K \u00d7 N) as a Dirichlet(1, \u2026, 1) sample \u2014 equivalently, exponential random
+#' weights normalized to sum to one \u2014 so archetypes start as random convex
+#' combinations over the row-normalized data. `S` is then fitted from the
+#' resulting `A` via [fit_simplex()], exactly as all other initialization
+#' methods do.
+#'
+#' This differs from `"random"` (the [aa_init()] method that selects K rows
+#' of the data uniformly at random), which initializes `B` as a one-hot matrix
+#' so that archetypes start at actual data points on the hemisphere.
+#'
 #' @references
 #' Olsen, A. S., Høegh, R. M. T., Hinrich, J. L., Madsen, K. H., & Mørup, M.
 #' (2022). Combining electro- and magnetoencephalography data using directional
@@ -49,7 +62,7 @@
 #' @export
 archetypes_directional <- function(x,
                                    K,
-                                   init = "random",
+                                   init = "dirichlet",
                                    init_args = list(),
                                    weights = NULL,
                                    max_iter = 100L,
@@ -233,9 +246,6 @@ archetypes_directional <- function(x,
 }
 
 .aa_directional_init_vars <- function(X_flip, X_gen, K, init, init_args, eps) {
-    if (is.character(init) && length(init) == 1L && identical(init, "random"))
-        return(.aa_directional_random_init(X_flip, K, eps = eps))
-
     if (is.matrix(init) || inherits(init, "data.frame")) {
         init <- as.matrix(init)
         if (!identical(dim(init), c(K, ncol(X_flip))))
@@ -250,14 +260,14 @@ archetypes_directional <- function(x,
         return(list(A0 = A, B = B, S = S))
     }
 
-    init_call <- c(list(X = X_flip, K = K), init_args)
+    init_call <- c(list(X = X_flip, K = K, eps = eps), init_args)
     if (is.character(init)) {
         init_call[["method"]] <- init
         init_vars <- do.call(aa_init, init_call)
     } else if (is.function(init)) {
         init_vars <- do.call(init, init_call)
     } else {
-        stop("`init` must be 'random', an aa_init method, a function, or a matrix.",
+        stop("`init` must be an aa_init method string, a function, or a matrix.",
              call. = FALSE)
     }
     B <- init_vars[["B"]]

@@ -258,8 +258,7 @@ run_aa.fd <- function(x, K, ...) {
                            data = NULL,
                            ...) {
     method <- match.arg(method, c("pgd", "nnls", "kernel", "directional", "paa"))
-    if (is.null(init))
-        init <- if (identical(method, "directional")) "random" else "furthest_sum"
+    init <- init %||% ifelse(identical(method, "directional"), "dirichlet", "furthest_sum")
     stopifnot("`missing` must be TRUE or FALSE" =
                   is.logical(missing) && length(missing) == 1L && !is.na(missing))
     stopifnot("`nrep` must be a single positive integer" =

@@ -4,7 +4,7 @@
 #'
 #' @param X a numeric matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes to be initialized
-#' @param method initialization method. One of `"uniform_archetypes"`,
+#' @param method initialization method. One of `"random"`, `"dirichlet"`,
 #'   `"furthest_first"`, `"kmeans_pp"`, `"furthest_sum"`, `"coreset_initfn"`,
 #'   `"aa_pp"`, `"aa_pp_mc"`, or `"hull_outmost"` (default: `"furthest_sum"`).
 #' @param sparse whether `B` should be a sparse matrix (default: same as X)
@@ -35,7 +35,16 @@
 #'
 #' The following initialization methods are available:
 #'
-#' - `"uniform_archetypes"`: selects uniformly at random `K` archetypes from `X`.
+#' - `"random"`: selects uniformly at random `K` archetypes from `X`.
+#' - `"dirichlet"`: draws each archetype as a random convex combination of all
+#'   data points by sampling `B` row-wise from a Dirichlet(α, ..., α)
+#'   distribution (Gamma(α, 1) weights normalized to unit sum). `alpha = 1`
+#'   (default) gives a uniform distribution over the simplex; `alpha < 1`
+#'   concentrates mass near simplex vertices, yielding sparser rows; `alpha > 1`
+#'   concentrates mass toward the centroid. If `eps > 0`, raw Gamma weights
+#'   below `eps` are zeroed out before normalization and `B` is returned as a
+#'   sparse matrix; `eps = 0` (default) keeps all weights and returns a dense
+#'   `B`. Accepts optional `alpha` and `eps` arguments via `...`.
 #' - `"furthest_first"`: selects the first archetype randomly and then greedily
 #'   selects the point furthest from the current set of archetypes.
 #' - `"kmeans_pp"`: a soft version of `furthest_first` where points are sampled
@@ -103,7 +112,8 @@ aa_init <- function(X,
     method <- match.arg(
         method,
         c(
-            "uniform_archetypes",
+            "random",
+            "dirichlet",
             "furthest_first",
             "kmeans_pp",
             "furthest_sum",
@@ -154,9 +164,10 @@ aa_init <- function(X,
         return(.ind_to_init(X, ind, sparse = sparse))
     }
 
-    ind <- switch(
+    result <- switch(
         method,
-        uniform_archetypes = uniform_archetypes(X, K, ...),
+        random             = uniform_archetypes(X, K, ...),
+        dirichlet          = dirichlet(X, K, ...),
         furthest_first     = furthest_first(X, K, ...),
         kmeans_pp          = kmeans_pp(X, K, ...),
         furthest_sum       = furthest_sum(X, K, ...),
@@ -174,7 +185,7 @@ aa_init <- function(X,
         ),
         coreset_initfn     = coreset_initfn(X, K, m = m, ...)
     )
-    .ind_to_init(X, ind, sparse = sparse)
+    if (is.list(result)) result else .ind_to_init(X, result, sparse = sparse)
 }
 
 uniform_archetypes <- function(X, K, ...) sample(nrow(X), K, replace = FALSE)
@@ -566,27 +577,18 @@ hull_outmost <- function(X,
     S
 }
 
-# Internal random initialization for directional AA.
-#
-# This mirrors the reference directional AA MATLAB code, which initializes both
-# the archetype generator C and the composition matrix S with exponential random
-# entries and then L1-normalizes them. It is intentionally not exposed as an
-# `aa_init()` method yet: Euclidean AA initializers usually select or construct
-# concrete data-space archetypes, while this helper initializes the directional
-# generator coefficients directly.
-.aa_directional_random_init <- function(X_flip, K, eps = 0) {
-    N <- nrow(X_flip)
-
-    # B is paper C^T in YAAAP's row-oriented convention. Each row is a convex
-    # combination over samples and therefore generates one directional archetype.
-    B <- matrix(stats::rexp(K * N), nrow = K, ncol = N)
-    B <- proj_l1(B, eps = eps)
-
-    # S is paper S^T. Each row is the composition of one sample in the
-    # directional archetype hull.
-    S <- matrix(stats::rexp(N * K), nrow = N, ncol = K)
-    S <- proj_l1(S, eps = eps)
-
-    A <- B %*% X_flip
-    list(A0 = A, B = B, S = S)
+dirichlet <- function(X, K, alpha = 1, eps = 0, ...) {
+    stopifnot("`alpha` must be a single positive number" =
+                  is.numeric(alpha) && length(alpha) == 1L && is.finite(alpha) && alpha > 0)
+    stopifnot("`eps` must be a single non-negative number" =
+                  is.numeric(eps) && length(eps) == 1L && is.finite(eps) && eps >= 0)
+    N <- nrow(X)
+    nm <- paste0("A", seq_len(K))
+    B <- matrix(stats::rgamma(K * N, shape = alpha), nrow = K, ncol = N)
+    B[B < eps] <- 0
+    B <- proj_l1(B, eps = 0)
+    if (eps > 0) B <- Matrix::Matrix(B, sparse = TRUE) # TODO: check for sparsity before converting?
+    A <- B %*% X
+    rownames(A) <- rownames(B) <- nm
+    list(A = A, B = B)
 }

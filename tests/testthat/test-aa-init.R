@@ -1,7 +1,7 @@
 test_that("aa_init covers every initialization method", {
     X <- scale(toy_matrix())
     methods <- c(
-        "uniform_archetypes",
+        "random",
         "furthest_first",
         "kmeans_pp",
         "furthest_sum",
@@ -110,7 +110,7 @@ test_that("aa_init uses stable archetype names instead of selected data row name
     X <- scale(toy_matrix())
     rownames(X) <- paste0("sample_", seq_len(nrow(X)))
 
-    init <- aa_init(X, K = 3L, method = "uniform_archetypes")
+    init <- aa_init(X, K = 3L, method = "random")
 
     expect_equal(rownames(init[["A"]]), c("A1", "A2", "A3"))
     expect_equal(rownames(init[["B"]]), c("A1", "A2", "A3"))

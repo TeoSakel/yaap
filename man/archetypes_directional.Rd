@@ -7,7 +7,7 @@
 archetypes_directional(
   x,
   K,
-  init = "random",
+  init = "dirichlet",
   init_args = list(),
   weights = NULL,
   max_iter = 100L,
@@ -29,7 +29,7 @@ archetypes_directional(
 
 \item{K}{Number of archetypes.}
 
-\item{init}{Initialization method. \code{"random"} samples exponential generator
+\item{init}{Initialization method. \code{"dirichlet"} samples exponential generator
 weights as in the reference implementation; any method accepted by
 \code{\link[=aa_init]{aa_init()}} is also supported. A numeric \verb{K x ncol(data)} matrix may be
 supplied as initial archetype directions.}

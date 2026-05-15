@@ -555,8 +555,8 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
     }
 
     if (is.character(init) && length(init) == 1L &&
-            init %in% c("uniform_archetypes", "furthest_first", "kmeans_pp", "furthest_sum")) {
-        method <- match.arg(init, c("uniform_archetypes", "furthest_first", "kmeans_pp", "furthest_sum"))
+            init %in% c("random", "furthest_first", "kmeans_pp", "furthest_sum")) {
+        method <- match.arg(init, c("random", "furthest_first", "kmeans_pp", "furthest_sum"))
         ind <- do.call(
             .aa_kernel_init_indices,
             args = c(list(G = G, K = K, method = method), init_args)
@@ -590,7 +590,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
     center_dists <- .aa_kernel_dist2_center(G)
     switch(
         method,
-        uniform_archetypes = sample(nrow(G), K, replace = FALSE),
+        random            = sample(nrow(G), K, replace = FALSE),
         furthest_first = furthest_first(G, K, distances = distances, center_dists = center_dists),
         kmeans_pp = kmeans_pp(G, K, distances = distances, center_dists = center_dists),
         furthest_sum = furthest_sum(G, K, distances = distances)

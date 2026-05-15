@@ -556,7 +556,7 @@ test_that("archetypes fitters accept sparse input with expected invariants", {
     pgd <- suppressWarnings(archetypes_pgd(
         X,
         K = 2L,
-        init = "uniform_archetypes",
+        init = "random",
         sd_threshold = 0,
         max_iter = 2L
     ))
@@ -564,7 +564,7 @@ test_that("archetypes fitters accept sparse input with expected invariants", {
     nnls <- suppressWarnings(archetypes_nnls(
         X,
         K = 2L,
-        init = "uniform_archetypes",
+        init = "random",
         sd_threshold = 0,
         max_iter = 1L
     ))
@@ -599,7 +599,7 @@ test_that("missing-data PGD defaults on for dense NA input", {
     fit <- suppressWarnings(archetypes_pgd(
         X,
         K = 2L,
-        init = "uniform_archetypes",
+        init = "random",
         sd_threshold = 0,
         max_iter = 3L
     ))
@@ -632,7 +632,7 @@ test_that("missing-data PGD supports zero optimizer iterations", {
     fit <- suppressWarnings(archetypes_pgd(
         X,
         K = 2L,
-        init = "uniform_archetypes",
+        init = "random",
         sd_threshold = 0,
         max_iter = 0L
     ))
@@ -663,7 +663,7 @@ test_that("missing-data PGD treats sparse structural zeros as missing", {
     fit <- suppressWarnings(archetypes_pgd(
         X,
         K = 2L,
-        init = "uniform_archetypes",
+        init = "random",
         missing = TRUE,
         sd_threshold = 0,
         max_iter = 3L
