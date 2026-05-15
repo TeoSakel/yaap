@@ -1,7 +1,6 @@
 test_that("tidy.archetypes returns correct long-form for 'coordinates'", {
-    set.seed(1)
-    X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
+    fit <- manual_fit()
+    X <- fit[["data"]]
 
     td <- tidy(fit)  # default: matrix = "coordinates"
 
@@ -14,9 +13,8 @@ test_that("tidy.archetypes returns correct long-form for 'coordinates'", {
 })
 
 test_that("tidy.archetypes returns correct long-form for 'coefficients'", {
-    set.seed(1)
-    X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
+    fit <- manual_fit()
+    X <- fit[["data"]]
 
     td <- tidy(fit, matrix = "coefficients")
 
@@ -27,9 +25,8 @@ test_that("tidy.archetypes returns correct long-form for 'coefficients'", {
 })
 
 test_that("tidy.archetypes returns correct long-form for 'compositions'", {
-    set.seed(1)
-    X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
+    fit <- manual_fit()
+    X <- fit[["data"]]
 
     td <- tidy(fit, matrix = "compositions")
 
@@ -42,9 +39,7 @@ test_that("tidy.archetypes returns correct long-form for 'compositions'", {
 })
 
 test_that("tidy.archetypes uses anames as archetype labels", {
-    set.seed(1)
-    X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
+    fit <- manual_fit()
     anames(fit) <- c("Alpha", "Beta", "Gamma")
 
     td <- tidy(fit)
@@ -52,9 +47,7 @@ test_that("tidy.archetypes uses anames as archetype labels", {
 })
 
 test_that("glance.archetypes returns a one-row tibble with correct fields", {
-    set.seed(1)
-    X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 20L))
+    fit <- manual_fit()
 
     gl <- glance(fit)
 
@@ -72,9 +65,8 @@ test_that("glance.archetypes returns a one-row tibble with correct fields", {
 })
 
 test_that("augment.archetypes uses stored data when data = NULL", {
-    set.seed(1)
-    X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
+    fit <- manual_fit()
+    X <- fit[["data"]]
 
     aug <- augment(fit)
 
@@ -97,20 +89,19 @@ test_that("augment.archetypes errors when no data available", {
 })
 
 test_that("augment.archetypes accepts explicit new data", {
-    set.seed(1)
-    X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L))
+    fit <- manual_fit()
+    X <- fit[["data"]]
 
-    X_new <- X[1:10, ]
+    X_new <- X[2:4, ]
     aug   <- augment(fit, data = X_new)
 
-    expect_equal(nrow(aug), 10L)
+    expect_equal(nrow(aug), 3L)
     comp_cols <- paste0(".", anames(fit))
     expect_true(all(comp_cols %in% colnames(aug)))
     # compositions for new data must be non-negative and sum to 1
     S_new <- as.matrix(aug[, comp_cols])
     expect_true(all(S_new >= -1e-8))
-    expect_equal(rowSums(S_new), rep(1, 10L), tolerance = 1e-6)
+    expect_equal(rowSums(S_new), rep(1, 3L), tolerance = 1e-6)
 })
 
 test_that("tidy/glance/augment dispatch without attaching broom", {

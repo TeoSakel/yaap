@@ -23,6 +23,32 @@ expect_matrix_dim <- function(x, nrow, ncol) {
     expect_equal(dim(x), c(nrow, ncol))
 }
 
+expect_matrix_like_dim <- function(x, nrow, ncol) {
+    expect_true(is.matrix(x) || inherits(x, "Matrix"))
+    expect_equal(dim(x), c(nrow, ncol))
+}
+
+expect_archetypes_fit <- function(fit,
+                                  K,
+                                  n,
+                                  p,
+                                  class = "archetypes",
+                                  fitted_dim = NULL,
+                                  residual_dim = NULL) {
+    expect_s3_class(fit, class)
+    expect_matrix_dim(fit[["coordinates"]], K, p)
+    expect_matrix_like_dim(fit[["coefficients"]], K, n)
+    expect_matrix_like_dim(fit[["compositions"]], n, K)
+    expect_row_stochastic(fit[["coefficients"]])
+    expect_row_stochastic(fit[["compositions"]])
+    expect_true(is_all_finite(fit[["loss"]][["loss"]]))
+
+    if (!is.null(fitted_dim))
+        expect_equal(dim(fitted(fit)), fitted_dim)
+    if (!is.null(residual_dim))
+        expect_equal(dim(residuals(fit)), residual_dim)
+}
+
 manual_fit <- function() {
     X <- matrix(
         c(
@@ -36,11 +62,13 @@ manual_fit <- function() {
         dimnames = list(NULL, c("x", "y"))
     )
     A <- X[1:3, , drop = FALSE]
+    rownames(A) <- paste0("A", 1:3)
     B <- rbind(
         c(1, 0, 0, 0),
         c(0, 1, 0, 0),
         c(0, 0, 1, 0)
     )
+    rownames(B) <- rownames(A)
     S <- matrix(
         c(
             1, 0, 0,
@@ -51,6 +79,7 @@ manual_fit <- function() {
         ncol = 3,
         byrow = TRUE
     )
+    colnames(S) <- rownames(A)
     loss <- data.frame(loss = c(2, 1, 0.5), r2 = c(0, 0.5, 0.75), k_S = 1, k_A = 1)
 
     archetypes(
@@ -68,4 +97,39 @@ directional_matrix <- function(n = 90L) {
     X <- X / sqrt(rowSums(X * X))
     scale <- 0.5 + seq_len(n) / n
     X * scale
+}
+
+sparse_test_matrix <- function() {
+    Matrix::Matrix(
+        matrix(
+            c(
+                1, 0, 2, 0,
+                0, 3, 0, 1,
+                4, 0, 0, 0,
+                0, 5, 1, 0,
+                2, 0, 0, 3,
+                0, 1, 0, 0
+            ),
+            nrow = 6L,
+            byrow = TRUE,
+            dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
+        ),
+        sparse = TRUE
+    )
+}
+
+missing_test_matrix <- function() {
+    matrix(
+        c(
+            1, NA, 2, 0,
+            0, 3, NA, 1,
+            4, 0, 0, NA,
+            NA, 5, 1, 0,
+            2, NA, 0, 3,
+            0, 1, NA, 0
+        ),
+        nrow = 6L,
+        byrow = TRUE,
+        dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
+    )
 }

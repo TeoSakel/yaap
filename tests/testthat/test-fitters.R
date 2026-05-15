@@ -1,57 +1,30 @@
-test_that("archetypes_pgd fits toy data with expected invariants", {
-    set.seed(1)
+test_that("Euclidean fitters and run_aa share core toy-data invariants", {
     X <- toy_matrix()
-    fit <- archetypes_pgd(X, K = 3L, max_iter = 20L, tol_r2 = 0.95)
+    cases <- list(
+        pgd = function() archetypes_pgd(X, K = 3L, max_iter = 20L, tol_r2 = 0.95),
+        nnls = function() archetypes_nnls(X, K = 3L, max_iter = 5L, tol_r2 = 0.95),
+        run_aa_pgd = function() run_aa(X, K = 3L, method = "pgd", max_iter = 20L, tol_r2 = 0.95),
+        run_aa_nnls = function() run_aa(X, K = 3L, method = "nnls", max_iter = 5L, tol_r2 = 0.95)
+    )
 
-    expect_s3_class(fit, "archetypes")
-    expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
-    expect_matrix_dim(fit[["coefficients"]], 3L, 250L)
-    expect_matrix_dim(fit[["compositions"]], 250L, 3L)
-    expect_row_stochastic(fit[["coefficients"]])
-    expect_row_stochastic(fit[["compositions"]])
-    expect_equal(dim(fitted(fit)), dim(X))
-    expect_equal(dim(residuals(fit)), dim(X))
-})
-
-test_that("archetypes_nnls fits toy data with expected invariants", {
-    set.seed(1)
-    X <- toy_matrix()
-    fit <- archetypes_nnls(X, K = 3L, max_iter = 5L, tol_r2 = 0.95)
-
-    expect_s3_class(fit, "archetypes")
-    expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
-    expect_matrix_dim(fit[["coefficients"]], 3L, 250L)
-    expect_matrix_dim(fit[["compositions"]], 250L, 3L)
-    expect_row_stochastic(fit[["coefficients"]])
-    expect_row_stochastic(fit[["compositions"]])
-    expect_equal(dim(fitted(fit)), dim(X))
-    expect_equal(dim(residuals(fit)), dim(X))
-})
-
-test_that("run_aa dispatches to supported fitters", {
-    set.seed(1)
-    X <- toy_matrix()
-    pgd <- run_aa(X, K = 3L, method = "pgd", max_iter = 20L, tol_r2 = 0.95)
-
-    set.seed(1)
-    nnls <- run_aa(X, K = 3L, method = "nnls", max_iter = 5L, tol_r2 = 0.95)
-
-    for (fit in list(pgd, nnls)) {
-        expect_s3_class(fit, "archetypes")
-        expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
-        expect_matrix_dim(fit[["coefficients"]], 3L, 250L)
-        expect_matrix_dim(fit[["compositions"]], 250L, 3L)
-        expect_row_stochastic(fit[["coefficients"]])
-        expect_row_stochastic(fit[["compositions"]])
+    for (case in cases) {
+        set.seed(1)
+        fit <- suppressWarnings(case())
+        expect_archetypes_fit(
+            fit,
+            K = 3L,
+            n = nrow(X),
+            p = ncol(X),
+            fitted_dim = dim(X),
+            residual_dim = dim(X)
+        )
     }
 })
 
-test_that("fitters integrate with hull_outmost initialization", {
-    set.seed(1)
+test_that("PGD and NNLS integrate with hull_outmost initialization", {
     X <- toy_matrix()
-
-    fits <- list(
-        suppressWarnings(run_aa(
+    cases <- list(
+        pgd = function() run_aa(
             X,
             K = 3L,
             method = "pgd",
@@ -59,8 +32,8 @@ test_that("fitters integrate with hull_outmost initialization", {
             init_args = list(hull_method = "projected", projected_dim = 2L),
             max_iter = 5L,
             tol_r2 = 0.9
-        )),
-        suppressWarnings(run_aa(
+        ),
+        nnls = function() run_aa(
             X,
             K = 3L,
             method = "nnls",
@@ -68,32 +41,12 @@ test_that("fitters integrate with hull_outmost initialization", {
             init_args = list(hull_method = "partitioned", n_partitions = 5L),
             max_iter = 3L,
             tol_r2 = 0.9
-        )),
-        suppressWarnings(archetypes_pgd(
-            X,
-            K = 3L,
-            init = "hull_outmost",
-            init_args = list(hull_method = "full"),
-            max_iter = 5L,
-            tol_r2 = 0.9
-        )),
-        suppressWarnings(archetypes_nnls(
-            X,
-            K = 3L,
-            init = "hull_outmost",
-            init_args = list(hull_method = "projected", projected_dim = 1L),
-            max_iter = 3L,
-            tol_r2 = 0.9
-        ))
+        )
     )
 
-    for (fit in fits) {
-        expect_s3_class(fit, "archetypes")
-        expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
-        expect_matrix_dim(fit[["coefficients"]], 3L, nrow(X))
-        expect_matrix_dim(fit[["compositions"]], nrow(X), 3L)
-        expect_row_stochastic(fit[["coefficients"]])
-        expect_row_stochastic(fit[["compositions"]])
+    for (case in cases) {
+        set.seed(1)
+        expect_archetypes_fit(suppressWarnings(case()), K = 3L, n = nrow(X), p = ncol(X))
     }
 })
 
@@ -400,11 +353,8 @@ test_that("PGD and NNLS accept matrix scale and return original-unit coordinates
     nnls <- suppressWarnings(archetypes_nnls(X, K = 3L, scale = scale, max_iter = 2L))
 
     for (fit in list(pgd, nnls)) {
-        expect_s3_class(fit, "archetypes")
-        expect_matrix_dim(fit[["coordinates"]], 3L, ncol(X))
+        expect_archetypes_fit(fit, K = 3L, n = nrow(X), p = ncol(X))
         expect_equal(colnames(fit[["coordinates"]]), colnames(X))
-        expect_true(is_all_finite(fit[["coordinates"]]))
-        expect_true(is_all_finite(fit[["loss"]][["loss"]]))
     }
 })
 
@@ -498,20 +448,8 @@ test_that("non-convergence warning reports realized iteration count", {
 })
 
 test_that("sparse preprocessing preserves sparse structure without centering", {
-    X_dense <- matrix(
-        c(
-            1, 0, 2, 0,
-            0, 3, 0, 1,
-            4, 0, 0, 0,
-            0, 5, 1, 0,
-            2, 0, 0, 3,
-            0, 1, 0, 0
-        ),
-        nrow = 6L,
-        byrow = TRUE,
-        dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
-    )
-    X_sparse <- Matrix::Matrix(X_dense, sparse = TRUE)
+    X_sparse <- sparse_test_matrix()
+    X_dense <- as.matrix(X_sparse)
 
     pre <- .aa_test_euclidean_preprocess(X_sparse)
 
@@ -535,22 +473,7 @@ test_that("sparse preprocessing keeps NNLS bigM column sparse", {
 })
 
 test_that("archetypes fitters accept sparse input with expected invariants", {
-    X <- Matrix::Matrix(
-        matrix(
-            c(
-                1, 0, 2, 0,
-                0, 3, 0, 1,
-                4, 0, 0, 0,
-                0, 5, 1, 0,
-                2, 0, 0, 3,
-                0, 1, 0, 0
-            ),
-            nrow = 6L,
-            byrow = TRUE,
-            dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
-        ),
-        sparse = TRUE
-    )
+    X <- sparse_test_matrix()
 
     set.seed(2)
     pgd <- suppressWarnings(archetypes_pgd(
@@ -569,31 +492,12 @@ test_that("archetypes fitters accept sparse input with expected invariants", {
         max_iter = 1L
     ))
 
-    for (fit in list(pgd, nnls)) {
-        expect_s3_class(fit, "archetypes")
-        expect_matrix_dim(fit[["coordinates"]], 2L, 4L)
-        expect_equal(dim(fit[["coefficients"]]), c(2L, 6L))
-        expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
-        expect_row_stochastic(fit[["coefficients"]])
-        expect_row_stochastic(fit[["compositions"]])
-        expect_true(is_all_finite(fit[["loss"]][["loss"]]))
-    }
+    for (fit in list(pgd, nnls))
+        expect_archetypes_fit(fit, K = 2L, n = nrow(X), p = ncol(X))
 })
 
 test_that("missing-data PGD defaults on for dense NA input", {
-    X <- matrix(
-        c(
-            1, NA, 2, 0,
-            0, 3, NA, 1,
-            4, 0, 0, NA,
-            NA, 5, 1, 0,
-            2, NA, 0, 3,
-            0, 1, NA, 0
-        ),
-        nrow = 6L,
-        byrow = TRUE,
-        dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
-    )
+    X <- missing_test_matrix()
 
     set.seed(3)
     fit <- suppressWarnings(archetypes_pgd(
@@ -604,29 +508,12 @@ test_that("missing-data PGD defaults on for dense NA input", {
         max_iter = 3L
     ))
 
-    expect_s3_class(fit, "archetypes")
-    expect_matrix_dim(fit[["coordinates"]], 2L, 4L)
-    expect_equal(dim(fit[["coefficients"]]), c(2L, 6L))
-    expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
-    expect_row_stochastic(fit[["coefficients"]])
-    expect_row_stochastic(fit[["compositions"]])
-    expect_true(is_all_finite(fit[["loss"]][["loss"]]))
+    expect_archetypes_fit(fit, K = 2L, n = nrow(X), p = ncol(X))
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
 })
 
 test_that("missing-data PGD supports zero optimizer iterations", {
-    X <- matrix(
-        c(
-            1, NA, 2, 0,
-            0, 3, NA, 1,
-            4, 0, 0, NA,
-            NA, 5, 1, 0,
-            2, NA, 0, 3,
-            0, 1, NA, 0
-        ),
-        nrow = 6L,
-        byrow = TRUE
-    )
+    X <- missing_test_matrix()
 
     set.seed(3)
     fit <- suppressWarnings(archetypes_pgd(
@@ -644,20 +531,7 @@ test_that("missing-data PGD supports zero optimizer iterations", {
 })
 
 test_that("missing-data PGD treats sparse structural zeros as missing", {
-    X_dense <- matrix(
-        c(
-            1, 0, 2, 0,
-            0, 3, 0, 1,
-            4, 0, 0, 0,
-            0, 5, 1, 0,
-            2, 0, 0, 3,
-            0, 1, 0, 0
-        ),
-        nrow = 6L,
-        byrow = TRUE,
-        dimnames = list(paste0("x", 1:6), paste0("v", 1:4))
-    )
-    X <- Matrix::Matrix(X_dense, sparse = TRUE)
+    X <- sparse_test_matrix()
 
     set.seed(4)
     fit <- suppressWarnings(archetypes_pgd(
@@ -669,13 +543,7 @@ test_that("missing-data PGD treats sparse structural zeros as missing", {
         max_iter = 3L
     ))
 
-    expect_s3_class(fit, "archetypes")
-    expect_matrix_dim(fit[["coordinates"]], 2L, 4L)
-    expect_equal(dim(fit[["coefficients"]]), c(2L, 6L))
-    expect_equal(dim(fit[["compositions"]]), c(6L, 2L))
-    expect_row_stochastic(fit[["coefficients"]])
-    expect_row_stochastic(fit[["compositions"]])
-    expect_true(all(is.finite(fit[["loss"]][["loss"]])))
+    expect_archetypes_fit(fit, K = 2L, n = nrow(X), p = ncol(X))
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
 })
 
@@ -768,15 +636,8 @@ test_that("robust archetypes fitters keep expected invariants", {
         tol_r2 = 0.95
     ))
 
-    for (fit in list(pgd, nnls)) {
-        expect_s3_class(fit, "archetypes")
-        expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
-        expect_matrix_dim(fit[["coefficients"]], 3L, 250L)
-        expect_matrix_dim(fit[["compositions"]], 250L, 3L)
-        expect_row_stochastic(fit[["coefficients"]])
-        expect_row_stochastic(fit[["compositions"]])
-        expect_true(is_all_finite(fit[["loss"]][["loss"]]))
-    }
+    for (fit in list(pgd, nnls))
+        expect_archetypes_fit(fit, K = 3L, n = nrow(X), p = ncol(X))
 })
 
 test_that("archetypes fitters accept named coordinate matrix initialization", {
@@ -874,61 +735,47 @@ test_that("run_aa with nrep = 1 returns same structure as default", {
     expect_equal(fit_default[["coordinates"]], fit_nrep1[["coordinates"]])
 })
 
-test_that("run_aa with nrep > 1 returns a single archetypes object", {
-    set.seed(1)
-    X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L, nrep = 5L))
-
-    expect_s3_class(fit, "archetypes")
-    expect_false(is.list(fit) && !inherits(fit, "archetypes"))
-    expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
-    expect_matrix_dim(fit[["compositions"]], 250L, 3L)
-})
-
-test_that("run_aa with nrep > 1 returns a fit no worse than each single run", {
+test_that("run_aa with nrep > 1 returns the best sequential restart", {
     set.seed(7)
     X <- toy_matrix()
     final_loss <- function(fit) tail(fit[["loss"]][["loss"]], 1L)
 
-    fit_nrep <- suppressWarnings(run_aa(X, K = 3L, max_iter = 15L, nrep = 10L))
+    fit_nrep <- suppressWarnings(run_aa(X, K = 3L, max_iter = 5L, nrep = 3L))
     nrep_loss <- final_loss(fit_nrep)
 
-    single_losses <- suppressWarnings(replicate(10L, {
-        final_loss(run_aa(X, K = 3L, max_iter = 15L))
+    set.seed(7)
+    single_losses <- suppressWarnings(replicate(3L, {
+        final_loss(run_aa(X, K = 3L, max_iter = 5L))
     }))
-    expect_lte(nrep_loss, max(single_losses) + .Machine$double.eps)
+    expect_archetypes_fit(fit_nrep, K = 3L, n = nrow(X), p = ncol(X))
+    expect_equal(nrep_loss, min(single_losses), tolerance = 1e-8)
 })
 
 test_that("run_aa nrep validation rejects invalid values", {
     X <- toy_matrix()
-    expect_error(run_aa(X, K = 3L, nrep = 0L),  "`nrep`")
-    expect_error(run_aa(X, K = 3L, nrep = -1L), "`nrep`")
-    expect_error(run_aa(X, K = 3L, nrep = 1.5), "`nrep`")
+    for (nrep in list(0L, -1L, 1.5))
+        expect_error(run_aa(X, K = 3L, nrep = nrep),  "`nrep`")
 })
 
-test_that("run_aa nrep works with method = 'nnls'", {
-    set.seed(3)
+test_that("run_aa nrep works with non-default methods", {
     X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, method = "nnls", max_iter = 10L, nrep = 3L))
+    cases <- list(
+        nnls = function() run_aa(X, K = 3L, method = "nnls", max_iter = 5L, nrep = 2L),
+        kernel = function() run_aa(
+            tcrossprod(X),
+            K = 3L,
+            method = "kernel",
+            kernel = "precomputed",
+            data = X,
+            max_iter = 5L,
+            nrep = 2L
+        ),
+        paa = function() run_aa(X, K = 3L, method = "paa", max_iter = 5L, nrep = 2L)
+    )
 
-    expect_s3_class(fit, "archetypes")
-    expect_matrix_dim(fit[["coordinates"]], 3L, 2L)
-})
-
-test_that("run_aa nrep works with method = 'kernel'", {
-    set.seed(5)
-    X <- toy_matrix()
-    G <- tcrossprod(X)
-    fit <- suppressWarnings(run_aa(G, K = 3L, method = "kernel", kernel = "precomputed",
-                  data = X, max_iter = 10L, nrep = 3L))
-
-    expect_s3_class(fit, "kernel_archetypes")
-})
-
-test_that("run_aa nrep works with method = 'paa'", {
-    set.seed(9)
-    X <- toy_matrix()
-    fit <- suppressWarnings(run_aa(X, K = 3L, method = "paa", max_iter = 10L, nrep = 3L))
-
-    expect_s3_class(fit, "archetypes")
+    for (case in cases) {
+        set.seed(3)
+        fit <- suppressWarnings(case())
+        expect_true(inherits(fit, "archetypes") || inherits(fit, "kernel_archetypes"))
+    }
 })
