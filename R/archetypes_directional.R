@@ -209,8 +209,7 @@ archetypes_directional <- function(x,
 
 .aa_unit_rows <- function(X, row_norms = NULL, eps = .Machine$double.eps) {
     X <- as.matrix(X)
-    if (is.null(row_norms))
-        row_norms <- sqrt(rowSums(X * X))
+    row_norms <- row_norms %||% sqrt(rowSums(X * X))
     safe <- ifelse(row_norms > eps, row_norms, 1)
     X / safe
 }

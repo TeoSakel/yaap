@@ -212,7 +212,7 @@ onehot <- function(ind, sparse = FALSE, ...) {
 #' @exportS3Method onehot default
 onehot.default <- function(ind, sparse = FALSE, nc = NULL, ...) {
     nr <- length(ind)
-    if (is.null(nc)) nc <- max(ind, na.rm = TRUE)
+    nc <- nc %||% max(ind, na.rm = TRUE)
     dnames <- list(names(ind), NULL)
 
     keep <- which(!is.na(ind))

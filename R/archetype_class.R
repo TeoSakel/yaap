@@ -530,8 +530,7 @@ plot.archetypes <- function(x,
             )
         }
         S <- subset_rows(as.matrix(x[["compositions"]]))
-        if (is.null(colnames(S)))
-            colnames(S) <- paste0("A", seq_len(ncol(S)))
+        colnames(S) <- colnames(S) %||% paste0("A", seq_len(ncol(S)))
         main <- dots[["main"]]
         args <- list(x = compositions::acomp(S), axes = TRUE) %|p|% dots[setdiff(names(dots), "main")]
         if (isTRUE(plot)) {
@@ -954,8 +953,7 @@ plot.kernel_archetypes <- function(x,
             )
         }
         S <- subset_rows(as.matrix(x[["compositions"]]))
-        if (is.null(colnames(S)))
-            colnames(S) <- paste0("A", seq_len(ncol(S)))
+        colnames(S) <- colnames(S) %||% paste0("A", seq_len(ncol(S)))
         main <- dots[["main"]]
         args <- list(x = compositions::acomp(S), axes = TRUE) %|p|% dots[setdiff(names(dots), "main")]
         if (isTRUE(plot)) {

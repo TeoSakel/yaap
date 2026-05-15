@@ -79,7 +79,8 @@ archetype names.}
 
 \item{init_args}{list of additional arguments for the initialization function}
 
-\item{weights}{optional vector of sample weights (default: NULL)}
+\item{weights}{optional vector of sample weights (default: NULL). Weights are
+internally scaled to have mean 1 and then are square-rooted.}
 
 \item{scale}{scaling or metric embedding used before fitting. \code{TRUE} applies
 the default z-score preprocessing, \code{FALSE} leaves columns on their original

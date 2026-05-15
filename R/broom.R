@@ -134,7 +134,7 @@ glance.archetypes <- function(x, ...) {
         r2        = loss_df[["r2"]][n],
         n_iter    = n - 1L,
         aic       = tryCatch(AIC(x), error = function(e) NA_real_, warning = function(w) NA_real_),
-        family    = if (is.null(x[["family"]])) "gaussian" else x[["family"]]
+        family    = x[["family"]] %||% "gaussian"
     )
 }
 
@@ -224,8 +224,8 @@ augment.kernel_archetypes <- function(x, data = NULL, ...) {
 # NULL row/column names are replaced by row_fill / col_fill.
 .aa_pivot_matrix <- function(mat, row_name, col_name, row_ids, col_ids,
                              row_fill, col_fill) {
-    if (is.null(row_ids)) row_ids <- row_fill
-    if (is.null(col_ids)) col_ids <- col_fill
+    row_ids <- row_ids %||% row_fill
+    col_ids <- col_ids %||% col_fill
     # R stores matrices column-major, so as.vector() iterates columns first.
     # rep(..., times = ncol) cycles the K row labels M times  (A1,A2,..,AK repeated M times)
     # rep(..., each = nrow)  repeats each column label K times (X1,X1,..,X1, X2,..)

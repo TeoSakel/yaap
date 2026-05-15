@@ -44,19 +44,14 @@ tune_archetypes <- function(data,
     if (!is.function(eval))
         stop("`eval` must be a function.", call. = FALSE)
 
-    if (is.null(eval_name))
-        eval_name <- .aa_eval_name(substitute(eval))
+    eval_name <- eval_name %||% .aa_eval_name(substitute(eval))
     stopifnot("`eval_name` must be a single non-empty string" =
                   is.character(eval_name) && length(eval_name) == 1L && nzchar(eval_name))
     reserved_metrics <- c("model_id", "K", "replicate", "converged", "loss", "r2")
     if (eval_name %in% reserved_metrics)
         stop("`eval_name` must not overwrite an internal metrics column.", call. = FALSE)
 
-    if (is.null(direction)) {
-        direction <- if (identical(eval_name, "AIC")) "minimize" else "minimize"
-    } else {
-        direction <- match.arg(direction, c("minimize", "maximize"))
-    }
+    direction <- match.arg(direction %||% "minimize", c("minimize", "maximize"))
 
     dots <- list(...)
     if (length(dots) > 0L && (is.null(names(dots)) || any(!nzchar(names(dots)))))
@@ -165,15 +160,13 @@ best.archetypes_ensemble <- function(x,
                                      metric = NULL,
                                      direction = NULL,
                                      ...) {
-    if (is.null(metric))
-        metric <- x[["prefer_metric"]]
+    metric <- metric %||% x[["prefer_metric"]]
     stopifnot("`metric` must be a single non-empty string" =
                   is.character(metric) && length(metric) == 1L && nzchar(metric))
     if (!metric %in% names(x[["metrics"]]))
         stop("`metric` must be a column in `x$metrics`.", call. = FALSE)
 
-    if (is.null(direction))
-        direction <- x[["prefer_direction"]]
+    direction <- direction %||% x[["prefer_direction"]]
     direction <- match.arg(direction, c("minimize", "maximize"))
 
     values <- x[["metrics"]][[metric]]
@@ -253,8 +246,7 @@ consistency.archetypes <- function(x,
             .aa_consistency_weights(y, "coefficients")
         ),
         coordinates = {
-            if (is.null(data))
-                data <- x[["data"]]
+            data <- data %||% x[["data"]]
             .aa_coordinate_consistency(x, y, data)
         }
     )

@@ -470,8 +470,7 @@ archetypes_kernel_pgd <- function(x,
 
 rbf_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X)
-    if (is.null(sigma))
-        sigma <- .auto_rbf_sigma(D)
+    sigma <- sigma %||% .auto_rbf_sigma(D)
     stopifnot("`sigma` must be a positive finite number" =
                   length(sigma) == 1L && is.finite(sigma) && sigma > 0)
     G <- exp(-0.5 * (D / sigma)^2)
@@ -483,8 +482,7 @@ rbf_kernel <- function(X, sigma = NULL) {
 
 laplace_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X, method = "manhattan")
-    if (is.null(sigma))
-        sigma <- .auto_rbf_sigma(D)
+    sigma <- sigma %||% .auto_rbf_sigma(D)
     stopifnot("`sigma` must be a positive finite number" =
                   length(sigma) == 1L && is.finite(sigma) && sigma > 0)
     G <- exp(-D / sigma)
@@ -498,8 +496,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
     stopifnot("`degree` must be a positive finite number" =
                   length(degree) == 1L && is.finite(degree) && degree > 0)
     stopifnot("`coef0` must be a finite number" = length(coef0) == 1L && is.finite(coef0))
-    if (is.null(gamma))
-        gamma <- 1 / ncol(X)
+    gamma <- gamma %||% (1 / ncol(X))
     stopifnot("`gamma` must be a positive finite number" =
                   length(gamma) == 1L && is.finite(gamma) && gamma > 0)
     (gamma * tcrossprod(X) + coef0)^degree
@@ -576,9 +573,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
     }
 
     B <- onehot(ind, sparse = FALSE, nc = nrow(G))
-    nm <- names(ind)
-    if (is.null(nm))
-        nm <- paste0("A", seq_along(ind))
+    nm <- names(ind) %||% paste0("A", seq_along(ind))
     rownames(B) <- nm
     colnames(B) <- rownames(G)
     S <- .aa_kernel_init_S(G, B, eps)
@@ -604,8 +599,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
 
 .aa_kernel_dist2 <- function(G, ind = NULL) {
     d <- diag(G)
-    if (is.null(ind))
-        ind <- seq_len(ncol(G))
+    ind <- ind %||% seq_len(ncol(G))
     pmax(outer(d, d[ind], "+") - 2 * G[, ind, drop = FALSE], 0)
 }
 
@@ -635,12 +629,8 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
     loss <- as.data.frame(loss)[seq_len(j), , drop = FALSE]
     rownames(loss) <- NULL
 
-    archetype_names <- rownames(B)
-    if (is.null(archetype_names))
-        archetype_names <- paste0("A", seq_len(nrow(B)))
-    sample_names <- row_names
-    if (is.null(sample_names))
-        sample_names <- paste0("x", seq_len(ncol(B)))
+    archetype_names <- rownames(B) %||% paste0("A", seq_len(nrow(B)))
+    sample_names    <- row_names    %||% paste0("x", seq_len(ncol(B)))
 
     rownames(B) <- colnames(S) <- archetype_names
     colnames(B) <- rownames(S) <- rownames(gram) <- colnames(gram) <- sample_names

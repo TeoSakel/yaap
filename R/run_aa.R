@@ -607,7 +607,7 @@ run_aa.fd <- function(x, K, ...) {
         coordinates  = A,
         coefficients = fit[["B"]],
         compositions = fit[["S"]],
-        slack        = if (is.null(fit[["delta"]])) 0 else fit[["delta"]],
+        slack        = fit[["delta"]] %||% 0,
         loss         = loss,
         converged    = fit[["converged"]],
         family       = prep[["family"]]

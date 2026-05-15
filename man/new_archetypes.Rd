@@ -14,7 +14,8 @@ new_archetypes(
   call = NULL,
   data = NULL,
   init = NULL,
-  family = "gaussian"
+  family = "gaussian",
+  weights = NULL
 )
 }
 \arguments{
@@ -38,6 +39,9 @@ row-sum relaxation.}
 \item{init}{Optional initial archetype coordinates.}
 
 \item{family}{Observation family.}
+
+\item{weights}{Optional numeric vector of sample weights used during
+fitting.}
 }
 \description{
 Archetypes object constructor

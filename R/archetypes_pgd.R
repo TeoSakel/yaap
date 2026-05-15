@@ -649,13 +649,13 @@ archetypes_pgd <- function(x,
                                StS = NULL, StX = NULL, AAt = NULL, XAt = NULL,
                                StXXt = NULL,
                                ...) {
-    if (is.null(xss)) xss <- norm(X, "F")^2
-    if (is.null(AAt)) AAt <- tcrossprod(A)
-    if (is.null(XAt)) XAt <- tcrossprod(X, A)
-    if (is.null(StS)) StS <- crossprod(S)
-    if (is.null(StX)) StX <- crossprod(S, X)
-    if (is.null(StXXt)) StXXt <- tcrossprod(StX, X)
-    if (is.null(rss)) rss <- xss - 2 * sum(A * StX) + sum(StS * AAt)
+    xss   <- xss   %||% norm(X, "F")^2
+    AAt   <- AAt   %||% tcrossprod(A)
+    XAt   <- XAt   %||% tcrossprod(X, A)
+    StS   <- StS   %||% crossprod(S)
+    StX   <- StX   %||% crossprod(S, X)
+    StXXt <- StXXt %||% tcrossprod(StX, X)
+    rss   <- rss   %||% (xss - 2 * sum(A * StX) + sum(StS * AAt))
 
     list(
         rss = rss,
@@ -672,9 +672,9 @@ archetypes_pgd <- function(x,
 
 .aa_pgd_weighted_loss_terms <- function(X, A, S, weight_fun, row_xss = NULL,
                                         AAt = NULL, XAt = NULL, ...) {
-    if (is.null(row_xss)) row_xss <- rowSums(X * X)
-    if (is.null(AAt)) AAt <- tcrossprod(A)
-    if (is.null(XAt)) XAt <- tcrossprod(X, A)
+    row_xss <- row_xss %||% rowSums(X * X)
+    AAt     <- AAt     %||% tcrossprod(A)
+    XAt     <- XAt     %||% tcrossprod(X, A)
 
     row_rss <- .aa_trace_row_rss(row_xss, S, XAt, AAt)
     row_weights <- weight_fun(row_rss)

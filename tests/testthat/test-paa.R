@@ -137,5 +137,5 @@ test_that("PAA profile plots use parameter-space coordinates", {
 
     pdf(NULL)
     on.exit(dev.off(), add = TRUE)
-    expect_identical(plot(fit, "profiles"), fit)
+    expect_named(plot(fit, "profiles"), c("coordinates", "family", "archetype_names", "barplot_args"))
 })

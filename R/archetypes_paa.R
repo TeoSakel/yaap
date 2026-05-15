@@ -347,9 +347,7 @@ archetypes_paa <- function(x,
                               max_iter_optimizer = 10L,
                               step_shrinkage = 0.5,
                               ...) {
-    family <- object[["family"]]
-    if (is.null(family))
-        family <- "gaussian"
+    family <- object[["family"]] %||% "gaussian"
     spec <- .aa_paa_family(family, eps = eps)
     prep <- spec[["prepare"]](newdata)
     X <- prep[["X"]]

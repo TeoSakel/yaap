@@ -12,8 +12,9 @@
 \item{newdata}{New data to fit. Must contain the features (columns) used to
 fit \code{object}; fd-backed fits may pass an \code{fda::fd} object.}
 
-\item{type}{Prediction output type. \code{"compositions"} (default) returns
-\code{S}; \code{"reconstruction"} returns \code{X_hat = S \%*\% A}.}
+\item{type}{Prediction output type.
+\code{"compositions"} (default) returns \code{S}; \code{"reconstruction"} returns
+\code{X_hat = S \%*\% A}.}
 
 \item{...}{Passed to \code{\link{fit_simplex}} and family-specific
 prediction routines.}
@@ -29,7 +30,8 @@ Projects new samples onto the archetype space by solving for composition
 weights with fixed archetype coordinates. By default the method returns
 compositions (\code{S}). With \code{type = "reconstruction"} it returns
 \code{X_hat = S \%*\% A}, where \code{A = object$coordinates}.
-
+}
+\details{
 For non-Gaussian families (\code{bernoulli}, \code{poisson}, \code{multinomial}),
 coordinates live in parameter space. In particular, multinomial
 reconstructions preserve existing package behavior by scaling each row of

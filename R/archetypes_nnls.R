@@ -142,7 +142,7 @@ archetypes_nnls <- function(x,
         A <- A[, -iM, drop = FALSE]
     }
 
-    if (is.null(xss)) xss <- norm(X, "F")^2  # computed once
+    xss <- xss %||% norm(X, "F")^2  # computed once
     AAt <- tcrossprod(A)     # (K x K) archetype Gram matrix
     XAt <- tcrossprod(X, A)  # (N x K) projection of data onto archetypes
     StS <- crossprod(S)      # (K x K) archetype score Gram matrix
@@ -166,7 +166,7 @@ archetypes_nnls <- function(x,
         A <- A[, -iM, drop = FALSE]
     }
 
-    if (is.null(row_xss)) row_xss <- rowSums(X * X)
+    row_xss <- row_xss %||% rowSums(X * X)
     AAt <- tcrossprod(A)
     XAt <- tcrossprod(X, A)
 
@@ -398,8 +398,7 @@ fit_ols <- function(S, X, method, a0 = NULL, row_weights = NULL, ...) {
     # method is one of the `optim` methods (if not an error will be thrown)
     M <- ncol(X)
     K <- ncol(S)
-    if (is.null(a0))  # random initial guess
-        a0 <- apply(X, 2L, function(x) stats::rnorm(K, mean(x), stats::sd(x)))
+    a0 <- a0 %||% apply(X, 2L, function(x) stats::rnorm(K, mean(x), stats::sd(x)))  # random initial guess
 
     a0 <- as.vector(a0)
     stopifnot(length(a0) == K * M)

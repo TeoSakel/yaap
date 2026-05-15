@@ -20,7 +20,8 @@ archetypes(
   call = NULL,
   data = NULL,
   init = NULL,
-  family = "gaussian"
+  family = "gaussian",
+  weights = NULL
 )
 
 anames(x)
@@ -64,6 +65,9 @@ supplied, residuals are computed against fitted values.}
 coordinates before optimization.}
 
 \item{family}{Observation family. Defaults to \code{"gaussian"}.}
+
+\item{weights}{Optional numeric vector of sample weights used during
+fitting. When present, it is used by \code{residuals(..., type = "pearson")}.}
 
 \item{x}{An archetype analysis result.}
 

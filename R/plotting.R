@@ -185,8 +185,7 @@ plot_archetypes_profiles <- function(coordinates,
         stop("`coordinates` must be numeric.", call. = FALSE)
     if (ncol(A) < 1L)
         stop("Profile plots require at least one feature.", call. = FALSE)
-    if (is.null(family))
-        family <- "gaussian"
+    family <- family %||% "gaussian"
 
     dots <- list(...)
     ylab <- dots[["ylab"]] %||%
@@ -481,10 +480,8 @@ plot_archetypes_coordinates <- function(coordinates,
                                        canvas_args,
                                        archetype_args,
                                        data_args) {
-    A <- coordinates
-    X <- data
-    combined <- if (is.null(X)) A else rbind(X, A)
-    n_data <- if (is.null(X)) 0L else nrow(X)
+    combined <- rbind(data, coordinates)
+    n_data <- nrow(data) %||% 0L
     n_total <- nrow(combined)
     panel <- function(x, y, ...) {
         if (n_data > 0L) {
@@ -526,6 +523,5 @@ plot_archetypes_coordinates <- function(coordinates,
         }
     }
     pair_args <- list(x = combined, panel = panel, lower.panel = panel, upper.panel = panel)
-    pair_args <- pair_args %|p|% canvas_args
-    do.call(graphics::pairs, pair_args)
+    do.call(graphics::pairs, pair_args %|p|% canvas_args)
 }

@@ -4,13 +4,14 @@
 \alias{residuals.archetypes}
 \title{Residuals for archetypes objects}
 \usage{
-\method{residuals}{archetypes}(object, data = NULL, ...)
+\method{residuals}{archetypes}(object, type = c("response", "pearson"), ...)
 }
 \arguments{
 \item{object}{An object of class \code{archetypes}.}
 
-\item{data}{Original data. If not provided, the function attempts to use
-\code{object$data}.}
+\item{type}{Residual type. \code{"response"} (default) returns \code{data - fitted}.
+\code{"pearson"} returns row-wise weighted residuals,
+\code{sqrt(weights) * (data - fitted)}.}
 
 \item{...}{Ignored.}
 }

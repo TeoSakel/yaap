@@ -184,7 +184,7 @@ furthest_first <- function(X, K, distances = NULL, center_dists = NULL, ...) {
     b <- integer(K)  # indices of archetypes
 
     # 1) randomly select the first archetype
-    dists <- if (is.null(center_dists)) .dist2(X, center = TRUE) else center_dists
+    dists <- center_dists %||% .dist2(X, center = TRUE)
     b[1L] <- .sample_distal_points(dists, 1L)
 
     # 2) compute next K-1 archetypes by selecting the furthest from current set
@@ -203,7 +203,7 @@ kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"),
     b <- integer(K)  # indices of archetypes
 
     # 1) randomly select the first archetype
-    dists <- if (is.null(center_dists)) .dist2(X, center = TRUE) else center_dists
+    dists <- center_dists %||% .dist2(X, center = TRUE)
     b[1L] <- .sample_distal_points(dists, 1L)
 
     # 2) compute next K-1 archetypes by sampling from the points furthest from the current set
@@ -552,9 +552,7 @@ hull_outmost <- function(X,
 .ind_to_init <- function(X, ind, sparse) {
     # make sure ind is positive indices selecting rows
     ind <- .aa_normalize_row_indices(ind, nrow(X), rownames(X))
-    nm <- names(ind)
-    if (is.null(nm))
-        nm <- paste0("A", seq_along(ind))
+    nm <- names(ind) %||% paste0("A", seq_along(ind))
 
     A <- X[ind, , drop = FALSE]  # Archetypes
     B <- onehot(ind, sparse = sparse, nrow(X))  # Row-stochastic matrix

@@ -16,7 +16,8 @@ kernel_archetypes(
   data = NULL,
   init = NULL,
   kernel = NULL,
-  kernel_args = list()
+  kernel_args = list(),
+  weights = NULL
 )
 }
 \arguments{
@@ -47,6 +48,9 @@ Hilbert-space archetypes.}
 \item{kernel}{Kernel specification.}
 
 \item{kernel_args}{Kernel arguments.}
+
+\item{weights}{Optional numeric vector of sample weights used during
+fitting.}
 }
 \description{
 Kernel archetype analysis result object
