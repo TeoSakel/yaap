@@ -448,22 +448,23 @@ plot.archetypes <- function(x,
     }
 
     if (what %in% c("ternary", "simplex")) {
-        if (!requireNamespace("compositions", quietly = TRUE)) {
-            stop(
-                "Ternary/simplex plots require package `compositions`. ",
-                "Install it to use `plot(..., what = 'ternary'/'simplex')`.",
-                call. = FALSE
-            )
-        }
         S <- .aa_plot_subset_rows(as.matrix(x[["compositions"]]), subset)
         colnames(S) <- colnames(S) %||% paste0("A", seq_len(ncol(S)))
-        main <- dots[["main"]]
-        args <- list(x = compositions::acomp(S), axes = TRUE) %|p|% dots[setdiff(names(dots), "main")]
         if (isTRUE(plot)) {
+            if (!requireNamespace("compositions", quietly = TRUE)) {
+                stop(
+                    "Ternary/simplex plots require package `compositions`. ",
+                    "Install it to use `plot(..., what = 'ternary'/'simplex')`.",
+                    call. = FALSE
+                )
+            }
+            args <- list(x = compositions::acomp(S), axes = TRUE) %|p|% dots
             do.call(graphics::plot, args)
-            if (!is.null(main)) graphics::title(main = main)
+            # main is ignored by compositions::plot.acomp() so add it separately if provided
+            graphics::title(main = dots[["main"]])
         }
-        return(invisible(list(compositions = S, plot_args = args)))
+        # target package ggtern uses wide format no "pca"
+        return(invisible(as.data.frame(S)))
     }
 
     if (what == "loss") {
