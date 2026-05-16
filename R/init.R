@@ -41,10 +41,8 @@
 #'   distribution (Gamma(α, 1) weights normalized to unit sum). `alpha = 1`
 #'   (default) gives a uniform distribution over the simplex; `alpha < 1`
 #'   concentrates mass near simplex vertices, yielding sparser rows; `alpha > 1`
-#'   concentrates mass toward the centroid. If `eps > 0`, raw Gamma weights
-#'   below `eps` are zeroed out before normalization and `B` is returned as a
-#'   sparse matrix; `eps = 0` (default) keeps all weights and returns a dense
-#'   `B`. Accepts optional `alpha` and `eps` arguments via `...`.
+#'   concentrates mass toward the centroid. Accepts optional `alpha` argument
+#'   via `...`.
 #' - `"furthest_first"`: selects the first archetype randomly and then greedily
 #'   selects the point furthest from the current set of archetypes.
 #' - `"kmeans_pp"`: a soft version of `furthest_first` where points are sampled
@@ -560,15 +558,12 @@ hull_outmost <- function(X,
     S
 }
 
-dirichlet <- function(X, K, alpha = 1, eps = 0, ...) {
+dirichlet <- function(X, K, alpha = 1, ...) {
     stopifnot("`alpha` must be a single positive number" = is_positive(alpha))
-    stopifnot("`eps` must be a single non-negative number" = is_non_negative(eps))
     N <- nrow(X)
     nm <- paste0("A", seq_len(K))
     B <- matrix(stats::rgamma(K * N, shape = alpha), nrow = K, ncol = N)
-    B[B < eps] <- 0
     B <- proj_l1(B, eps = 0)
-    if (eps > 0) B <- Matrix::Matrix(B, sparse = TRUE) # TODO: check for sparsity before converting?
     A <- B %*% X
     rownames(A) <- rownames(B) <- nm
     list(A = A, B = B)
