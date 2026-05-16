@@ -14,7 +14,8 @@ archetypes <- function(coordinates = NULL,
                        data = NULL,
                        init = NULL,
                        family = "gaussian",
-                       weights = NULL) {
+                       weights = NULL,
+                       fit_info = list()) {
     call <- call %||% match.call()
     loss <- loss %||% data.frame(loss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
 
@@ -57,6 +58,7 @@ archetypes <- function(coordinates = NULL,
     if (!inherits(loss, "data.frame")) stop("loss must be compatible with data.frame")
     family <- family %||% "gaussian"
     stopifnot("family must be a single non-empty string" = is_non_empty_string(family))
+    stopifnot("fit_info must be a list" = is.list(fit_info))
     if (!is.null(weights)) {
         stopifnot("weights must have one value per sample" = length(weights) == N)
         stopifnot("weights must be finite and non-negative" = is_all_non_negative(weights))
@@ -74,7 +76,8 @@ archetypes <- function(coordinates = NULL,
             data         = data,
             call         = call,
             family       = family,
-            weights      = weights
+            weights      = weights,
+            fit_info     = fit_info
         ),
         class = "archetypes"
     )
@@ -299,10 +302,9 @@ predict.archetypes <- function(object,
 
 #' @exportS3Method
 print.archetypes <- function(x, ...) {
-    # TODO: add more info about method used (method, missing, robust, etc.)
     call_str <- paste(deparse(x[["call"]]), sep = "\n", collapse = "\n")
     cat("\nCall:\n", call_str, "\n\n", sep = "")
-    cat("Archetypes Summary:\n")
+    cat(.aa_print_title(x), ":\n", sep = "")
     K <- nrow(x[["coordinates"]])
     loss <- x[["loss"]]
     cat("Number of Archetypes:", K, "\n")
@@ -315,6 +317,85 @@ print.archetypes <- function(x, ...) {
     cat("Final Loss Metrics:\n")
     print(loss[nrow(loss), ], row.names = FALSE)
     cat("\n")
+    invisible(x)
+}
+
+.aa_print_title <- function(x) {
+    info <- x[["fit_info"]]
+    if (!is.list(info) || length(info) == 0L)
+        return("Archetypal Analysis")
+
+    secondary <- if (isTRUE(info[["robust"]])) "Robust" else character()
+    method <- switch(
+        info[["method"]] %||% "",
+        pgd = "PGD",
+        nnls = "NNLS",
+        paa = "PAA",
+        kernel = "Kernel",
+        directional = "Directional",
+        info[["method"]] %||% ""
+    )
+    family <- info[["family"]]
+    suffix <- if (!is.null(info[["kernel"]])) {
+        sprintf(" (%s kernel)", info[["kernel"]])
+    } else if (identical(info[["method"]], "paa") && !is.null(family)) {
+        sprintf(" (%s family)", family)
+    } else {
+        ""
+    }
+
+    paste(c(secondary, method, "Archetypal Analysis"), collapse = " ") |>
+        paste0(suffix)
+}
+
+#' @exportS3Method
+summary.archetypes <- function(object, ...) {
+    loss <- object[["loss"]]
+    out <- list(
+        call = object[["call"]],
+        title = .aa_print_title(object),
+        fit_info = object[["fit_info"]],
+        n_archetypes = if (!is.null(object[["coordinates"]]))
+            nrow(object[["coordinates"]])
+        else
+            nrow(object[["coefficients"]]),
+        n_samples = nrow(object[["compositions"]]),
+        n_features = if (!is.null(object[["coordinates"]])) ncol(object[["coordinates"]]) else NA_integer_,
+        converged = object[["converged"]],
+        n_iter = nrow(loss) - 1L,
+        loss = loss,
+        final_loss = loss[nrow(loss), , drop = FALSE],
+        coordinates = if (inherits(object, "kernel_archetypes")) NULL else object[["coordinates"]]
+    )
+    class(out) <- "summary.archetypes"
+    out
+}
+
+#' @exportS3Method
+print.summary.archetypes <- function(x, ...) {
+    cat(x[["title"]], " Summary:\n", sep = "")
+    cat("Number of Archetypes:", x[["n_archetypes"]], "\n")
+    cat("Number of Samples:", x[["n_samples"]], "\n")
+    if (!is.na(x[["n_features"]]))
+        cat("Number of Features:", x[["n_features"]], "\n")
+
+    info <- x[["fit_info"]]
+    if (is.list(info) && length(info) > 0L) {
+        cat("\nFit Details:\n")
+        print(as.data.frame(info, stringsAsFactors = FALSE), row.names = FALSE)
+    }
+
+    cat("\nConvergence:\n")
+    cat(ifelse(x[["converged"]], "Converged", "DID NOT CONVERGE"),
+        " after ", x[["n_iter"]], " iterations.\n", sep = "")
+
+    cat("\nFinal Loss Metrics:\n")
+    print(x[["final_loss"]], row.names = FALSE)
+
+    if (!is.null(x[["coordinates"]])) {
+        cat("\nCoordinates:\n")
+        print(x[["coordinates"]])
+    }
     invisible(x)
 }
 #' Plot method for archetypes objects
@@ -403,7 +484,7 @@ plot.archetypes <- function(x,
     }
 
     family <- x[["family"]] %||% "gaussian"
-    if (!(family %in% c("gaussian", "directional"))) {
+    if (!(family %in% c("gaussian", "watson"))) {
         msg <- paste(
             "Coordinate plots are not defined when archetype coordinates live",
             "in parameter space but `data` lives in observation space;",
@@ -522,7 +603,8 @@ directional_archetypes <- function(coordinates,
                                    generator_data = NULL,
                                    hemisphere_direction = NULL,
                                    row_norms = NULL,
-                                   precision = NULL) {
+                                   precision = NULL,
+                                   fit_info = list()) {
     out <- archetypes(
         coordinates = coordinates,
         coefficients = coefficients,
@@ -533,7 +615,8 @@ directional_archetypes <- function(coordinates,
         call = call,
         data = data,
         init = init,
-        family = "directional"
+        family = "watson",
+        fit_info = fit_info
     )
     out[["generator_data"]] <- generator_data
     out[["hemisphere_direction"]] <- hemisphere_direction
@@ -670,7 +753,8 @@ kernel_archetypes <- function(coefficients,
                               init = NULL,
                               kernel = NULL,
                               kernel_args = list(),
-                              weights = NULL) {
+                              weights = NULL,
+                              fit_info = list()) {
     call <- call %||% match.call()
     loss <- loss %||% data.frame(loss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
     stopifnot("Gram matrix dimensions must match number of samples" =
@@ -686,7 +770,8 @@ kernel_archetypes <- function(coefficients,
         data         = data,
         init         = NULL,   # kernel init is a coefficient matrix; add after
         family       = "gaussian",
-        weights      = weights
+        weights      = weights,
+        fit_info     = fit_info
     )
     out[["init"]]        <- init
     out[["gram"]]        <- gram
@@ -764,8 +849,7 @@ residuals.kernel_archetypes <- function(object, ...) {
 print.kernel_archetypes <- function(x, ...) {
     call_str <- paste(deparse(x[["call"]]), sep = "\n", collapse = "\n")
     cat("\nCall:\n", call_str, "\n\n", sep = "")
-    cat("Kernel Archetypes Summary:\n")
-    cat("Kernel type:", x[["kernel"]], "\n")
+    cat(.aa_print_title(x), ":\n", sep = "")
     cat("Number of Archetypes:", nrow(x[["coefficients"]]), "\n")
     cat("Number of Samples:", ncol(x[["coefficients"]]), "\n")
     if (!is.null(x[["coordinates"]]))

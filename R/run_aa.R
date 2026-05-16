@@ -542,7 +542,8 @@ run_aa.fd <- function(x, K, ...) {
             i = nrow(out[["loss"]]) - 1L,
             loss = out[["loss"]],
             converged = out[["converged"]]
-        )
+        ),
+        fit_info = list(method = ctx[["method"]])
     )
 }
 
@@ -577,7 +578,7 @@ run_aa.fd <- function(x, K, ...) {
     init_vars
 }
 
-.aa_euclidean_output <- function(ctx, prep, fit) {
+.aa_euclidean_output <- function(ctx, prep, fit, fit_info = list()) {
     X <- if (!is.null(prep[["output_X"]])) prep[["output_X"]] else prep[["X"]]
     undo_scale <- prep[["undo_scale"]]
     if (is.null(undo_scale))
@@ -614,6 +615,19 @@ run_aa.fd <- function(x, K, ...) {
         message(sprintf(fmt, fit[["i"]], loss[j, "loss"], loss[j, "r2"]))
     }
 
+    init <- ctx[["init"]]
+    if (!is.null(init) && !is.character(init))
+        init <- if (is.function(init)) "function" else "matrix"
+    fit_info <- fit_info %|p|% list(
+        family = prep[["family"]] %||% ctx[["family"]] %||% "gaussian",
+        robust = isTRUE(ctx[["robust"]]),
+        missing = isTRUE(ctx[["missing"]]),
+        delta = fit[["delta"]] %||% 0,
+        init = init,
+        scaling = .aa_scale_label(ctx[["scale"]]),
+        sample_weights = !is.null(ctx[["weights"]])
+    )
+
     archetypes(
         call         = ctx[["call"]],
         data         = ctx[["x"]],
@@ -625,6 +639,19 @@ run_aa.fd <- function(x, K, ...) {
         slack        = fit[["delta"]] %||% 0,
         loss         = loss,
         converged    = fit[["converged"]],
-        family       = prep[["family"]]
+        family       = prep[["family"]],
+        fit_info     = fit_info
     )
+}
+
+.aa_scale_label <- function(scale) {
+    if (identical(scale, FALSE))
+        return("none")
+    if (isTRUE(scale))
+        return("z-score")
+    if (is.numeric(scale) && is.null(dim(scale)))
+        return("custom")
+    if (is.matrix(scale) || inherits(scale, "Matrix"))
+        return("metric")
+    "custom"
 }

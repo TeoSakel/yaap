@@ -109,7 +109,7 @@ samples as equally reliable.
 \subsection{Initialization}{
 
 The default \code{dirichlet} initialization draws the \code{coefficient} matrix
-as a $\text{Dirichlet}\(1, \..., 1\)$, which is the simplex equivalent
+as a Dirichlet(1, ..., 1), which is the simplex equivalent
 of the uniform distribution. This differs from \code{random} (the \code{\link[=aa_init]{aa_init()}}
 method that selects K rows of the data uniformly at random), which initializes
 \code{B} as a one-hot matrix so that archetypes start at actual data points

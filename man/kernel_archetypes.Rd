@@ -17,7 +17,8 @@ kernel_archetypes(
   init = NULL,
   kernel = NULL,
   kernel_args = list(),
-  weights = NULL
+  weights = NULL,
+  fit_info = list()
 )
 }
 \arguments{

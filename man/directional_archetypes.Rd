@@ -16,7 +16,8 @@ directional_archetypes(
   generator_data = NULL,
   hemisphere_direction = NULL,
   row_norms = NULL,
-  precision = NULL
+  precision = NULL,
+  fit_info = list()
 )
 }
 \arguments{

@@ -152,7 +152,9 @@ archetypes_nnls <- function(x,
             )
         },
         final_loss = .aa_final_loss,
-        prepare_output = .aa_euclidean_output
+        prepare_output = function(ctx, prep, fit) {
+            .aa_euclidean_output(ctx, prep, fit, fit_info = list(method = "nnls"))
+        }
     )
 }
 

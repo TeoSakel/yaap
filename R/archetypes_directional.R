@@ -60,7 +60,7 @@
 #' ## Initialization
 #'
 #' The default `dirichlet` initialization draws the `coefficient` matrix
-#' as a $\text{Dirichlet}\(1, \..., 1\)$, which is the simplex equivalent
+#' as a Dirichlet(1, ..., 1), which is the simplex equivalent
 #' of the uniform distribution. This differs from `random` (the [aa_init()]
 #' method that selects K rows of the data uniformly at random), which initializes
 #' `B` as a one-hot matrix so that archetypes start at actual data points
@@ -138,16 +138,22 @@ archetypes_directional <- function(x,
 
     list(
         check = function(ctx) {
-            if (ctx[["missing"]])
+            if (ctx[["missing"]]) {
                 stop("`missing = TRUE` is not supported for `method = 'directional'`.",
-                     call. = FALSE)
-            if (ctx[["robust"]])
+                    call. = FALSE
+                )
+            }
+            if (ctx[["robust"]]) {
                 stop("`robust = TRUE` is not supported for `method = 'directional'`.",
-                     call. = FALSE)
-            if (!isTRUE(ctx[["scale"]]))
+                    call. = FALSE
+                )
+            }
+            if (!isTRUE(ctx[["scale"]])) {
                 stop("`scale` is not supported for `method = 'directional'`.", call. = FALSE)
-            if (inherits(ctx[["x"]], "sparseMatrix"))
+            }
+            if (inherits(ctx[["x"]], "sparseMatrix")) {
                 stop("Directional AA currently requires a dense numeric matrix.", call. = FALSE)
+            }
             X <- as.matrix(ctx[["x"]])
             .aa_check_fit_controls(ctx, n = nrow(X))
             .aa_check_projected_gradient_controls(
@@ -157,8 +163,10 @@ archetypes_directional <- function(x,
                 max_no_update = max_no_update
             )
             if (!is.null(ctx[["weights"]])) {
-                stopifnot("weights must match rows in data" =
-                              length(ctx[["weights"]]) == nrow(X))
+                stopifnot(
+                    "weights must match rows in data" =
+                        length(ctx[["weights"]]) == nrow(X)
+                )
                 stopifnot("weights contain NA values" = !any(is.na(ctx[["weights"]])))
                 stopifnot("weights must be non-negative" = all(ctx[["weights"]] >= 0))
                 stopifnot("at least one weight must be positive" = any(ctx[["weights"]] > 0))
@@ -228,7 +236,17 @@ archetypes_directional <- function(x,
                 generator_data = prep[["X_flip"]],
                 hemisphere_direction = prep[["hemisphere_direction"]],
                 row_norms = prep[["row_norms"]],
-                precision = prep[["precision"]]
+                precision = prep[["precision"]],
+                fit_info = list(method = "directional", precision = prep[["precision"]]) %|p|%
+                    list(
+                        family = "watson",
+                        robust = FALSE,
+                        missing = FALSE,
+                        delta = 0,
+                        init = ctx[["init"]],
+                        scaling = "none",
+                        sample_weights = !is.null(ctx[["weights"]])
+                    )
             )
         }
     )
@@ -257,11 +275,12 @@ archetypes_directional <- function(x,
 
 .aa_directional_hemisphere <- function(X_gen, method = c("pca", "none")) {
     method <- match.arg(method)
-    if (method == "none")
+    if (method == "none") {
         return(list(X = X_gen, direction = NULL))
+    }
 
     pc <- stats::prcomp(X_gen, center = FALSE, scale. = FALSE, rank. = 1L)
-    direction <- pc[["rotation"]]  # (p x 1) unit vector normal to the PCA hyperplane
+    direction <- pc[["rotation"]] # (p x 1) unit vector normal to the PCA hyperplane
     direction <- direction / norm(direction, "F")
     projection <- as.numeric(X_gen %*% direction)
     sign <- ifelse(projection < 0, -1, 1)
@@ -271,8 +290,9 @@ archetypes_directional <- function(x,
 .aa_directional_init_vars <- function(X_flip, X_gen, K, init, init_args, eps) {
     if (is.matrix(init) || inherits(init, "data.frame")) {
         init <- as.matrix(init)
-        if (!identical(dim(init), c(K, ncol(X_flip))))
+        if (!identical(dim(init), c(K, ncol(X_flip)))) {
             stop("`init` matrix must have dimension `K x ncol(data)`.", call. = FALSE)
+        }
         .aa_check_no_zero_rows(init)
         B <- fit_simplex(X_flip, .aa_unit_rows(init), eps = eps)
         A <- B %*% X_flip
@@ -291,7 +311,8 @@ archetypes_directional <- function(x,
         init_vars <- do.call(init, init_call)
     } else {
         stop("`init` must be an aa_init method string, a function, or a matrix.",
-             call. = FALSE)
+            call. = FALSE
+        )
     }
     B <- init_vars[["B"]]
     B <- proj_l1(as.matrix(B), eps = eps)
@@ -347,8 +368,8 @@ archetypes_directional <- function(x,
 
         # S-update
         grad_Y <- .aa_directional_grad_Y(X_loss, Y, terms[["z"]], terms[["q"]]) # TV in Eqs. 6-7
-        grad_S <- tcrossprod(grad_Y, A)                                         # Equation 6
-        grad_S <- grad_S - rowSums(grad_S * S)                                  # pseudo-grad
+        grad_S <- tcrossprod(grad_Y, A) # Equation 6
+        grad_S <- grad_S - rowSums(grad_S * S) # pseudo-grad
         for (k in seq_len(max_iter_optimizer)) {
             S_new <- proj_l1(S - step_S * grad_S, eps = eps)
             Y_new <- S_new %*% A
@@ -365,10 +386,11 @@ archetypes_directional <- function(x,
         }
 
         # B-update
-        if (accepted_update) # use latest version of Y, terms
+        if (accepted_update) { # use latest version of Y, terms
             grad_Y <- .aa_directional_grad_Y(X_loss, Y, terms[["z"]], terms[["q"]])
+        }
         grad_B <- crossprod(S, tcrossprod(grad_Y, X_flip)) # Eq 7: t(S) %*% grad_Y %*% t(X_flip)
-        grad_B <- grad_B - rowSums(grad_B * B)             # pseudo-grad
+        grad_B <- grad_B - rowSums(grad_B * B) # pseudo-grad
         for (k in seq_len(max_iter_optimizer)) {
             B_new <- proj_l1(B - step_B * grad_B, eps = eps)
             A_new <- B_new %*% X_flip
@@ -388,8 +410,9 @@ archetypes_directional <- function(x,
 
         if (!accepted_update) {
             no_update <- no_update + 1L
-            for (nm in names(loss))
+            for (nm in names(loss)) {
                 loss[[nm]][j] <- loss[[nm]][i]
+            }
             if (verbose) {
                 fmt <- paste(
                     "Iteration %d: directional candidate did not improve loss;",
@@ -427,10 +450,10 @@ archetypes_directional <- function(x,
 .aa_directional_terms <- function(X_loss, Y, xss = norm(X_loss, "F")^2) {
     # Computes the Watson loss between X_loss and Y (equation 3),
     # along with intermediate terms used for gradient computation  z, q, and v
-    z <- rowSums(X_loss * Y)                       # (N x 1) vector of x_i^T xhat_i
+    z <- rowSums(X_loss * Y) # (N x 1) vector of x_i^T xhat_i
     q <- pmax(rowSums(Y * Y), .Machine$double.eps) # (N x 1) vector of xhat_i^T xhat_i
-    v <- z / sqrt(q)                               # (N x 1) v = z / ||xhat||
-    Lw <- norm(v, "2")^2                           # eq. 4
+    v <- z / sqrt(q) # (N x 1) v = z / ||xhat||
+    Lw <- norm(v, "2")^2 # eq. 4
     list(z = z, q = q, rss = xss - Lw, xss = xss)
 }
 

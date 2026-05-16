@@ -36,8 +36,118 @@ test_that("S3 methods return expected values", {
     fit_no_data <- fit
     fit_no_data[["data"]] <- NULL
     expect_error(residuals(fit_no_data), "Original data")
-    expect_output(print(fit), "Archetypes Summary")
+    expect_output(print(fit), "Archetypal Analysis")
     expect_true(is.numeric(AIC(fit)))
+})
+
+test_that("print.archetypes reports compact fitting method labels", {
+    X <- toy_matrix()[1:20, , drop = FALSE]
+
+    set.seed(1)
+    robust <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 3L,
+        robust = TRUE,
+        delta = 0.2,
+        max_iter = 1L
+    ))
+    robust_output <- paste(capture.output(print(robust)), collapse = "\n")
+    expect_match(robust_output, "Robust PGD Archetypal Analysis")
+    expect_false(grepl("Relaxed", robust_output, fixed = TRUE))
+    expect_match(robust_output, "Number of Archetypes: 3")
+
+    X_missing <- missing_test_matrix()
+    set.seed(2)
+    missing_fit <- suppressWarnings(archetypes_pgd(
+        X_missing,
+        K = 2L,
+        init = "random",
+        sd_threshold = 0,
+        max_iter = 1L
+    ))
+    missing_output <- paste(capture.output(print(missing_fit)), collapse = "\n")
+    expect_match(missing_output, "PGD Archetypal Analysis")
+    expect_false(grepl("Missing-data PGD", missing_output, fixed = TRUE))
+
+    paa <- suppressWarnings(archetypes_paa(
+        matrix(c(1, 0, 0, 1, 1, 1), ncol = 2, byrow = TRUE),
+        K = 2L,
+        family = "bernoulli",
+        max_iter = 1L
+    ))
+    paa_output <- paste(capture.output(print(paa)), collapse = "\n")
+    expect_match(paa_output, "PAA Archetypal Analysis \\(bernoulli family\\)")
+})
+
+test_that("summary.archetypes reports fit details, loss, and coordinates", {
+    X <- toy_matrix()[1:20, , drop = FALSE]
+
+    set.seed(1)
+    fit <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 3L,
+        robust = TRUE,
+        delta = 0.2,
+        max_iter = 1L
+    ))
+
+    smry <- summary(fit)
+    expect_s3_class(smry, "summary.archetypes")
+    expect_equal(smry[["fit_info"]][["method"]], "pgd")
+    expect_true(smry[["fit_info"]][["robust"]])
+    expect_equal(smry[["fit_info"]][["delta"]], 0.2)
+    expect_equal(smry[["fit_info"]][["scaling"]], "z-score")
+    expect_equal(smry[["final_loss"]], fit[["loss"]][nrow(fit[["loss"]]), , drop = FALSE])
+    expect_equal(smry[["coordinates"]], fit[["coordinates"]])
+
+    smry_output <- paste(capture.output(print(smry)), collapse = "\n")
+    expect_match(smry_output, "Fit Details:")
+    expect_match(smry_output, "z-score")
+    expect_match(smry_output, "Final Loss Metrics:")
+    expect_match(smry_output, "Coordinates:")
+})
+
+test_that("summary.archetypes reports scaling mode", {
+    X <- toy_matrix()[1:20, , drop = FALSE]
+
+    set.seed(1)
+    unscaled <- suppressWarnings(archetypes_pgd(X, K = 3L, scale = FALSE, max_iter = 1L))
+    expect_equal(summary(unscaled)[["fit_info"]][["scaling"]], "none")
+
+    set.seed(1)
+    custom <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 3L,
+        scale = c(x = 1, y = 2),
+        max_iter = 1L
+    ))
+    expect_equal(summary(custom)[["fit_info"]][["scaling"]], "custom")
+
+    set.seed(1)
+    metric <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 3L,
+        scale = diag(c(1, 2)),
+        max_iter = 1L
+    ))
+    expect_equal(summary(metric)[["fit_info"]][["scaling"]], "metric")
+})
+
+test_that("summary.kernel_archetypes omits coordinates", {
+    X <- toy_matrix()[1:12, , drop = FALSE]
+    fit <- suppressWarnings(archetypes_kernel_pgd(
+        X,
+        K = 3L,
+        kernel = "linear",
+        init = c(1L, 2L, 3L),
+        max_iter = 1L
+    ))
+
+    smry <- summary(fit)
+    expect_s3_class(smry, "summary.archetypes")
+    expect_equal(smry[["fit_info"]][["method"]], "kernel")
+    expect_null(smry[["coordinates"]])
+    expect_false(any(grepl("Coordinates:", capture.output(print(smry)), fixed = TRUE)))
 })
 
 test_that("pearson residuals apply stored sample weights", {
