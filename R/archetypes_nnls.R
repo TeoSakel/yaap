@@ -240,7 +240,6 @@ archetypes_nnls <- function(x,
     #   rss = ||X - SA||^2 = ||X||^2 - 2*tr(SAXt) + tr(StS AAt) Residual Sum of Squares
     A0 <- A
     Xt <- t(X)  # compute Xt once to reuse for B update
-    nnls_svd_kappa_threshold <- 500
     loss_terms <- loss_fun(X, A, S, weight_fun = weight_fun)
     xss <- loss_terms[["xss"]]
     row_xss <- loss_terms[["row_xss"]]
@@ -253,7 +252,6 @@ archetypes_nnls <- function(x,
         verbose = verbose,
         max_kappa = max_kappa
     )
-    use_svd_for_S <- loss[["k_A"]][1L] > nnls_svd_kappa_threshold
     converged <- FALSE
     no_update <- 0L
     max_simplex_error <- 0
@@ -265,7 +263,7 @@ archetypes_nnls <- function(x,
     # edge case: if max_iter = 0 return initial solution without any updates
     if (max_iter == 0L) {
         return(list(
-            A0 = A0,
+            # (kappa(A) check removed)
             A = A,
             B = B,
             S = S,
@@ -282,10 +280,8 @@ archetypes_nnls <- function(x,
     if (verbose) message("Starting main loop...")
     for (i in seq_len(max_iter)) {
         j <- i + 1L  # loss row to update
-        check_kappa <- i %% 10L == 0L  # Check kappa every 10 iterations
-
         # S update
-        S_raw <- fit_nnls(X, t(A), use_svd = use_svd_for_S) # Project X to A-simplex
+        S_raw <- fit_nnls(X, t(A), use_svd = FALSE) # Project X to A-simplex
         max_simplex_error <- max(max_simplex_error, max(abs(rowSums(S_raw) - 1)))
         S <- project(S_raw, eps = eps)
         # A update
@@ -339,15 +335,6 @@ archetypes_nnls <- function(x,
                 warning(sprintf(fmt, max_no_update), call. = FALSE)
                 break
             }
-        }
-
-        # Check if A is ill-conditioned and if we should switch to SVD for S update
-        if (check_kappa) {
-            k_A <- loss[["k_A"]][j]
-            # TODO: exact kappa already computes the SVD? maybe we should resuse it.
-            if (is.na(k_A))
-                loss[["k_A"]][j] <- k_A <- kappa(A, exact = TRUE)
-            use_svd_for_S <- k_A > nnls_svd_kappa_threshold
         }
 
         # Check convergence
