@@ -28,8 +28,10 @@
 #' @param border Border color for the stacked bar segments.
 #' @param ... Additional graphical parameters passed to [graphics::barplot()].
 #'
-#' @return Invisibly returns a list containing the plotted compositions,
-#'   row/column orders, clustering objects, colors, and plot arguments.
+#' @return Invisibly returns a data frame in long format with one row per
+#'   sample/archetype pair. Columns are `sample` (factor ordered by the applied
+#'   clustering), `archetype` (factor ordered by the applied clustering), and
+#'   `weight` (numeric).
 #'
 #' @export
 plot_archetypes_compositions <- function(compositions,
@@ -113,15 +115,15 @@ plot_archetypes_compositions <- function(compositions,
         }
     }
 
-    invisible(list(
-        compositions = S_plot,
-        row_order = row_order,
-        col_order = col_order,
-        row_hclust = row_hclust,
-        col_hclust = col_hclust,
-        col = col,
-        barplot_args = barplot_args
-    ))
+    out <- data.frame(
+        sample    = rep(rownames(S_plot), times = ncol(S_plot)),
+        archetype = rep(colnames(S_plot), each  = nrow(S_plot)),
+        weight    = as.vector(S_plot),
+        stringsAsFactors = FALSE
+    )
+    out[["sample"]]    <- factor(out[["sample"]],    levels = rownames(S_plot))
+    out[["archetype"]] <- factor(out[["archetype"]], levels = colnames(S_plot))
+    invisible(out)
 }
 
 #' Loss Plot For Archetypes
@@ -130,8 +132,8 @@ plot_archetypes_compositions <- function(compositions,
 #' @param plot Logical. Should the plot be drawn?
 #' @param ... Additional graphical parameters passed to [graphics::plot()].
 #'
-#' @return Invisibly returns a list with iteration indices, loss values, and
-#'   plot arguments.
+#' @return Invisibly returns a data frame with columns `iteration` (integer,
+#'   0-based) and `loss` (numeric).
 #'
 #' @export
 plot_archetypes_loss <- function(loss, plot = TRUE, ...) {
@@ -148,7 +150,7 @@ plot_archetypes_loss <- function(loss, plot = TRUE, ...) {
     ) %|p|% list(...)
     if (isTRUE(plot))
         do.call(graphics::plot, plot_args)
-    invisible(list(iteration = iterations, loss = values, plot_args = plot_args))
+    invisible(data.frame(iteration = iterations, loss = values))
 }
 
 #' Profile Plot For Archetypes
@@ -160,7 +162,9 @@ plot_archetypes_loss <- function(loss, plot = TRUE, ...) {
 #' @param ... Additional graphical parameters passed to [graphics::barplot()]
 #'   for matrix coordinates, or [graphics::plot()] for `fd` coordinates.
 #'
-#' @return Invisibly returns a list with profile data and plot arguments.
+#' @return Invisibly returns a data frame in long format with columns
+#'   `archetype`, `feature`, and `value`. Returns `NULL` invisibly for `fd`
+#'   coordinates.
 #'
 #' @export
 plot_archetypes_profiles <- function(coordinates,
@@ -172,12 +176,7 @@ plot_archetypes_profiles <- function(coordinates,
         plot_args <- list(...)
         if (isTRUE(plot))
             do.call(graphics::plot, c(list(x = coordinates), plot_args))
-        return(invisible(list(
-            coordinates = coordinates,
-            family = family,
-            archetype_names = archetype_names,
-            plot_args = plot_args
-        )))
+        return(invisible(NULL))
     }
 
     A <- as.matrix(coordinates)
@@ -209,12 +208,15 @@ plot_archetypes_profiles <- function(coordinates,
 
     if (isTRUE(plot))
         do.call(graphics::barplot, barplot_args)
-    invisible(list(
-        coordinates = A,
-        family = family,
-        archetype_names = archetype_names,
-        barplot_args = barplot_args
-    ))
+    arch_names <- archetype_names %||% rownames(A) %||% seq_len(nrow(A))
+    feat_names <- colnames(A) %||% seq_len(ncol(A))
+    out <- data.frame(
+        archetype = rep(arch_names, times = ncol(A)),
+        feature   = rep(feat_names, each  = nrow(A)),
+        value     = as.vector(A),
+        stringsAsFactors = FALSE
+    )
+    invisible(out)
 }
 
 #' Coordinate Plot For Archetypes
@@ -238,8 +240,9 @@ plot_archetypes_profiles <- function(coordinates,
 #'   window arguments such as `main`, `xlab`, `ylab`, `xlim`, `ylim`, and `asp`
 #'   are also honored when drawing the plot.
 #'
-#' @return Invisibly returns a list containing plotted coordinates, optional
-#'   plotted data, projection metadata, labels, and graphical argument sets.
+#' @return Invisibly returns a data frame in long format with one row per
+#'   point. Columns are the coordinate dimensions, `name` (character label),
+#'   and `archetype` (logical). Data rows come first, archetype rows last.
 #'
 #' @export
 plot_archetypes_coordinates <- function(coordinates,
@@ -325,17 +328,23 @@ plot_archetypes_coordinates <- function(coordinates,
         }
     }
 
-    invisible(list(
-        coordinates = A,
-        data = X,
-        projection = projection,
-        pca = pc,
-        archetype_names = archetype_names,
-        show_anames = show_anames,
-        args.coordinates = archetype_args,
-        args.data.scatter = data_args,
-        plot_args = canvas_args
-    ))
+    df_arch <- data.frame(
+        name = archetype_names %||% rownames(A) %||% seq_len(nrow(A)),
+        archetype = TRUE,
+        stringsAsFactors = FALSE
+    )
+    df_arch <- cbind(as.data.frame(A), df_arch)
+
+    if (is.null(X))
+        return(invisible(df_arch))
+
+    df_X <- data.frame(
+        name = rownames(X) %||% seq_len(nrow(X)),
+        archetype = FALSE,
+        stringsAsFactors = FALSE
+    )
+    df_X <- cbind(as.data.frame(X), df_X)
+    invisible(rbind(df_X, df_arch))
 }
 
 .aa_composition_dist <- function(data, distance) {

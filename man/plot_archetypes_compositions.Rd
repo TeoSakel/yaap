@@ -54,8 +54,10 @@ qualitative HCL palette.}
 \item{...}{Additional graphical parameters passed to \code{\link[graphics:barplot]{graphics::barplot()}}.}
 }
 \value{
-Invisibly returns a list containing the plotted compositions,
-row/column orders, clustering objects, colors, and plot arguments.
+Invisibly returns a data frame in long format with one row per
+sample/archetype pair. Columns are \code{sample} (factor ordered by the applied
+clustering), \code{archetype} (factor ordered by the applied clustering), and
+\code{weight} (numeric).
 }
 \description{
 Draws a horizontal stacked barplot for a matrix-like set of composition
