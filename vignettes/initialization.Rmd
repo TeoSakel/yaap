@@ -22,11 +22,11 @@ knitr::opts_chunk$set(
 )
 set.seed(42)
 par(bty = "n")
-library(YAAAP)
+library(yaap)
 ```
 
 > This vignette assumes familiarity with the basic AA workflow covered in the
-  **Introduction to Archetypal Analysis with YAAAP** vignette.
+  **Introduction to Archetypal Analysis with yaap** vignette.
 
 ## Quick Start
 
@@ -39,9 +39,9 @@ starts and runtime is less important, use `"aa_pp"` because each added point is
 chosen against the current AA reconstruction error.
 
 ```{r quick-recommendation, eval = FALSE}
-library(YAAAP)
+library(yaap)
 
-toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 
 fit <- run_aa(toy, K = 3, nrep = 5,  init = "furthest_sum")
 fit <- run_aa(toy, K = 3, nrep = 5,  init = "kmeans_pp")
@@ -61,7 +61,7 @@ both $S$ and $A$, and gradient descent can terminate at a **local minimum**. As
 a result, the quality of the final solution depends substantially on the starting
 point.
 
-YAAAP implements several options for initializing the archetype coordinates,
+yaap implements several options for initializing the archetype coordinates,
 which have been suggested in the literature, through the `aa_init()` function
 and the `init` argument.
 
@@ -98,7 +98,7 @@ named list with two elements:
   convex combination of data points ($A = B X$).
 
 ```{r aa-init-basic}
-toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 X <- as.matrix(toy) # 250 × 2
 K <- 3
 

@@ -1,12 +1,12 @@
 ---
-title: "Introduction to Archetypal Analysis with YAAAP"
+title: "Introduction to Archetypal Analysis with yaap"
 bibliography: ../references.bib
 output:
   rmarkdown::html_vignette:
     toc: true
     toc_depth: 3
 vignette: >
-  %\VignetteIndexEntry{Introduction to Archetypal Analysis with YAAAP}
+  %\VignetteIndexEntry{Introduction to Archetypal Analysis with yaap}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -70,9 +70,9 @@ archetype 1, while $(1/3,1/3,1/3)$ means it sits equally between all three.
 
 ---
 
-## The YAAAP package
+## The yaap package
 
-**YAAAP** (Yet Another Archetypal Analysis Package) provides fast, flexible AA
+**yaap** (Yet Another Archetypes Package) provides fast, flexible AA
 for R. This vignette covers the essentials:
 
 1. Fitting a model with `run_aa()`, from both a matrix and a formula.
@@ -84,7 +84,8 @@ for R. This vignette covers the essentials:
 7. Robust fitting and missing data.
 
 ```{r library}
-library(YAAAP)
+library(yaap)
+library(generics)
 ```
 
 ## A first example: the toy dataset
@@ -94,7 +95,7 @@ The package ships a small two-dimensional `toy` dataset (originally from the
 250 points scattered around three vertices of a triangle.
 
 ```{r load-toy}
-toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 head(toy, 3)
 dim(toy)
 ```
@@ -160,6 +161,50 @@ The `$loss` data frame records four diagnostics at each logged iteration:
 Note that `loss` values may differ from the RSS computed directly above because
 the working objective operates on internally scaled data. See <a href="#algorithm-details">*Algorithm details*</a>
 for a full discussion.
+
+### Integration with `broom`
+
+yaap also supports broom-style methods for fitted `archetypes` objects.
+These methods return ordinary tibbles, which makes them convenient for
+downstream inspection, plotting, and reporting.
+
+`tidy()` returns model matrices in long form. By default it returns the
+archetype coordinates: one row per archetype-feature pair, with columns
+`archetype`, `term`, and `value`.
+
+```{r broom-tidy-coordinates}
+head(tidy(fit))
+```
+
+The same verb can return other fitted matrices. For example,
+`matrix = "compositions"` returns one row per sample-archetype pair; `value`
+is the fitted weight of that archetype in that sample. `matrix = "coefficients"`
+similarly returns the weights that express each archetype as a mixture of
+training samples.
+
+```{r broom-tidy-compositions}
+head(tidy(fit, matrix = "compositions"))
+```
+
+`glance()` returns one row of model-level diagnostics, including the
+number of archetypes, convergence status, final loss, final $R^2$, number of
+iterations, adapted AIC, and model family.
+
+```{r broom-glance}
+glance(fit)
+```
+
+`augment()` returns the original data with one dot-prefixed composition
+column per archetype. The `.A1`, `.A2`, and `.A3` columns are the fitted
+barycentric weights for each sample, so they sum to one row by row.
+
+```{r broom-augment}
+aug <- augment(fit, data = toy)
+head(aug)
+
+comp_cols <- paste0(".", anames(fit))
+range(rowSums(as.matrix(aug[, comp_cols])))  # all should be 1
+```
 
 ### Visualising the fit
 
@@ -441,7 +486,7 @@ avoid annoying warning messages by stopping the optimization earlier.
 
 ---
 
-## Variants of Canonical AA and their implementation in YAAAP
+## Variants of Canonical AA and their implementation in yaap
 
 ### Relaxing the convex hull constraint with `delta`
 
@@ -514,8 +559,8 @@ their interpretability as extreme prototypes.
 ### Robust fitting
 
 Standard AA minimises squared residuals, making it sensitive to outliers.
-Setting `robust = TRUE` applies **Tukey bisquare** row reweighting^[similar to
-M-estimators in `MASS::rlm`]: observations with large residuals receive reduced
+Setting `robust = TRUE` applies **Tukey bisquare** row reweighting: observations
+with large residuals receive reduced
 influence at each iteration, so outliers cannot monopolise an archetype.
 
 Below we augment the `iris` dataset with five outliers and compare the results
@@ -673,7 +718,7 @@ Note that for a single archetype object `plot(fit_miss, what = "coordinates")`
 will produce the same plot as above but without the complete-data archetypes for
 comparison that is why we reconstructed the plot manually here.
 
-This vignette covers only the Euclidean setting. YAAAP also supports AA on
+This vignette covers only the Euclidean setting. yaap also supports AA on
 **directional** and **compositional** data; these variants are demonstrated in
 the *Non-Euclidean Geometries* vignette.
 
@@ -686,7 +731,7 @@ the *Non-Euclidean Geometries* vignette.
 The CRAN package
 [`archetypes`](https://cran.r-project.org/package=archetypes) implements AA
 via **alternating NNLS** (non-negative least squares): at each step a
-constrained NNLS subproblem is solved via `nnls::nnls()`.  YAAAP's
+constrained NNLS subproblem is solved via `nnls::nnls()`.  yaap's
 `method = "nnls"` implements this alternating NNLS approach.
 
 The default `method = "pgd"` uses **projected gradient descent** instead.
@@ -860,7 +905,7 @@ implements some of them. The most common strategies are:
 
 - **Delta relaxation**: If the genuine extremes of the underlying data-generating
   process are not observed, standard AA will be unable to recover them. To
-  accommodate this situation, the 
+  accommodate this situation, the
   <a href="#relaxing-the-convex-hull-constraint-with-delta">`delta` relaxation</a>
   allows archetypes to step outside the data hull and better capture true extremes
   when the data is truncated.
