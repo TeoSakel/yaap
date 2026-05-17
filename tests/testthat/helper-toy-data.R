@@ -1,5 +1,5 @@
 toy_path <- function() {
-    path <- system.file("extdata", "toy.csv", package = "YAAAP")
+    path <- system.file("extdata", "toy.csv", package = "yaap")
     if (!nzchar(path))
         path <- file.path("..", "..", "inst", "extdata", "toy.csv")
     path

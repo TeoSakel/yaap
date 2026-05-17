@@ -35,7 +35,7 @@
 #' Tidy output: [tidy.archetypes()], [glance.archetypes()], [augment.archetypes()].
 #'
 #' @examples
-#' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+#' toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 #' run_aa(as.matrix(toy), K = 3)
 #' run_aa(as.matrix(toy), K = 3, method = "nnls")
 #' run_aa(Species ~ ., data = iris, K = 3)
@@ -135,7 +135,7 @@ run_aa.formula <- function(formula,
 #'   Any initializer can receive `batch_size`, `batch_type`, and
 #'   `batch_replace` through `init_args`; `batch_type = "distal"` implements
 #'   coreset-style candidate sampling (Mair & Brefeld 2019).
-#'   See `vignette("initialization", package = "YAAAP")` for a comparison.
+#'   See `vignette("initialization", package = "yaap")` for a comparison.
 #' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional numeric vector of sample weights (default: `NULL`).
 #'   Internally scaled to mean 1 and square-rooted before use.

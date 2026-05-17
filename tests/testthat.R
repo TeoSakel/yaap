@@ -1,4 +1,4 @@
 library(testthat)
-library(YAAAP)
+library(yaap)
 
-test_check("YAAAP")
+test_check("yaap")

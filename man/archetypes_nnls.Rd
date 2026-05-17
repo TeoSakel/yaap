@@ -93,7 +93,7 @@ numerically unstable.
 }
 }
 \examples{
-toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 archetypes_nnls(as.matrix(toy), K = 3)
 
 }

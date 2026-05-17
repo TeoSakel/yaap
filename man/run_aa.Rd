@@ -85,7 +85,7 @@ Dirichlet distribution. Default for \code{"directional"}.}
 Any initializer can receive \code{batch_size}, \code{batch_type}, and
 \code{batch_replace} through \code{init_args}; \code{batch_type = "distal"} implements
 coreset-style candidate sampling (Mair & Brefeld 2019).
-See \code{vignette("initialization", package = "YAAAP")} for a comparison.}
+See \code{vignette("initialization", package = "yaap")} for a comparison.}
 
 \item{init_args}{list of additional arguments for the initialization function.}
 
@@ -149,7 +149,7 @@ matrix from \code{fda::eval.penalty(data$basis, Lfdobj = 0)}, so
 them to an \code{fda::fd} object on demand.
 }
 \examples{
-toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 run_aa(as.matrix(toy), K = 3)
 run_aa(as.matrix(toy), K = 3, method = "nnls")
 run_aa(Species ~ ., data = iris, K = 3)

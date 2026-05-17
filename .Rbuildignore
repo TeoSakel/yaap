@@ -9,6 +9,7 @@
 ^vignettes/\.Rhistory$
 ^\.git$
 ^\.vscode$
+^dev$
 ^\.\.Rcheck$
 ^vignettes/.*\.html$
 ^vignettes/.*_cache$

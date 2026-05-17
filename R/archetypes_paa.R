@@ -50,7 +50,7 @@
 #' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'
 #' @examples
-#' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+#' toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 #' archetypes_paa(as.matrix(toy), K = 3)
 #'
 #' @references
@@ -263,7 +263,7 @@ archetypes_paa <- function(x,
                             max_iter_optimizer,
                             step_shrinkage,
                             max_no_update) {
-    # Nomenclature follows Seth and Eugster (2014), transposed to YAAAP's
+    # Nomenclature follows Seth and Eugster (2014), transposed to yaap's
     # row-oriented convention:
     #   X: observed data, rows are observations x_n.
     #   P: paper Θ^T, the fixed MLE parameter profiles derived from X.

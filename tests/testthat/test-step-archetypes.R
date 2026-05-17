@@ -152,7 +152,7 @@ test_that("required_pkgs.step_archetypes returns correct packages", {
     step_archetypes(all_numeric(), num_comp = 3L)
 
   out <- recipes::required_pkgs(rec$steps[[1L]])
-  expect_setequal(out, c("YAAAP", "withr"))
+  expect_setequal(out, c("yaap", "withr"))
 })
 
 test_that("print.step_archetypes does not error", {

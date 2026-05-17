@@ -69,7 +69,7 @@
 #'   \code{sparseMatrix} inputs, structural zeros are treated as missing.  The
 #'   default is `any(is.na(x))`, so missing-data mode is activated automatically
 #'   when the input contains `NA`s.  For kernel and probabilistic variants of AA
-#'   see \code{vignette("non-gaussian-aa", package = "YAAAP")}.
+#'   see \code{vignette("non-gaussian-aa", package = "yaap")}.
 #'
 #' ## Algorithm mechanics and tuning
 #'
@@ -110,14 +110,14 @@
 #' leaves columns on their original scale, a positive numeric vector divides
 #' each column by the supplied factor, and a symmetric positive-definite matrix
 #' defines a full quadratic feature metric — see
-#' \code{vignette("non-gaussian-aa", package = "YAAAP")} for the metric-AA use
+#' \code{vignette("non-gaussian-aa", package = "yaap")} for the metric-AA use
 #' case.  Sample-level `weights` re-weight rows in the loss but do not affect
 #' the preprocessing step.
 #'
 #' @returns An object of class \code{archetypes}
 #'
 #' @examples
-#' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+#' toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 #' archetypes_pgd(as.matrix(toy), K = 3)
 #'
 #' @references

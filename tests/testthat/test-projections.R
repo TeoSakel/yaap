@@ -53,7 +53,7 @@ test_that("fit_simplex QP path errors when quadprog is unavailable", {
         .aa_require_namespace = function(pkg, feature) {
             stop("mocked missing quadprog", call. = FALSE)
         },
-        .package = "YAAAP"
+        .package = "yaap"
     )
 
     expect_error(
@@ -78,7 +78,7 @@ test_that("matrix initialization reports missing quadprog clearly", {
         .aa_require_namespace = function(pkg, feature) {
             stop(sprintf("missing %s for %s", pkg, feature), call. = FALSE)
         },
-        .package = "YAAAP"
+        .package = "yaap"
     )
 
     expect_error(

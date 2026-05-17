@@ -106,7 +106,7 @@ test_that("augment.archetypes accepts explicit new data", {
 
 test_that("tidy/glance/augment dispatch without attaching broom", {
     # generics package re-exports the S3 generics; dispatch must work with
-    # only YAAAP loaded (broom is in Suggests only)
+    # only yaap loaded (broom is in Suggests only)
     set.seed(1)
     X <- toy_matrix()
     fit <- suppressWarnings(run_aa(X, K = 2L, max_iter = 5L))

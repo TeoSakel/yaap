@@ -1,5 +1,5 @@
-Package: YAAAP
-Title: Yet Another Archetypal Analysis Package
+Package: yaap
+Title: Yet Another Archetypes Package
 Version: 0.0.0.9000
 Authors@R: person(given = "Teo", family = "Sakel", email = "teo@intelligentbiodata.com", role = c("aut", "cre"))
 Author: Teo Sakel [aut, cre]
@@ -11,25 +11,23 @@ Roxygen: list(markdown = TRUE)
 Imports:
     generics (>= 0.1.3),
     graphics,
-    MASS,
     methods,
     Matrix,
     matrixStats,
     nnls,
-    quadprog,
     rlang (>= 1.0.0),
     stats,
     tibble (>= 3.0.0),
     utils,
     vctrs
 Suggests:
-    archetypes,
     bench,
     compositions,
     fda,
     geometry,
     irlba,
     knitr,
+    quadprog,
     recipes (>= 1.0.0),
     rmarkdown,
     RSpectra,

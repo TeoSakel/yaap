@@ -122,7 +122,7 @@ that define it.  For dense matrices, \code{NA} marks missing entries; for sparse
 \code{sparseMatrix} inputs, structural zeros are treated as missing.  The
 default is \code{any(is.na(x))}, so missing-data mode is activated automatically
 when the input contains \code{NA}s.  For kernel and probabilistic variants of AA
-see \code{vignette("non-gaussian-aa", package = "YAAAP")}.
+see \code{vignette("non-gaussian-aa", package = "yaap")}.
 }
 }
 
@@ -166,13 +166,13 @@ feature metric: \code{TRUE} (default) applies column-wise z-scoring, \code{FALSE
 leaves columns on their original scale, a positive numeric vector divides
 each column by the supplied factor, and a symmetric positive-definite matrix
 defines a full quadratic feature metric — see
-\code{vignette("non-gaussian-aa", package = "YAAAP")} for the metric-AA use
+\code{vignette("non-gaussian-aa", package = "yaap")} for the metric-AA use
 case.  Sample-level \code{weights} re-weight rows in the loss but do not affect
 the preprocessing step.
 }
 }
 \examples{
-toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 archetypes_pgd(as.matrix(toy), K = 3)
 
 }

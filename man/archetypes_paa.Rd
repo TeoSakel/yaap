@@ -88,7 +88,7 @@ weights, and metric scaling.
 }
 }
 \examples{
-toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 archetypes_paa(as.matrix(toy), K = 3)
 
 }

@@ -1,5 +1,5 @@
 test_that("dependency metadata keeps optional solvers optional", {
-    desc_path <- system.file("DESCRIPTION", package = "YAAAP")
+    desc_path <- system.file("DESCRIPTION", package = "yaap")
     if (!nzchar(desc_path))
         desc_path <- testthat::test_path("..", "..", "DESCRIPTION")
     desc <- read.dcf(desc_path)[1L, ]
@@ -14,7 +14,7 @@ test_that("dependency metadata keeps optional solvers optional", {
 })
 
 test_that("internal pseudoinverse handles singular matrices without MASS", {
-    ginv <- get(".aa_ginv", asNamespace("YAAAP"))
+    ginv <- get(".aa_ginv", asNamespace("yaap"))
     S <- matrix(c(1, 2, 2, 4), nrow = 2L)
     G <- ginv(S)
 
@@ -23,7 +23,7 @@ test_that("internal pseudoinverse handles singular matrices without MASS", {
 })
 
 test_that("row weight validation returns NULL for trivial weights", {
-    check_row_weights <- get(".aa_check_row_weights", asNamespace("YAAAP"))
+    check_row_weights <- get(".aa_check_row_weights", asNamespace("yaap"))
 
     expect_null(check_row_weights(NULL, 3L))
     expect_null(check_row_weights(c(1, 1, 1), 3L))
@@ -31,8 +31,8 @@ test_that("row weight validation returns NULL for trivial weights", {
 })
 
 test_that("effic uses a pseudo-inverse when cov(X) is singular", {
-    effic <- get("effic", asNamespace("YAAAP"))
-    ginv <- get(".aa_ginv", asNamespace("YAAAP"))
+    effic <- get("effic", asNamespace("yaap"))
+    ginv <- get(".aa_ginv", asNamespace("yaap"))
     X <- matrix(seq_len(12), nrow = 3L)
     Y <- X / 2
 
@@ -45,7 +45,7 @@ test_that("effic uses a pseudo-inverse when cov(X) is singular", {
 })
 
 test_that("effic keeps Cholesky path for positive definite covariance", {
-    effic <- get("effic", asNamespace("YAAAP"))
+    effic <- get("effic", asNamespace("yaap"))
     X <- as.matrix(iris[1:50, 1:4])
     Y <- X / 2
 

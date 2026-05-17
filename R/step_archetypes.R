@@ -24,7 +24,7 @@
 #'   `S %*% Z` (compositions times archetype coordinates).
 #' @param keep_original_cols Should the original predictor columns be retained
 #'   after baking? Default `FALSE`.
-#' @param res The fitted [archetypes][YAAAP::archetypes_pgd] object. `NULL`
+#' @param res The fitted [archetypes][yaap::archetypes_pgd] object. `NULL`
 #'   before `prep()`, set automatically by `prep()`.
 #' @param col_names Character vector of selected column names. Set by `prep()`.
 #' @param seed Integer seed for reproducible fitting. Evaluated once at
@@ -217,5 +217,5 @@ tunable.step_archetypes <- function(x, ...) {
 
 #' @exportS3Method recipes::required_pkgs
 required_pkgs.step_archetypes <- function(x, ...) {
-    c("YAAAP", "withr")
+    c("yaap", "withr")
 }

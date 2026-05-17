@@ -88,7 +88,7 @@
 #' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'
 #' @examples
-#' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+#' toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
 #' archetypes_kernel_pgd(as.matrix(toy), K = 3)
 #'
 #' @references

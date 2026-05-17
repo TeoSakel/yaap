@@ -1,7 +1,7 @@
 test_that("toy data benchmarks do not regress", {
     skip_if_not(
-        identical(Sys.getenv("YAAAP_BENCHMARKS"), "true"),
-        "toy benchmarks are opt-in; set YAAAP_BENCHMARKS=true to run"
+        identical(Sys.getenv("YAAP_BENCHMARKS"), "true"),
+        "toy benchmarks are opt-in; set YAAP_BENCHMARKS=true to run"
     )
     skip_if_not_installed("bench")
 

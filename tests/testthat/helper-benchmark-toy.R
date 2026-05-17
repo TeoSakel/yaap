@@ -124,7 +124,7 @@ format_toy_benchmark_failures <- function(comparison,
 write_toy_benchmark_baseline <- function(path = toy_benchmark_baseline_path(),
                                          iterations = toy_benchmark_iterations()) {
     baseline <- run_toy_benchmarks(iterations = iterations)
-    baseline[["package_version"]] <- as.character(utils::packageVersion("YAAAP"))
+    baseline[["package_version"]] <- as.character(utils::packageVersion("yaap"))
     baseline[["updated_at"]] <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
 
     dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
