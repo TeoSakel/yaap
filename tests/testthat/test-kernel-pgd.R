@@ -106,6 +106,49 @@ test_that("kernel PGD passes refinement_steps to furthest_sum initialization", {
     expect_row_stochastic(fit[["init"]])
 })
 
+test_that("kernel PGD supports dirichlet initialization", {
+    set.seed(4)
+    X <- toy_matrix()[1:20, , drop = FALSE]
+
+    fit <- suppressWarnings(archetypes_kernel_pgd(
+        x = X,
+        K = 3L,
+        kernel = "rbf",
+        kernel_args = list(sigma = 0.5),
+        init = "dirichlet",
+        init_args = list(alpha = 0.5, batch_size = 6L),
+        max_iter = 1L,
+        tol_r2 = 1
+    ))
+
+    expect_s3_class(fit, "kernel_archetypes")
+    expect_matrix_dim(fit[["init"]], 3L, nrow(X))
+    expect_row_stochastic(fit[["init"]])
+    expect_length(which(colSums(fit[["init"]]) > 0), 6L)
+})
+
+test_that("kernel PGD accepts batching for row-index initializers", {
+    X <- rbind(
+        matrix(0, nrow = 8L, ncol = 2L),
+        c(10, 0),
+        c(-5, 8.660254),
+        c(-5, -8.660254)
+    )
+
+    set.seed(5)
+    fit <- suppressWarnings(archetypes_kernel_pgd(
+        x = X,
+        K = 3L,
+        kernel = "linear",
+        init = "random",
+        init_args = list(batch_size = 3L),
+        max_iter = 1L,
+        tol_r2 = 1
+    ))
+
+    expect_equal(sort(which(colSums(fit[["init"]]) > 0)), 9:11)
+})
+
 test_that("run_aa dispatches to kernel PGD", {
     X <- toy_matrix()[1:20, , drop = FALSE]
 

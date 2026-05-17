@@ -9,8 +9,9 @@ aa_init(
   K,
   method = "furthest_sum",
   sparse = inherits(X, "sparseMatrix"),
-  m = NULL,
   batch_size = NULL,
+  batch_type = c("distal", "uniform"),
+  batch_replace = FALSE,
   hull_method = c("full", "projected", "partitioned"),
   projected_dim = 2L,
   n_partitions = 10L,
@@ -25,14 +26,16 @@ aa_init(
 \item{K}{number of archetypes to be initialized}
 
 \item{method}{initialization method. One of \code{"random"}, \code{"dirichlet"},
-\code{"furthest_first"}, \code{"kmeans_pp"}, \code{"furthest_sum"}, \code{"coreset_initfn"},
-\code{"aa_pp"}, \code{"aa_pp_mc"}, or \code{"hull_outmost"} (default: \code{"furthest_sum"}).}
+\code{"furthest_first"}, \code{"kmeans_pp"}, \code{"furthest_sum"}, \code{"aa_pp"}, or
+\code{"hull_outmost"} (default: \code{"furthest_sum"}).}
 
 \item{sparse}{whether \code{B} should be a sparse matrix (default: same as X)}
 
-\item{m}{optional batch size for coreset initialization}
+\item{batch_size}{optional number of candidate rows to sample.}
 
-\item{batch_size}{optional batch size for MCMC approximation of the AA++ initialization}
+\item{batch_type}{candidate sampling strategy, \code{"distal"} or \code{"uniform"}.}
+
+\item{batch_replace}{whether to sample candidate batches with replacement.}
 
 \item{hull_method}{strategy used by \code{"hull_outmost"}. One of \code{"full"},
 \code{"projected"}, or \code{"partitioned"} (default: \code{"full"}).}
@@ -83,21 +86,27 @@ of greedily picking the furthest point every time.
 \item \code{"furthest_sum"}: selects the first archetype randomly and then greedily
 selects the next archetypes that maximizes the sum of distances of all
 points from the current set of archetypes (see Mørup & Hansen 2012).
-\item \code{"coreset_initfn"}: initializes archetypes using a coreset of size \code{m} sampled
-from the data matrix \code{X} and then applies \code{furthest_sum} on the coreset
-(see Mair & Brefeld 2019).
 \item \code{"aa_pp"}: AA++ is a probabilistic initialization method similar to \verb{kmeans++}
 but instead using the distances to the current set of archetypes it uses
 distances to their convex hull (see Mair & Sjölund 2023).
-\item \code{"aa_pp_mc"}: MCMC approximation of AA++ initialization. Each archetype is
-sampled by performing AA++ on a sub-sample of size \code{batch_size} from the
-data matrix \code{X} (see Mair & Sjölund 2023).
 \item \code{"hull_outmost"}: computes hull candidates using one of the
 \code{hull_method} strategies (\code{"full"}, \code{"projected"}, or \code{"partitioned"})
 and then selects \code{K} archetypes via an outmost-vote ranking. This family of
 hull-based initializations is adapted from the \pkg{archetypal} package
 (Mouselimis et al., 2025).
 }
+
+Supplying \code{batch_size} applies the selected method to a candidate batch
+rather than to all rows. For all methods except \code{"aa_pp"}, one batch is
+sampled up front. For \code{"aa_pp"}, a fresh batch is sampled at each
+approximation step; this is a variant of the Monte Carlo AA++ approximation
+rather than the exact \code{"aa_pp_mc"} scheme. \code{batch_replace = FALSE} by default.
+
+The default \code{batch_type = "distal"} is the coreset sampling strategy of
+Mair & Brefeld (2019): rows farther from the data center are more likely to
+be candidates, which saves memory and time while focusing on the boundary
+where archetypes are expected to lie. Use \code{batch_type = "uniform"} for an
+unbiased candidate batch.
 }
 \references{
 Mørup, M., & Hansen, L. K. (2012).

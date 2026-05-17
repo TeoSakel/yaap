@@ -22,14 +22,34 @@ knitr::opts_chunk$set(
 )
 set.seed(42)
 par(bty = "n")
-viridis_pal <- c("#440154", "#452B79", "#3A518A", "#2C718E", "#218F8B", "#28AD7F", "#5DC861", "#AADA31", "#FDE725")
 library(YAAAP)
 ```
 
-## Background
-
 > This vignette assumes familiarity with the basic AA workflow covered in the
   **Introduction to Archetypal Analysis with YAAAP** vignette.
+
+## Quick Start
+
+For a first Euclidean AA fit, start with `"furthest_sum"` or `"kmeans_pp"`.
+`"furthest_sum"` is a strong boundary-seeking default for convex data, while
+`"kmeans_pp"` is a softer alternative when you want some randomness without
+falling back to uniform sampling. If the geometry is unknown and you can afford
+several starts, use `"random"` with a larger `nrep`. If you only have a few
+starts and runtime is less important, use `"aa_pp"` because each added point is
+chosen against the current AA reconstruction error.
+
+```{r quick-recommendation, eval = FALSE}
+library(YAAAP)
+
+toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
+
+fit <- run_aa(toy, K = 3, nrep = 5,  init = "furthest_sum")
+fit <- run_aa(toy, K = 3, nrep = 5,  init = "kmeans_pp")
+fit <- run_aa(toy, K = 3, nrep = 20, init = "random")
+fit <- run_aa(toy, K = 3, nrep = 3,  init = "aa_pp")
+```
+
+## Background
 
 Archetypal analysis (AA) minimizes a reconstruction loss, written in the
 standard Euclidean formulation as
@@ -47,20 +67,26 @@ and the `init` argument.
 
 ## Methods at a Glance
 
-The table below summarizes the eight methods by their strategy, whether they
-involve random sampling, and any mandatory extra arguments.
+The table below summarizes the seven methods by their strategy, whether they
+involve random sampling, their relative speed, and any mandatory extra arguments.
 
-| Method                 | Strategy                                                                           | Stochastic?      | Mandatory extras |
-| ---------------------- | ---------------------------------------------------------------------------------- | ---------------- | :--------------: |
-| `"random"`             | Sample $K$ rows uniformly at random                                                | Yes              | —                |
-| `"dirichlet"`          | Draw archetypes as Dirichlet($\alpha$,...,$\alpha$) convex combinations            | Yes              | —                |
-| `"kmeans_pp"`          | Sample proportional to squared distance to the nearest current archetype           | Yes              | —                |
-| `"aa_pp"`              | Sample proportional to squared residual from the convex hull of current archetypes | Yes              | —                |
-| `"aa_pp_mc"`           | MCMC approximation of AA++ using a Metropolis-Hastings batch                       | Yes              | `batch_size`     |
-| `"furthest_first"`     | Always add the single point furthest from all current archetypes                   | Seed only        | —                |
-| `"furthest_sum"`       | Maximize the *sum* of distances to all current archetypes; optional refinement     | Seed only        | —                |
-| `"coreset_initfn"`     | Distance-weighted coreset subsample, then `furthest_sum` on the coreset            | Yes              | `m`              |
-| `"hull_outmost"`       | Rank convex-hull candidates by outmost-vote frequency                              | Partitioned only | `hull_method`    |
+| Method                 | Strategy                                                                           | Stochastic?      | Speed  | Mandatory extras |
+| ---------------------- | ---------------------------------------------------------------------------------- | ---------------- | ------ | :--------------: |
+| `"random"`             | Sample $K$ rows uniformly at random                                                | Yes              | Fast   | —                |
+| `"dirichlet"`          | Construct each archetype as a random convex combination of rows                    | Yes              | Fast   | —                |
+| `"kmeans_pp"`          | Sample proportional to squared distance to the nearest current archetype           | Yes              | Medium | —                |
+| `"aa_pp"`              | Sample using residual reconstruction error from the current hull                   | Yes              | Slow   | —                |
+| `"furthest_first"`     | Select the point furthest from all current archetypes                              | Seed only        | Medium | —                |
+| `"furthest_sum"`       | Select the point that maximizes the *sum* of distances to all current archetypes   | Seed only        | Medium | —                |
+| `"hull_outmost"`       | Select frequently outlying convex-hull candidates                                  | Partitioned only | Medium | `hull_method`    |
+
+Large-data approximations are controlled orthogonally with `batch_size`,
+`batch_type`, and `batch_replace`. By default, `batch_type = "distal"` samples
+candidate rows with probability proportional to squared distance from the data
+center, preserving the coreset idea of focusing computation on likely boundary
+points [@Mair2019]. Use `batch_type = "uniform"` when you want an unbiased
+mini-batch approximation, for example with `method = "aa_pp"`.
+
 
 ## The `aa_init()` Function
 
@@ -74,9 +100,9 @@ named list with two elements:
 ```{r aa-init-basic}
 toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
 X <- as.matrix(toy) # 250 × 2
+K <- 3
 
-set.seed(42)
-init <- aa_init(X, K = 3)
+init <- aa_init(X, K = K, method = "furthest_sum")
 str(init)
 ```
 
@@ -89,37 +115,6 @@ the coordinates still admit a feasible `B`. Rows outside the allowed data hull
 are projected back into the hull with a warning.
 
 ```{r initialization-helpers, include = FALSE}
-K <- 3
-fit_tol <- 0.01
-lbl <- c(
-    random             = "Random",
-    dirichlet          = "Dirichlet",
-    kmeans_pp          = "k-means++",
-    aa_pp              = "AA++",
-    aa_pp_mc           = "AA++MC",
-    furthest_first     = "Furthest First",
-    furthest_sum       = "Furthest Sum",
-    coreset_initfn     = "Coreset",
-    hull_outmost       = "Hull-outmost"
-)
-
-method_args <- list(
-    random             = list(),
-    dirichlet          = list(),
-    kmeans_pp          = list(),
-    aa_pp              = list(),
-    aa_pp_mc           = list(batch_size = 60),
-    furthest_first     = list(),
-    furthest_sum       = list(),
-    coreset_initfn     = list(m = 60),
-    hull_outmost       = list(hull_method = "partitioned")
-)
-
-make_init <- function(X, K, method, seed, extra = method_args[[method]]) {
-    if (!missing(seed)) set.seed(seed)
-    do.call(aa_init, c(list(X = X, K = K, method = method), extra))
-}
-
 draw_simplex <- function(A, border, fill = NULL, lty = 1, lwd = 2,
                          pch = 17, cex = 1.1) {
     if (nrow(A) >= 3) {
@@ -134,8 +129,6 @@ draw_simplex <- function(A, border, fill = NULL, lty = 1, lwd = 2,
     points(A, pch = pch, cex = cex, col = border)
 }
 
-nearest_rows <- function(X, A) apply(.pdist2(X, A), 2, which.min)
-
 selection_deviation_score <- function(counts, K, n, pseudocount = 0.5) {
     total_counts <- sum(counts)
     N_runs <- total_counts / K
@@ -144,7 +137,7 @@ selection_deviation_score <- function(counts, K, n, pseudocount = 0.5) {
 
     log_fc <- log2((counts + pseudocount) / (expected + pseudocount))
     p_lower <- pbinom(counts, size = N_runs, prob = p_null)
-    p_upper <- pbinom(counts - 1L, size = N_runs, prob = p_null,
+    p_upper <- pbinom(counts - 1, size = N_runs, prob = p_null,
         lower.tail = FALSE
     )
     p_value <- pmin(1, 2 * pmin(p_lower, p_upper))
@@ -168,8 +161,7 @@ plot_selected_density <- function(X, counts, main, K, color_max = NULL,
         rep(0.5, length(signed_log_p))
     }
     point_cols <- pal(probs) / 255
-    colnames(point_cols) <- c("red", "green", "blue")
-    point_cols <- do.call(rgb, as.data.frame(point_cols))
+    point_cols <- rgb(point_cols[, 1], point_cols[, 2], point_cols[, 3])
     ix <- order(abs(signed_log_p))
     plot(
         X[ix, ],
@@ -190,16 +182,6 @@ plot_data_with_points <- function(X, A, main, col = "grey75", view = c(1, 2),
         col = point_col
     )
 }
-
-fit_from_method <- function(X, K, method, seed, nrep = 1, extra = method_args[[method]]) {
-    if (!missing(seed)) set.seed(seed)
-    run_aa(X,
-        K = K, init = method, init_args = extra, nrep = nrep,
-        scale = FALSE, max_iter = 60, tol = fit_tol
-    )
-}
-
-# Make artificial datasets
 
 make_concentric_circles <- function(n = 180, noise = 0.03) {
     n_inner <- n %/% 2
@@ -241,7 +223,7 @@ make_swiss_roll <- function(n = 180, noise = 0.025) {
 }
 ```
 
-## Supplying Your Own Initialization
+### Supplying Your Own Initialization
 
 The built-in method names cover the common cases, but `run_aa()` also accepts
 either a precomputed matrix of archetype coordinates or a custom initialization
@@ -249,28 +231,37 @@ function.
 
 If the starting coordinates are already available, pass them directly as a
 matrix in the same units as the `X`. `run_aa()` will preprocess it the same way
-it preprocesses `X`, handles the required checks and construct `B` construction.
+it preprocesses `X`, handles the required checks, and constructs `B`.
 
 ```{r precomputed-init-matrix}
-A0 <- X[seq_len(3), , drop = FALSE]
+X <- as.matrix(toy)
+K <- 3
+tol <- 0.01
+eps <- 0
 
-fit_matrix <- run_aa(X, K = 3, init = A0, scale = FALSE, tol = fit_tol)
+A0 <- X[1:K, , drop = FALSE]
+
+fit_matrix <- run_aa(X, K = K, init = A0, scale = FALSE, tol = tol, eps = eps)
 ```
 
 A custom function is useful when initialization itself needs code. The function
 must take `X` and `K`, and return the same two objects as `aa_init()`: the
 archetype coordinates `A` and the data weights `B`. Additional arguments can
-be passed through `init_args`. Below,is a deliberately simple initializer that
+be passed through `init_args`. Below is a deliberately simple initializer that
 chooses the first `K` rows of the data.
 
 ```{r custom-init-function}
+X <- as.matrix(toy)
+K <- 3
+tol <- 0.01
+
 first_k_init <- function(X, K, ...) {
     A <- X[1:K, , drop = FALSE]
     B <- diag(1, nrow = K, ncol = nrow(X))
     list(A = A, B = B)
 }
 
-fit_custom <- run_aa(X, K = 3, init = first_k_init, scale = FALSE, tol = fit_tol)
+fit_custom <- run_aa(X, K = K, init = first_k_init, scale = FALSE, tol = tol)
 ```
 
 If your custom initializer naturally produces only archetype coordinates,
@@ -279,8 +270,11 @@ feasible `B`. Reconstructing `A_init` as `B %*% X` ensures the coordinates passe
 to AA are on the data hull:
 
 ```{r custom-init-fit-simplex, eval = FALSE}
-A_user <- some_initializer(X, K = 3)
-B <- fit_simplex(X, A_user)
+X <- as.matrix(toy)
+K <- 3
+
+A_user <- some_initializer(X, K = K)
+B <- fit_simplex(A_user, X)
 A_init <- B %*% X
 init <- list(A = A_init, B = B)
 ```
@@ -290,52 +284,76 @@ analysis, a domain-specific rule, or an external clustering workflow. For most
 workflows, passing a method name remains the shortest form.
 
 ```{r run-aa-init-short, eval = FALSE}
-fit <- run_aa(X, K = 3, init = "furthest_sum", tol = 0.01)
-fit <- run_aa(X, K = 3, init = "aa_pp", tol = 0.01)
+X <- as.matrix(toy)
+K <- 3
+tol <- 0.01
+
+fit <- run_aa(X, K = K, init = "furthest_sum", tol = tol)
+fit <- run_aa(X, K = K, init = "aa_pp", tol = tol)
 fit <- run_aa(X,
-    K = 3, init = "aa_pp_mc",
-    init_args = list(batch_size = 200),
-    tol = 0.01
+    K = K, init = "aa_pp",
+    init_args = list(batch_size = 200, batch_type = "uniform"),
+    tol = tol
 )
 ```
 
 ## Comparing Initializer Biases
 
-The first practical difference between initializers is not whether they are
-"good" or "bad"; it is where they tend to look. The toy data below are simple:
-250 two-dimensional points spread near the vertices of a triangle. We run all
-built-in row-selecting initializers multiple times and count how many times
-each data point is selected as an archetype.
+```{r init-selection-density}
+X <- as.matrix(toy)
+K <- 3
 
-```{r init-selection-density, cache=TRUE}
-# Keep methods that select points
-density_methods <- setdiff(names(method_args), "dirichlet")
-N_expected <- 10  # Expected selections under random sampling
+method_labels <- c(
+    random         = "Random",
+    kmeans_pp      = "k-means++",
+    aa_pp          = "AA++",
+    furthest_first = "Furthest First",
+    furthest_sum   = "Furthest Sum",
+    hull_outmost   = "Hull-outmost"
+)
+N_expected <- 10  # Expected selections per point across all runs
 N_runs <- nrow(X) * N_expected
+# "significance" cutoff for coloring points red/blue
+color_cutoff <- -log10(1 / nrow(X))
 
-selected_counts <- lapply(density_methods, function(method) {
-    counts <- integer(nrow(X))
-    for (seed in seq_len(N_runs)) {
-        init_obj <- make_init(X, K = K, method = method, seed = 999 + seed)
+selected_counts <- list()
+for (method in names(method_labels)) {
+    counts <- rep(0, nrow(X))
+    for (run in 1:N_runs) {
+        if (method == "hull_outmost") {
+            init_obj <- aa_init(
+                X, K = K,
+                method = method,
+                hull_method = "partitioned"
+            )
+        } else {
+            init_obj <- aa_init(X, K = K, method = method)
+        }
         selected <- which(init_obj$B > 0, arr.ind = TRUE)[, 2]
         counts[selected] <- counts[selected] + 1
     }
-    counts
-})
-names(selected_counts) <- density_methods
+    selected_counts[[method]] <- counts
+}
 ```
 
-```{r init-selection-density-plot, fig.width = 9, fig.height = 6.5, out.width="100%", echo = FALSE}
-selection_color_max <- -log10(1 / nrow(X))
+The first practical difference between initializers is not whether they are
+"good" or "bad"; it is where they tend to look. The toy data below are simple:
+250 two-dimensional points spread near the vertices of a triangle. The figure
+below repeats each row-selecting initializer many times and colors each point by
+how often it was selected compared with uniform random sampling. Red points are
+selected more often than random, blue points are selected less often, and white
+points are close to the random baseline.
 
-op <- par(mfrow = c(2, 4), mar = c(2, 2, 3, 0.5), bty = "n")
-for (method in density_methods) {
+```{r init-selection-density-plot, fig.width = 8, fig.height = 7, out.width="100%", results='hold', echo=FALSE}
+
+op <- par(mfrow = c(2, 3), mar = c(2, 2, 3, 0.5), bty = "n")
+for (method in names(method_labels)) {
     plot_selected_density(
         X,
         selected_counts[[method]],
-        main = sprintf("%s\nselection deviation", lbl[method]),
+        main = method_labels[method],
         K = K,
-        color_max = selection_color_max
+        color_max = color_cutoff
     )
 }
 par(op)
@@ -348,23 +366,23 @@ it is unbiased and thus robust to unknown data structure. With enough restarts
 this strategy will eventually explore every region, but any single run may miss
 the corners.
 
-On the other extreme, methods like `furthest_first`, `furthest_sum`,
-`coreset_initfn`, and `hull_outmost` are exploring more aggressively the
+On the other extreme, methods like `furthest_first`, `furthest_sum`, and
+`hull_outmost` are exploring more aggressively the
 boundary of the data geometry. We see that most of them converge to the same set
-of candidate points and never pick any point in the middle of of the cloud.
+of candidate points and never pick any point in the middle of the cloud.
 `furthest_first` is the only one that shows some variation in the selected
 points, but it still has a strong corner preference. For a simple convex shape
 that bias is often useful: the corners are exactly where good archetypes should
 start.
 
 Finally, in the middle between the two extremes, are clustering-inspired methods
-like: `kmeans_pp`, `aa_pp`, and `aa_pp_mc`. These methods adapt ideas developed
+like: `kmeans_pp` and `aa_pp`. These methods adapt ideas developed
 to initialize clustering algorithms to the AA setting. They are more probabilistic
 in nature and thus represent softer versions of their boundary searching counterparts.
 They also rarely select any point in the center of the cloud but they are exploring
-more diffusely the boundary regions and are not actively looking for the exterema.
+more diffusely the boundary regions and are not actively looking for the extrema.
 
-More details about the methodology imployed by each method can be found in the
+More details about the methodology employed by each method can be found in the
 [Method Reference](#method-reference) section at the end of this vignette.
 The rest of the vignette narrows to three representatives: `random` as an
 exploratory baseline, `kmeans_pp` as the softer outward-biased initializer, and
@@ -377,24 +395,23 @@ increases, the question changes from "did we find the corners?" to "how do the
 extra archetypes cover the cloud?" The following chunk is the user-facing call:
 only the `method` and `K` values change.
 
-```{r increasing-k-user-code}
-set.seed(42)
-init_k7 <- aa_init(X, K = 7, method = "kmeans_pp")
-```
-
-```{r increasing-k-setup, include = FALSE}
+```{r increasing-k}
+X <- as.matrix(toy)
 k_grid <- c(3, 7, 15)
 k_methods <- c("random", "kmeans_pp", "furthest_sum")
-k_inits <- lapply(k_methods, function(method) {
-    lapply(k_grid, function(k_value) {
-        make_init(X, K = k_value, method = method, seed = 1600 + k_value)
-    })
-})
-names(k_inits) <- k_methods
-k_inits <- lapply(k_inits, setNames, paste0("K = ", k_grid))
+
+k_inits <- list()
+for (method in k_methods) {
+    method_inits <- list()
+    for (K in k_grid) {
+        k_lab <- paste("K =", K)
+        method_inits[[k_lab]] <- aa_init(X, K = K, method = method)
+    }
+    k_inits[[method]] <- method_inits
+}
 ```
 
-```{r increasing-k-plot, fig.width = 9, fig.height = 6.5, out.width="100%", echo = FALSE}
+```{r increasing-k-plot, fig.width = 8.5, fig.height = 6, out.width="100%", results='hold', echo=FALSE}
 op <- par(
     mfrow = c(length(k_methods), length(k_grid)),
     mar = c(0.5, 0.5, 2.2, 0.2), oma = c(0, 0, 0, 0), bty = "n"
@@ -405,7 +422,7 @@ for (method in k_methods) {
         plot(
             X,
             pch = 16, cex = 0.42, col = "grey75",
-            main = sprintf("%s\n%s", lbl[method], k_label),
+            main = sprintf("%s\n%s", method_labels[method], k_label),
             xlab = "", ylab = "", axes = FALSE, asp = 1
         )
         draw_simplex(
@@ -440,64 +457,58 @@ fit. The red dashed triangle below is the starting point; the blue solid
 triangle is the fitted solution.
 
 ```{r init-before-after-fit}
+X <- as.matrix(toy)
+K <- 3
 focused_methods <- c("random", "kmeans_pp", "furthest_sum")
-focused_inits <- lapply(seq_along(focused_methods), function(i) {
-    method <- focused_methods[i]
-    make_init(X, K = K, method = method, seed = 2000 + i)
-})
-names(focused_inits) <- focused_methods
-
-fits_from_init <- lapply(focused_inits, function(init_obj) {
-    run_aa(X, K = K, init = init_obj$A, scale = FALSE, max_iter = 60,
-        tol = fit_tol
+fits <- list()
+for (method in focused_methods) {
+    fits[[method]] <- run_aa(
+        x        = X,
+        K        = K,
+        init     = method,
+        scale    = FALSE,
+        max_iter = 60,
+        tol      = 0.01
     )
-})
-fit_steps <- vapply(
-    fits_from_init, function(fit) as.integer(nrow(fit$loss) - 1),
-    integer(1)
-)
+}
 ```
 
-```{r init-before-after-plot, fig.width = 8.5, fig.height = 6, out.width="100%", echo = FALSE}
-loss_ylim <- range(unlist(lapply(fits_from_init, function(fit) fit$loss$loss)))
+```{r init-before-after-plot, echo=FALSE, fig.width = 8.5, fig.height = 6, out.width="100%", results='hold'}
+loss_values <- c()
+for (method in focused_methods) {
+    loss_values <- c(loss_values, fits[[method]]$loss$loss)
+}
+loss_ylim <- range(loss_values)
 op <- par(mfrow = c(2, 3), mar = c(2.2, 2.5, 3, 0.5), bty = "n")
 for (method in focused_methods) {
-    plot(
-        X,
-        pch = 16, cex = 0.45, col = "grey75",
-        main = sprintf("%s\n%d steps", lbl[method], fit_steps[method]),
-        xlab = "", ylab = "", axes = FALSE, asp = 1
+    fit <- fits[[method]]
+    plot(fit,
+        what = "coordinates",
+        show_anames = FALSE,
+        main = sprintf("%s\n%d steps", method_labels[method], nrow(fit$loss) - 1),
+        args.data.scatter = list(pch = 16, cex = 0.45, col = "grey75"),
+        pch = 19,
+        col = "steelblue4",
+        axes = FALSE,
+        asp = 1
     )
     draw_simplex(
-        focused_inits[[method]]$A,
+        fit$init,
         border = adjustcolor("firebrick3", 0.75),
         fill = adjustcolor("firebrick3", 0.05),
         lty = 2
     )
-    draw_simplex(
-        fits_from_init[[method]]$coordinates,
-        border = "steelblue4",
-        fill = adjustcolor("steelblue4", 0.08),
-        pch = 19
-    )
-    if (method == focused_methods[1]) {
-        legend(
-            "topleft",
-            legend = c("Initial", "Fitted"),
-            col = c("firebrick3", "steelblue4"), lty = c(2, 1), lwd = 2,
-            pch = c(17, 19), bty = "n", cex = 0.7
-        )
-    }
 }
 for (method in focused_methods) {
-    loss <- fits_from_init[[method]]$loss
-    iterations <- seq_len(nrow(loss)) - 1L
-    plot(
-        iterations, loss$loss, type = "l", lwd = 1.8, col = "steelblue4",
-        ylim = loss_ylim, main = "Loss", xlab = "Iteration", ylab = "",
+    plot(fits[[method]],
+        what = "loss",
+        lwd = 1.8,
+        col = "steelblue4",
+        ylim = loss_ylim,
+        main = "Loss",
+        ylab = "",
         las = 1
     )
-    points(iterations, loss$loss, pch = 16, cex = 0.45, col = "steelblue4")
 }
 par(op)
 ```
@@ -515,55 +526,38 @@ the outer circle contains the most distant points. In a Swiss roll, points that
 look close in a two-dimensional projection may be far apart along the rolled
 surface.
 
-```{r nonlinear-data, include = FALSE}
-set.seed(3001)
+```{r nonlinear-init}
+K <- 8
 nonlinear_data <- list(
-    circles = make_concentric_circles(),
+    circles    = make_concentric_circles(),
     swiss_roll = make_swiss_roll()
 )
-nonlinear_K <- 8
 nonlinear_methods <- c("random", "kmeans_pp", "furthest_sum")
-nonlinear_inits <- lapply(nonlinear_data, function(data_obj) {
-    out <- lapply(nonlinear_methods, function(method) {
-        make_init(
-            data_obj$X,
-            K = nonlinear_K,
-            method = method,
-            seed = 3010 + match(method, nonlinear_methods)
-        )
-    })
-    names(out) <- nonlinear_methods
-    out
-})
+
+nonlinear_inits <- list()
+for (data_shape in names(nonlinear_data)) {
+    data_obj <- nonlinear_data[[data_shape]]
+    out <- list()
+    for (method in nonlinear_methods) {
+        out[[method]] <- aa_init(data_obj$X, K = K, method = method)
+    }
+    nonlinear_inits[[data_shape]] <- out
+}
 ```
 
-First inspect the Euclidean initializations. The biased methods are doing what
-they were designed to do: they seek far-away points. On these shapes, that can
-over-emphasize the outside and leave the center or inner structure
-under-represented. `random` does not fix the geometry, but it is less committed
-to the outside by construction.
-
-```{r nonlinear-init-user-code}
-set.seed(3011)
-circle_init <- aa_init(nonlinear_data$circles$X,
-    K = 8,
-    method = "furthest_sum"
-)
-```
-
-```{r nonlinear-init-plot, fig.width = 8.5, fig.height = 6, out.width="100%", echo = FALSE}
+```{r nonlinear-init-plot, fig.width = 8.5, fig.height = 6, out.width="100%", results='hold', echo=FALSE}
 op <- par(
     mfrow = c(length(nonlinear_data), length(nonlinear_methods)),
     mar = c(2, 2, 3, 0.5), bty = "n"
 )
-for (dataset_name in names(nonlinear_data)) {
-    data_obj <- nonlinear_data[[dataset_name]]
+for (data_shape in names(nonlinear_data)) {
+    data_obj <- nonlinear_data[[data_shape]]
     for (method in nonlinear_methods) {
-        init_obj <- nonlinear_inits[[dataset_name]][[method]]
+        init_obj <- nonlinear_inits[[data_shape]][[method]]
         plot_data_with_points(
             data_obj$X,
             init_obj$A,
-            main = sprintf("%s\n%s", data_obj$main, lbl[method]),
+            main = sprintf("%s\n%s", data_obj$main, method_labels[method]),
             col = adjustcolor(data_obj$col, 0.62),
             view = data_obj$view
         )
@@ -572,62 +566,66 @@ for (dataset_name in names(nonlinear_data)) {
 par(op)
 ```
 
+First inspect the Euclidean initializations. The biased methods are doing what
+they were designed to do: they seek far-away points. On these shapes, that can
+over-emphasize the outside and leave the center or inner structure
+under-represented. `random` does not fix the geometry, but it is less committed
+to the outside by construction.
+
 For these cases, the better answer is often to change the space in which AA is
 fit. A kernel method lets nearby points influence each other according to a
 smooth similarity rule rather than only through straight-line distance in the
 input coordinates.
 
-```{r kernel-user-code}
+```{r kernel-user-code, eval=FALSE}
 fit_kernel <- archetypes_kernel_pgd(
-    nonlinear_data$circles$X,
-    K = 8,
+    x      = X,
+    K      = K,
     kernel = "laplace",
-    kernel_args = list(sigma = 0.25),
-    init = "furthest_sum",
-    tol = fit_tol
+    init   = "furthest_sum",
+    tol    = 0.01
 )
 ```
 
-```{r nonlinear-kernel-setup, include = FALSE}
+```{r nonlinear-kernel-setup, include = FALSE, warning=FALSE}
 kernel_methods <- c("furthest_sum", "kmeans_pp")
-kernel_inits <- lapply(names(nonlinear_data), function(dataset_name) {
-    data_obj <- nonlinear_data[[dataset_name]]
-    out <- lapply(kernel_methods, function(method) {
-        euclidean_A <- nonlinear_inits[[dataset_name]][[method]]$A
-
-        set.seed(4100 + match(method, kernel_methods))
-        kernel_fit <- suppressWarnings(archetypes_kernel_pgd(
+kernel_inits <- list()
+for (data_shape in names(nonlinear_data)) {
+    data_obj <- nonlinear_data[[data_shape]]
+    out <- list()
+    for (method in kernel_methods) {
+        kernel_fit <- archetypes_kernel_pgd(
             data_obj$X,
-            K = nonlinear_K,
+            K = K,
+            init = method,
             kernel = data_obj$kernel,
             kernel_args = data_obj$kernel_args,
-            init = method,
             max_iter = 1,
-            tol = fit_tol,
+            tol = 0.01,
             tol_r2 = 1
-        ))
-        kernel_A <- kernel_fit$init %*% data_obj$X
-        list(euclidean = euclidean_A, kernel = kernel_A)
-    })
-    names(out) <- kernel_methods
-    out
-})
-names(kernel_inits) <- names(nonlinear_data)
+        )
+        out[[method]] <- list(
+            euclidean = nonlinear_inits[[data_shape]][[method]]$A,
+            kernel = kernel_fit$init %*% data_obj$X
+        )
+    }
+    kernel_inits[[data_shape]] <- out
+}
 ```
 
-```{r nonlinear-kernel-plot, fig.width = 8.5, fig.height = 6, out.width="100%", echo = FALSE}
+```{r nonlinear-kernel-plot, fig.width = 8.5, fig.height = 6, out.width="100%", results='hold', echo=FALSE}
 op <- par(
     mfrow = c(length(nonlinear_data), length(kernel_methods)),
     mar = c(2, 2, 3, 0.5), bty = "n"
 )
-for (dataset_name in names(nonlinear_data)) {
-    data_obj <- nonlinear_data[[dataset_name]]
+for (data_shape in names(nonlinear_data)) {
+    data_obj <- nonlinear_data[[data_shape]]
     for (method in kernel_methods) {
-        init_obj <- kernel_inits[[dataset_name]][[method]]
+        init_obj <- kernel_inits[[data_shape]][[method]]
         plot(
             data_obj$X[, data_obj$view, drop = FALSE],
             pch = 16, cex = 0.45, col = adjustcolor(data_obj$col, 0.55),
-            main = sprintf("%s\n%s", data_obj$main, lbl[method]),
+            main = sprintf("%s\n%s", data_obj$main, method_labels[method]),
             xlab = "", ylab = "", axes = FALSE, asp = 1
         )
         points(init_obj$euclidean[, data_obj$view, drop = FALSE],
@@ -636,17 +634,16 @@ for (dataset_name in names(nonlinear_data)) {
         points(init_obj$kernel[, data_obj$view, drop = FALSE],
             pch = 1, cex = 1.25, lwd = 1.6, col = "#D55E00"
         )
-        if (dataset_name == names(nonlinear_data)[1] &&
-            method == kernel_methods[1]) {
-            legend(
-                "topright",
-                legend = c("Euclidean init", "Kernel init"),
-                pch = c(4, 1), col = c("black", "#D55E00"),
-                pt.cex = c(1.1, 1.2), bty = "n", cex = 0.7
-            )
-        }
     }
 }
+par(fig = c(0, 1, 0, 1), mar = c(0, 0, 0, 0), new = TRUE)
+plot.new()
+legend(
+    "center",
+    legend = c("Euclidean init", "Kernel init"),
+    pch = c(4, 1), col = c("black", "#D55E00"),
+    pt.cex = c(2.1, 2.2), bty = "n", cex = 1.2
+)
 par(op)
 ```
 
@@ -655,26 +652,76 @@ kernel version measures spread in the similarity space used by the model. This
 can rescue boundary-seeking methods on shapes where the raw coordinates make
 the outside look more important than the rest of the structure.
 
-## Practical Guidance
+## Conclusions and Recommendations
 
 There is no universal best initializer. The right choice depends on how much
 you know about the geometry.
 
-| Situation                             | Recommended `init`                                                        |
-| ------------------------------------- | ------------------------------------------------------------------------- |
-| Simple convex-ish data                | `"furthest_sum"`, `"kmeans_pp"`, or `"aa_pp"`                            |
-| Unknown structure, enough restarts    | `"random"` with a larger `nrep`                                           |
-| Unknown structure, few restarts       | `"aa_pp"` or `"kmeans_pp"`                                                 |
-| Clearly nonlinear geometry           | `method = "kernel"` with a suitable kernel                                |
-| Large dataset ($n \gg 10{,}000$)      | `"aa_pp_mc"` with a moderate `batch_size`                                 |
-| Very large dataset, speed critical    | `"coreset_initfn"` or `"hull_outmost"` with `hull_method = "partitioned"` |
-| Reproducing legacy results            | `"furthest_sum"` (historical AA default, @Morup2012)                      |
+| Situation                             | Recommended `init`                                                          |
+| ------------------------------------- | ----------------------------------------------------------------------------|
+| Simple convex-ish data                | `"furthest_sum"`, `"kmeans_pp"`                                             |
+| Unknown structure, enough restarts    | `"random"` with a larger `nrep`                                             |
+| Unknown structure, few restarts       | `"aa_pp"`                                                                   |
+| Very large dataset, speed critical    | `"furthest_sum"` with `batch_size` or `"hull_outmost"` partitioned          |
+| Reproducing legacy results            | `"furthest_sum"` (PCHA), `"random"` [archetypes], `"dirichlet"` directional |
 
 When the geometry is simple, a boundary or coverage bias can be helpful. When
 the geometry is unknown, `random` with enough restarts is often the safest
-baseline because it makes the fewest assumptions. If the geometry is visibly
-nonlinear, changing the model with `archetypes_kernel_pgd()` is usually more
-important than fine-tuning the Euclidean initializer.
+baseline because it makes the fewest assumptions.
+
+If the geometry is visibly nonlinear, changing the model is usually more
+important than fine-tuning the Euclidean initializer. Use
+`archetypes_kernel_pgd()` with a suitable kernel, then choose one of the
+kernel-compatible initializers such as `"kmeans_pp"` or `"furthest_sum"`.
+
+For memory efficiency and speed, any initializer can be restricted to a
+candidate batch with `batch_size`. The default `batch_type = "distal"` samples
+candidate rows in proportion to their squared distance from the data center,
+which is the coreset idea of @Mair2019: if archetypes are expected near the
+boundary, it is wasteful to spend most candidate memory on central points. Use
+`batch_type = "uniform"` when the goal is an unbiased mini-batch approximation,
+especially for `method = "aa_pp"`.
+
+### Initialization Caveats {#initialization-caveats}
+
+The default `scale = TRUE` in `run_aa()` applies column-wise standardization
+(z-scoring) before fitting. While scaling often improves the conditioning of the
+optimization, it interacts differently with each initialization strategy.
+
+@Mair2023 show that FurthestSum is sensitive to preprocessing: standardization
+can distort the Euclidean distances it uses to choose boundary points. AA++ is
+less affected because it samples from residuals tied directly to the AA objective
+[@Mair2023].
+
+The cost of this objective-aware sampling is runtime. Among the built-in
+initializers, `"aa_pp"` is usually the slowest because after the first two
+points it solves a small AA projection problem at each step, essentially a
+greedy AA analysis. In return, each added point is guaranteed not to increase
+the reconstruction cost, and reduces it whenever it expands the current hull.
+
+Initializer names are not supported identically by every model family. The
+Euclidean solvers (`method = "pgd"`, `"nnls"`, and `"paa"`) call
+`aa_init()` on the preprocessed data, so they accept the full catalogue of
+initializer strings described above, as well as custom initializer functions and
+coordinate matrices.
+
+Kernel AA is the main exception. With `method = "kernel"`, initializer strings
+are limited to `"random"`, `"dirichlet"`, `"furthest_first"`, `"kmeans_pp"`,
+and `"furthest_sum"`. Row-selection methods can be expressed using selected row
+indices and pairwise distances from the kernel Gram matrix; `"dirichlet"` is
+also available because it constructs the coefficient matrix $B$ directly and
+does not require input-space archetype coordinates. Candidate batching is
+supported for these kernel initializers, with distal batches computed from
+kernel-space center distances. The remaining strings are not accepted as kernel
+initializers: `"aa_pp"` requires convex-hull residual projections and
+`"hull_outmost"` requires explicit hull candidates. Those operations would need
+separate kernel-space implementations. If you need one of those starts for a
+kernel fit, pass an explicit `K x n` non-negative coefficient matrix instead;
+row indices or row names are also accepted when you want to select observed rows
+directly.
+
+The directional solver also accepts the `aa_init()` method
+strings, but it defaults to `"dirichlet"` for historical reasons.
 
 ## Method Reference {#method-reference}
 
@@ -683,16 +730,18 @@ important than fine-tuning the Euclidean initializer.
 Selects $K$ rows of $X$ uniformly at random without replacement.
 
 ```{r uniform-ex, eval = FALSE}
-init <- aa_init(X, K = 3, method = "random")
+X <- as.matrix(toy)
+K <- 3
+init <- aa_init(X, K = K, method = "random")
 ```
 
 Uniform sampling is the simplest possible initialization and requires no
 distance computations. Its expected quality depends entirely on the data
 geometry. By design it explores the whole geometry with equal probability,
-so it is unaffected by potential biases in the data distribution trapping it
-in a local minimum. When combined with many random restarts via the `nrep`
-argument in `run_aa()`, even simple uniform initialization can find good
-solutions as pointed out in [@Krohne2019].
+so it makes few assumptions about where useful archetypes should lie. When
+combined with many random restarts via the `nrep` argument in `run_aa()`, even
+simple uniform initialization can find good solutions as pointed out in
+[@Krohne2019].
 
 ### `dirichlet`
 
@@ -704,34 +753,48 @@ archetypes are random convex combinations of **all** data points.
 The `alpha` parameter controls the shape of the distribution:
 
 * **`alpha = 1`** (default): all possible combinations are equally likely
-* **`alpha < 1`**: sparse combinations are more likely thus only a few points
+* **`alpha < 1`**: sparse combinations are more likely, so only a few points
   contribute to each archetype.
-* **`alpha > 1`**: near uniform combinations are more likely thus many points
+* **`alpha > 1`**: near uniform combinations are more likely, so many points
   contribute to each archetype.
 
-So as $\alpha \to 0$ the behavior approaches `random` (archetypes snap to data points),
-while for $\alpha \gg 1$ the archetypes are more likely to lie near the center of
-the data hull. The plot below compares initial archetype placements across three
-variants to demonstrate the convergence of `dirichlet` to `random`.
+As $\alpha \to 0$ the behavior approaches `random` (archetypes snap to data
+points), while for $\alpha \gg 1$ the archetypes are more likely to lie near the
+center of the data hull. The plot below compares initial archetype placements
+across three variants to demonstrate the convergence of `dirichlet` to
+`random`.
 
-```{r dirichlet-vs-random-setup}
+```{r dirichlet-vs-random-plot, fig.height = 3, fig.width=7, results='hold', echo=FALSE}
+X <- as.matrix(toy)
+K <- 3
 dir_variants <- list(
     `random` = list(method = "random"),
     `dirichlet α = 1` = list(method = "dirichlet", alpha = 1),
     `dirichlet α = 0.01` = list(method = "dirichlet", alpha = 0.01)
 )
 n_dir_runs <- 3
-dir_seeds <- 42 + seq_len(n_dir_runs) - 1
 
-dir_inits <- lapply(dir_variants, function(args) {
-    lapply(dir_seeds, function(s) {
-        set.seed(s)
-        do.call(aa_init, c(list(X = X, K = K), args))
-    })
-})
-```
-
-```{r dirichlet-vs-random-plot, echo = FALSE, fig.height = 3, fig.width=7}
+dir_inits <- list()
+for (variant in names(dir_variants)) {
+    args <- dir_variants[[variant]]
+    dir_inits[[variant]] <- list()
+    for (run in 1:n_dir_runs) {
+        if (args$method == "dirichlet") {
+            dir_inits[[variant]][[run]] <- aa_init(
+                X,
+                K = K,
+                method = args$method,
+                alpha = args$alpha
+            )
+        } else {
+            dir_inits[[variant]][[run]] <- aa_init(
+                X,
+                K = K,
+                method = args$method
+            )
+        }
+    }
+}
 op <- par(mfrow = c(1, 3), mar = c(2, 2, 2.5, 0.5), bty = "n")
 run_cols <- adjustcolor(c("firebrick3", "darkorange3", "purple4"), 0.7)
 
@@ -744,7 +807,7 @@ for (nm in names(dir_inits)) {
         ylim = range(X[, 2]) + c(-1, 1),
         axes = FALSE
     )
-    for (run_ix in seq_along(dir_inits[[nm]])) {
+    for (run_ix in 1:length(dir_inits[[nm]])) {
         draw_simplex(
             dir_inits[[nm]][[run_ix]]$A,
             border = run_cols[run_ix],
@@ -756,8 +819,8 @@ for (nm in names(dir_inits)) {
     if (nm == names(dir_inits)[1]) {
         legend(
             "topleft",
-            legend = paste("Run", seq_len(n_dir_runs)),
-            col = run_cols, lty = seq_len(n_dir_runs), lwd = 2, pch = 17,
+            legend = paste("Run", 1:n_dir_runs),
+            col = run_cols, lty = 1:n_dir_runs, lwd = 2, pch = 17,
             bty = "n", cex = 0.7
         )
     }
@@ -766,14 +829,15 @@ par(op)
 ```
 
 `"random"` archetypes (left) always coincide with data points and cluster
-near high-density regions. `"dirichlet"` with $\alpha = 1$ (center) select a
-random distribution of weights from all data points and because there are more
-of them near the "uniform" distribution tends to produce archetypes that lie
-near the center of the hull. Lowering $\alpha$ (right) biases the results towards
-distribution with a few large weights, which pushes the random mixtures towards
-specific data points thus approaching the behavior of `"random"`.
+near high-density regions. `"dirichlet"` with $\alpha = 1$ (center) samples
+weights from all data points and often produces archetypes near the center of
+the hull. Lowering $\alpha$ (right) makes weights sparse, which pushes the
+random mixtures toward specific data points and toward the behavior of
+`"random"`.
 
-`dirichlet` is used as the default option for the directional method because directional data are represented through coefficients, so random convex combinations are a natural starting point.
+`dirichlet` is used as the default option for the directional method because
+directional data are represented through coefficients, so random convex
+combinations are a natural starting point.
 
 ### Furthest First (`"furthest_first"`)
 
@@ -782,10 +846,12 @@ the mean), then iteratively adds the single point that is *farthest* from the
 already-selected set (the nearest-archetype distance to the set is maximized).
 
 ```{r furthest-first-ex, eval = FALSE}
-init <- aa_init(X, K = 3, method = "furthest_first")
+X <- as.matrix(toy)
+K <- 3
+init <- aa_init(X, K = K, method = "furthest_first")
 ```
 
-FurthestFirst is a greedy adaptation of the $k$-center algorithm.  It produces
+Furthest First is a greedy adaptation of the $k$-center algorithm. It produces
 well-separated archetypes and is deterministic after the first random draw.
 Because it targets the globally farthest point at each step, it tends to spread
 archetypes evenly across the data hull, though this spread is not specifically
@@ -798,7 +864,9 @@ archetype with probability proportional to the *squared* distance to the nearest
 already-selected archetype.
 
 ```{r kmeans-pp-ex, eval = FALSE}
-init <- aa_init(X, K = 3, method = "kmeans_pp")
+X <- as.matrix(toy)
+K <- 3
+init <- aa_init(X, K = K, method = "kmeans_pp")
 ```
 
 The k-means++ sampling rule approximates AA++ (see below) by replacing the
@@ -815,38 +883,46 @@ cycles through the selected set and replaces each archetype with a better
 candidate, controlled by `refinement_steps` (default 10).
 
 ```{r furthest-sum-ex, eval = FALSE}
+X <- as.matrix(toy)
+K <- 3
 # Default refinement
-init <- aa_init(X, K = 3, method = "furthest_sum")
+init <- aa_init(X, K = K, method = "furthest_sum")
 
 # More aggressive refinement
-init <- aa_init(X, K = 3, method = "furthest_sum", refinement_steps = 30)
+init <- aa_init(X, K = K, method = "furthest_sum", refinement_steps = 30)
 
 # No refinement
-init <- aa_init(X, K = 3, method = "furthest_sum", refinement_steps = 0)
+init <- aa_init(X, K = K, method = "furthest_sum", refinement_steps = 0)
 ```
 
 FurthestSum is the historical default initialization for AA [@Morup2012] and
 remains the default when `init = NULL` is passed to `run_aa()`. It places
 archetypes near the boundary of the data cloud and is computationally efficient.
-See the [Initialization caveats](#initialization-caveats) below for an important caveat
-about its interaction with standardization.
+See the [Initialization caveats](#initialization-caveats) below for an important
+caveat about its interaction with standardization.
 
-### Coreset + FurthestSum (`"coreset_initfn"`)
+### Batched Coreset-Style Initialization
 
-Subsamples a coreset of $m$ points from $X$ with probability proportional to
-each point's squared distance from the data mean, then runs `furthest_sum` on
-the coreset [@Mair2019]. The mandatory `m` parameter controls the coreset size
-and must satisfy `m >= K`.
+Supplying `batch_size` restricts initialization to a candidate batch before
+selecting archetypes. With the default `batch_type = "distal"`, candidates are
+sampled with probability proportional to each point's squared distance from the
+data mean. This is the coreset idea of @Mair2019: reduce the effective problem
+size while preserving the extremal structure that boundary-seeking methods such
+as `furthest_sum` rely on.
 
 ```{r coreset-ex, eval = FALSE}
-# m must be at least K
-init <- aa_init(X, K = 3, method = "coreset_initfn", m = 60)
+X <- as.matrix(toy)
+K <- 3
+batch_size <- 60
+
+# batch_size must be at least K
+init <- aa_init(X, K = K, method = "furthest_sum", batch_size = batch_size)
 ```
 
 For large datasets where computing all pairwise distances is expensive, the
-coreset strategy reduces the effective problem size. Because the coreset is
-distance-weighted, the approximation preserves the extremal structure that
-FurthestSum relies on [@Mair2019].
+batch reduces memory use and runtime. Because distal batching downweights the
+center, it avoids spending most candidate slots in regions where archetypes are
+unlikely to be useful.
 
 ### AA++ (`"aa_pp"`)
 
@@ -858,7 +934,9 @@ approximation as a convex combination of the current archetypes; the squared
 reconstruction error becomes the sampling weight for the $k$-th archetype.
 
 ```{r aa-pp-ex, eval = FALSE}
-init <- aa_init(X, K = 3, method = "aa_pp")
+X <- as.matrix(toy)
+K <- 3
+init <- aa_init(X, K = K, method = "aa_pp")
 ```
 
 Because the sampling probability is tied to the AA objective itself rather than
@@ -873,23 +951,37 @@ initializing $K$ archetypes requires $K - 2$ small optimization problems.
 Despite this, initialization is still much cheaper than running $K$ full AA
 iterations [@Mair2023].
 
-### AA++MC (`"aa_pp_mc"`)
+### Batched AA++
 
-AA++MC approximates AA++ through a Metropolis–Hastings Markov chain [@Mair2023].
-Instead of projecting the full dataset at each step, it draws a random batch of
-`batch_size` points, projects them, and uses the Metropolis acceptance rule to
-select the next archetype candidate. The mandatory `batch_size` parameter trades
+AA++ can also use `batch_size`, giving a variant of the Monte Carlo AA++
+approximation. Instead of projecting the full dataset at each step, it draws a
+candidate batch, projects only those rows, and samples the next archetype from
+their residuals. This is not identical to the `"aa_pp_mc"` scheme: candidate
+batches follow `batch_type` and `batch_replace`, and the same batching interface
+is used for the early AA++ selections. The `batch_size` parameter trades
 approximation accuracy for speed and must satisfy `batch_size >= K`.
 
 ```{r aa-pp-mc-ex, eval = FALSE}
-# Larger batch_size → closer approximation to exact AA++
-init <- aa_init(X, K = 3, method = "aa_pp_mc", batch_size = 100)
+X <- as.matrix(toy)
+K <- 3
+batch_size <- 100
+batch_type <- "uniform"
+
+# Larger batch_size -> closer approximation to exact AA++
+init <- aa_init(X,
+    K = K,
+    method = "aa_pp",
+    batch_size = batch_size,
+    batch_type = batch_type
+)
 ```
 
-When `batch_size == nrow(X)` the Metropolis acceptance probability is always 1
-and the method reduces to exact AA++. When `batch_size << nrow(X)` only a
-small fraction of the data is evaluated at each step, making AA++MC well-suited
-for large datasets where exact AA++ becomes memory-bound.
+When `batch_size == nrow(X)` the method reduces to exact AA++. When
+`batch_size << nrow(X)` only a small fraction of the data is evaluated at each
+step, making batched AA++ useful for large datasets where exact AA++ becomes
+memory-bound. Use `batch_type = "uniform"` for the least biased approximation,
+or keep the default `batch_type = "distal"` if you want the candidate batches
+to emphasize likely boundary points.
 
 ### Hull-outmost (`"hull_outmost"`)
 
@@ -908,18 +1000,20 @@ most-voted candidates are selected as archetypes. The `hull_method` argument
   data rows. Controlled by `n_partitions` (default `10`). The fastest strategy.
 
 ```{r hull-outmost-ex, eval = FALSE}
+X <- as.matrix(toy)
+K <- 3
 # Full hull — exact but requires 'geometry' for D > 2
-init <- aa_init(X, K = 3, method = "hull_outmost", hull_method = "full")
+init <- aa_init(X, K = K, method = "hull_outmost", hull_method = "full")
 
 # Projected hull — works in any dimension without extra packages
 init <- aa_init(X,
-    K = 3, method = "hull_outmost",
+    K = K, method = "hull_outmost",
     hull_method = "projected", projected_dim = 2
 )
 
 # Partitioned hull — fastest, suitable for large n
 init <- aa_init(X,
-    K = 3, method = "hull_outmost",
+    K = K, method = "hull_outmost",
     hull_method = "partitioned", n_partitions = 15
 )
 ```
@@ -928,47 +1022,6 @@ The partitioned and projected strategies are designed for datasets where
 computing the exact hull is intractable. The `use_unique_candidates` argument
 (default `FALSE`) controls whether duplicate hull candidates (a point appearing
 in multiple projections or partitions) cast only one vote.
-
-## Initialization Caveats {#initialization-caveats}
-
-The default `scale = TRUE` in `run_aa()` applies column-wise standardization
-(z-scoring) before fitting. While scaling often improves the conditioning of the
-optimization, it interacts differently with each initialization strategy.
-
-@Mair2023 demonstrate that FurthestSum is "especially sensitive to the
-pre-processing scheme": standardization can degrade its performance because it
-distorts the Euclidean distances that FurthestSum relies on to place archetypes
-near the data boundary. AA++ and its approximations are robust to this effect
-because their sampling probabilities are tied to the actual objective loss
-rather than to raw Euclidean distances [@Mair2023].
-
-Additionally, @Suleman2017 reports that FurthestSum tends to produce redundant
-(near-duplicate) archetypes when $K$ is large relative to the intrinsic
-dimensionality of the data. If you observe that several fitted archetypes are
-very similar to one another, switching to `"aa_pp"` is recommended.
-
-Initializer names are not supported identically by every model family. The
-Euclidean solvers (`method = "pgd"`, `"nnls"`, and `"paa"`) call
-`aa_init()` on the preprocessed data, so they accept the full catalogue of
-initializer strings described above, as well as custom initializer functions and
-coordinate matrices.
-
-Kernel AA is the main exception. With `method = "kernel"`, initializer strings
-are limited to `"random"`, `"furthest_first"`, `"kmeans_pp"`, and
-`"furthest_sum"`. These methods can be expressed using selected row indices and
-pairwise distances from the kernel Gram matrix. The other strings are not
-accepted as kernel initializers: `"dirichlet"` creates arbitrary coefficient
-mixtures, `"aa_pp"` and `"aa_pp_mc"` require convex-hull residual projections,
-`"coreset_initfn"` requires a coreset construction tied to the input-space
-geometry, and `"hull_outmost"` requires explicit hull candidates. Those
-operations would need separate kernel-space implementations. If you need one of
-those starts for a kernel fit, pass an explicit `K x n` non-negative coefficient
-matrix instead; row indices or row names are also accepted when you want to
-select observed rows directly.
-
-The directional solver also accepts the `aa_init()` method
-strings, but it defaults to `"dirichlet"` for historical reasons^[the paper
-introducing it opted for this method].
 
 ## Session Information
 

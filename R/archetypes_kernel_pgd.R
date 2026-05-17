@@ -61,6 +61,12 @@
 #' and set `kernel = "precomputed"`. Supply the original data as the `data`
 #' argument if you want input-space `coordinates` in the output.
 #'
+#' Kernel initializers that can be expressed through row selections or
+#' coefficient matrices are supported: `"random"`, `"furthest_first"`,
+#' `"kmeans_pp"`, `"furthest_sum"`, and `"dirichlet"`. Candidate batching can
+#' be requested through `init_args = list(batch_size = ..., batch_type = ...)`;
+#' distal batching uses distances implied by the Gram matrix.
+#'
 #' ## Archetype coordinates
 #'
 #' Because the space where the similarities are measured is implicitly defined
@@ -604,6 +610,23 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
         ))
     }
 
+    if (is_single_string(init) && init == "dirichlet") {
+        B <- do.call(
+            .aa_kernel_dirichlet,
+            args = c(list(G = G, K = K), init_args)
+        )
+        nm <- .aa_init_names(B)
+        rownames(B) <- nm
+        colnames(B) <- rownames(G)
+        S <- .aa_kernel_init_S(G, B, eps)
+        return(list(
+            init = B,
+            B = B,
+            S = S,
+            loss = .aa_new_loss(L)
+        ))
+    }
+
     if (is_single_string(init) && init %in% c("random", "furthest_first", "kmeans_pp", "furthest_sum")) {
         method <- match.arg(init, c("random", "furthest_first", "kmeans_pp", "furthest_sum"))
         ind <- do.call(
@@ -634,16 +657,84 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
     )
 }
 
-.aa_kernel_init_indices <- function(G, K, method = "furthest_sum", ...) {
+.aa_kernel_init_indices <- function(G,
+                                    K,
+                                    method = "furthest_sum",
+                                    batch_size = NULL,
+                                    batch_type = c("distal", "uniform"),
+                                    batch_replace = FALSE,
+                                    ...) {
+    batch_type <- match.arg(batch_type)
+    stopifnot("batch_replace must be TRUE or FALSE" = is_logical(batch_replace))
+    batch_size <- .aa_validate_batch_size(
+        batch_size,
+        n = nrow(G),
+        K = K,
+        replace = batch_replace
+    )
     distances <- .aa_kernel_dist2(G)
     center_dists <- .aa_kernel_dist2_center(G)
-    switch(
-        method,
-        random            = sample(nrow(G), K, replace = FALSE),
-        furthest_first = furthest_first(G, K, distances = distances, center_dists = center_dists),
-        kmeans_pp = kmeans_pp(G, K, distances = distances, center_dists = center_dists),
-        furthest_sum = furthest_sum(G, K, distances = distances)
+    candidates <- .aa_sample(
+        center_dists,
+        size = batch_size,
+        type = batch_type,
+        replace = batch_replace
     )
+    candidate_distances <- distances[candidates, candidates, drop = FALSE]
+    candidate_center_dists <- center_dists[candidates]
+    G_candidates <- G[candidates, candidates, drop = FALSE]
+
+    ind <- switch(
+        method,
+        random = sample(seq_along(candidates), K, replace = FALSE),
+        furthest_first = furthest_first(
+            G_candidates,
+            K,
+            distances = candidate_distances,
+            center_dists = candidate_center_dists
+        ),
+        kmeans_pp = kmeans_pp(
+            G_candidates,
+            K,
+            distances = candidate_distances,
+            center_dists = candidate_center_dists
+        ),
+        furthest_sum = furthest_sum(G_candidates, K, distances = candidate_distances)
+    )
+    candidates[ind]
+}
+
+.aa_kernel_dirichlet <- function(G,
+                                 K,
+                                 alpha = 1,
+                                 batch_size = NULL,
+                                 batch_type = c("distal", "uniform"),
+                                 batch_replace = FALSE,
+                                 ...) {
+    stopifnot("`alpha` must be a single positive number" = is_positive(alpha))
+    batch_type <- match.arg(batch_type)
+    stopifnot("batch_replace must be TRUE or FALSE" = is_logical(batch_replace))
+    batch_size <- .aa_validate_batch_size(
+        batch_size,
+        n = nrow(G),
+        K = K,
+        replace = batch_replace
+    )
+    center_dists <- .aa_kernel_dist2_center(G)
+    candidates <- .aa_sample(
+        center_dists,
+        size = batch_size,
+        type = batch_type,
+        replace = batch_replace
+    )
+    B_batch <- matrix(stats::rgamma(K * length(candidates), shape = alpha),
+                      nrow = K, ncol = length(candidates))
+    B_batch <- proj_l1(B_batch, eps = 0)
+    B <- matrix(0, nrow = K, ncol = nrow(G))
+    B[, candidates] <- B_batch
+    rownames(B) <- paste0("A", seq_len(K))
+    colnames(B) <- rownames(G)
+    B
 }
 
 .aa_kernel_dist2 <- function(G, ind = NULL) {

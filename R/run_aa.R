@@ -128,12 +128,13 @@ run_aa.formula <- function(formula,
 #'   \item{`"random"`}{uniformly random sample of K rows.}
 #'   \item{`"dirichlet"`}{random convex combinations sampled from a
 #'     Dirichlet distribution. Default for `"directional"`.}
-#'   \item{`"aa_pp"` / `"aa_pp_mc"`}{AA++ and its MCMC approximation
-#'     (Mair & Sjölund 2023).}
-#'   \item{`"coreset_initfn"`}{furthest-sum on a coreset subsample
-#'     (Mair & Brefeld 2019).}
+#'   \item{`"aa_pp"`}{AA++ initialization (Mair & Sjölund 2023). Pass
+#'     `batch_size` in `init_args` to use a Monte Carlo-inspired variant.}
 #'   \item{`"hull_outmost"`}{hull-candidate outmost-vote ranking.}
 #' }
+#'   Any initializer can receive `batch_size`, `batch_type`, and
+#'   `batch_replace` through `init_args`; `batch_type = "distal"` implements
+#'   coreset-style candidate sampling (Mair & Brefeld 2019).
 #'   See `vignette("initialization", package = "YAAAP")` for a comparison.
 #' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional numeric vector of sample weights (default: `NULL`).

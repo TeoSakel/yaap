@@ -5,11 +5,12 @@
 #' @param X a numeric matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes to be initialized
 #' @param method initialization method. One of `"random"`, `"dirichlet"`,
-#'   `"furthest_first"`, `"kmeans_pp"`, `"furthest_sum"`, `"coreset_initfn"`,
-#'   `"aa_pp"`, `"aa_pp_mc"`, or `"hull_outmost"` (default: `"furthest_sum"`).
+#'   `"furthest_first"`, `"kmeans_pp"`, `"furthest_sum"`, `"aa_pp"`, or
+#'   `"hull_outmost"` (default: `"furthest_sum"`).
 #' @param sparse whether `B` should be a sparse matrix (default: same as X)
-#' @param m optional batch size for coreset initialization
-#' @param batch_size optional batch size for MCMC approximation of the AA++ initialization
+#' @param batch_size optional number of candidate rows to sample.
+#' @param batch_type candidate sampling strategy, `"distal"` or `"uniform"`.
+#' @param batch_replace whether to sample candidate batches with replacement.
 #' @param hull_method strategy used by `"hull_outmost"`. One of `"full"`,
 #'   `"projected"`, or `"partitioned"` (default: `"full"`).
 #' @param projected_dim projection dimension used by `"hull_outmost"` when
@@ -51,20 +52,26 @@
 #' - `"furthest_sum"`: selects the first archetype randomly and then greedily
 #'   selects the next archetypes that maximizes the sum of distances of all
 #'   points from the current set of archetypes (see Mørup & Hansen 2012).
-#' - `"coreset_initfn"`: initializes archetypes using a coreset of size `m` sampled
-#'   from the data matrix `X` and then applies `furthest_sum` on the coreset
-#'   (see Mair & Brefeld 2019).
 #' - `"aa_pp"`: AA++ is a probabilistic initialization method similar to `kmeans++`
 #'   but instead using the distances to the current set of archetypes it uses
 #'   distances to their convex hull (see Mair & Sjölund 2023).
-#' - `"aa_pp_mc"`: MCMC approximation of AA++ initialization. Each archetype is
-#'   sampled by performing AA++ on a sub-sample of size `batch_size` from the
-#'   data matrix `X` (see Mair & Sjölund 2023).
 #' - `"hull_outmost"`: computes hull candidates using one of the
 #'   `hull_method` strategies (`"full"`, `"projected"`, or `"partitioned"`)
 #'   and then selects `K` archetypes via an outmost-vote ranking. This family of
 #'   hull-based initializations is adapted from the \pkg{archetypal} package
 #'   (Mouselimis et al., 2025).
+#'
+#' Supplying `batch_size` applies the selected method to a candidate batch
+#' rather than to all rows. For all methods except `"aa_pp"`, one batch is
+#' sampled up front. For `"aa_pp"`, a fresh batch is sampled at each
+#' approximation step; this is a variant of the Monte Carlo AA++ approximation
+#' rather than the exact `"aa_pp_mc"` scheme. `batch_replace = FALSE` by default.
+#'
+#' The default `batch_type = "distal"` is the coreset sampling strategy of
+#' Mair & Brefeld (2019): rows farther from the data center are more likely to
+#' be candidates, which saves memory and time while focusing on the boundary
+#' where archetypes are expected to lie. Use `batch_type = "uniform"` for an
+#' unbiased candidate batch.
 #'
 #' @references
 #' Mørup, M., & Hansen, L. K. (2012).
@@ -91,8 +98,9 @@ aa_init <- function(X,
                     K,
                     method = "furthest_sum",
                     sparse = inherits(X, "sparseMatrix"),
-                    m = NULL,
                     batch_size = NULL,
+                    batch_type = c("distal", "uniform"),
+                    batch_replace = FALSE,
                     hull_method = c("full", "projected", "partitioned"),
                     projected_dim = 2L,
                     n_partitions = 10L,
@@ -114,21 +122,20 @@ aa_init <- function(X,
             "furthest_first",
             "kmeans_pp",
             "furthest_sum",
-            "coreset_initfn",
             "aa_pp",
-            "aa_pp_mc",
             "hull_outmost"
         )
     )
+    batch_type <- match.arg(batch_type)
+    stopifnot("batch_replace must be TRUE or FALSE" = is_logical(batch_replace))
+    batch_size <- .aa_validate_batch_size(
+        batch_size,
+        n = nrow(X),
+        K = K,
+        replace = batch_replace
+    )
 
-    if (method == "coreset_initfn") {
-        stopifnot("`m` must be a positive integer at least K" = is_count(m, start_from = K))
-        stopifnot("Number of samples must be at least `m`" = nrow(X) >= m)
-    } else if (method == "aa_pp_mc") {
-        batch_size <- ifelse(is.null(batch_size), m, batch_size)
-        stopifnot("`batch_size` must be a positive integer at least K" = is_count(batch_size, start_from = K))
-        stopifnot("Number of samples must be at least `batch_size`" = nrow(X) >= batch_size)
-    } else if (method == "hull_outmost") {
+    if (method == "hull_outmost") {
         hull_method <- match.arg(hull_method, c("full", "projected", "partitioned"))
 
         stopifnot("`projected_dim` must be between [1, ncol(X)]" =
@@ -150,17 +157,31 @@ aa_init <- function(X,
         return(.ind_to_init(X, ind, sparse = sparse))
     }
 
+    batch <- .aa_sample(
+        X,
+        size = batch_size,
+        type = batch_type,
+        replace = batch_replace
+    )
+    X_init <- X[batch, , drop = FALSE]
+
     result <- switch(
         method,
-        random             = uniform_archetypes(X, K, ...),
-        dirichlet          = dirichlet(X, K, ...),
-        furthest_first     = furthest_first(X, K, ...),
-        kmeans_pp          = kmeans_pp(X, K, ...),
-        furthest_sum       = furthest_sum(X, K, ...),
-        aa_pp              = aa_pp(X, K, ...),
-        aa_pp_mc           = aa_pp_mc(X, K, batch_size = batch_size, ...),
-        hull_outmost       = hull_outmost(
+        random             = uniform_archetypes(X_init, K, ...),
+        dirichlet          = dirichlet(X_init, K, ...),
+        furthest_first     = furthest_first(X_init, K, ...),
+        kmeans_pp          = kmeans_pp(X_init, K, ...),
+        furthest_sum       = furthest_sum(X_init, K, ...),
+        aa_pp              = aa_pp(
             X,
+            K,
+            batch_size = batch_size,
+            batch_type = batch_type,
+            batch_replace = batch_replace,
+            ...
+        ),
+        hull_outmost       = hull_outmost(
+            X_init,
             K,
             hull_method = hull_method,
             projected_dim = projected_dim,
@@ -168,10 +189,60 @@ aa_init <- function(X,
             n_projection_max = n_projection_max,
             use_unique_candidates = use_unique_candidates,
             ...
-        ),
-        coreset_initfn     = coreset_initfn(X, K, m = m, ...)
+        )
     )
-    if (is.list(result)) result else .ind_to_init(X, result, sparse = sparse)
+    if (is.list(result)) {
+        if (is.null(batch_size))
+            return(result)
+        return(.aa_expand_init_batch(result, X, batch, sparse = sparse))
+    }
+    if (method == "aa_pp")
+        return(.ind_to_init(X, result, sparse = sparse))
+    .ind_to_init(X, batch[result], sparse = sparse)
+}
+
+.aa_validate_batch_size <- function(batch_size, n, K, replace = FALSE) {
+    if (is.null(batch_size))
+        return(NULL)
+    stopifnot("`batch_size` must be a positive integer at least K" =
+                  is_count(batch_size, start_from = K))
+    if (!replace) {
+        stopifnot("`batch_size` must be no larger than the number of samples when `batch_replace = FALSE`" =
+                      batch_size <= n)
+    }
+    as.integer(batch_size)
+}
+
+.aa_sample <- function(x,
+                       size = NULL,
+                       type = "distal",
+                       replace = FALSE) {
+    nr <- nrow(x)
+    has_rows <- !is.null(nr)
+    n <- if (has_rows) nr else length(x)
+    if (is.null(size))
+        return(seq_len(n))
+    prob <- if (!has_rows && identical(type, "distal")) {
+        x
+    } else if (identical(type, "distal")) {
+        .dist2(x, center = TRUE)
+    } else {
+        NULL
+    }
+    sample(n, size = size, replace = replace, prob = prob)
+}
+
+.aa_expand_init_batch <- function(init, X, batch, sparse = FALSE) {
+    B_batch <- init[["B"]]
+    B <- matrix(0, nrow = nrow(B_batch), ncol = nrow(X))
+    B[, batch] <- B_batch
+    rownames(B) <- rownames(B_batch)
+    colnames(B) <- rownames(X)
+    if (sparse)
+        B <- as(B, "sparseMatrix")
+    A <- as.matrix(B %*% X)
+    rownames(A) <- rownames(B)
+    list(A = A, B = B)
 }
 
 uniform_archetypes <- function(X, K, ...) sample(nrow(X), K, replace = FALSE)
@@ -182,7 +253,7 @@ furthest_first <- function(X, K, distances = NULL, center_dists = NULL, ...) {
 
     # 1) randomly select the first archetype
     dists <- center_dists %||% .dist2(X, center = TRUE)
-    b[1L] <- .sample_distal_points(dists, 1L)
+    b[1L] <- .aa_sample(dists, size = 1L, replace = TRUE)
 
     # 2) compute next K-1 archetypes by selecting the furthest from current set
     for (k in seq_len(K - 1L)) {
@@ -201,12 +272,12 @@ kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"),
 
     # 1) randomly select the first archetype
     dists <- center_dists %||% .dist2(X, center = TRUE)
-    b[1L] <- .sample_distal_points(dists, 1L)
+    b[1L] <- .aa_sample(dists, size = 1L, replace = TRUE)
 
     # 2) compute next K-1 archetypes by sampling from the points furthest from the current set
     for (k in seq_len(K - 1)) {
         dists <- .dist_to_nearest_archetype(X, b[1:k], distances = distances)
-        b[k + 1L] <- .sample_distal_points(dists, 1L)
+        b[k + 1L] <- .aa_sample(dists, size = 1L, replace = TRUE)
     }
 
     b
@@ -254,78 +325,70 @@ furthest_sum <- function(X, K, distances = NULL, refinement_steps = 10L, ...) {
     b
 }
 
-coreset_initfn <- function(X, K, m, ...) {
-    # Coresets for Archetypal Analysis - Mair and Brefeld, 2019
-    # https://github.com/smair/archetypalanalysis-coreset/blob/master/code/coresets.py
-    # https://github.com/smair/archetypalanalysis-coreset/blob/master/code/experiments.py
-    # m: cardinality of coreset
-
-    q <- .dist2(X, center = TRUE)  # distances from the mean
-    coreset <- .sample_distal_points(q, m)
-    b <- furthest_sum(X[coreset, , drop = FALSE], K, ...)
-    coreset[b]
-}
-
-aa_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"), ...) {
+aa_pp <- function(X,
+                  K,
+                  sparse = inherits(X, "sparseMatrix"),
+                  batch_size = NULL,
+                  batch_type = c("distal", "uniform"),
+                  batch_replace = FALSE,
+                  ...) {
     # A++ initialization for Archetypal Analysis - Mair and Brefeld, 2019
 
     # if K is 2 AA++ reduces to kmeans++
-    if (K == 2) return(kmeans_pp(X, K, ...))
+    if (K == 2 && is.null(batch_size)) return(kmeans_pp(X, K, ...))
 
     b <- integer(K)  # indices of archetypes
 
     # 1) randomly select the first archetype
-    b[1L] <- sample(nrow(X), 1L)
+    first_batch <- .aa_sample(
+        X,
+        size = batch_size,
+        type = batch_type,
+        replace = batch_replace
+    )
+    b[1L] <- sample(first_batch, 1L)
 
     # 2) sample the second archetype from points distal to the first
-    b[2L] <- .sample_distal_points(.dist2(X, X[b[1], ]), 1L)
+    available <- setdiff(seq_len(nrow(X)), b[1L])
+    second_batch_size <- if (is.null(batch_size)) NULL else min(batch_size, length(available))
+    second_batch <- .aa_sample(
+        X[available, , drop = FALSE],
+        size = second_batch_size,
+        type = batch_type,
+        replace = batch_replace
+    )
+    second_candidates <- available[second_batch]
+    b[2L] <- second_candidates[
+        .aa_sample(.dist2(X[second_candidates, , drop = FALSE], X[b[1L], ]),
+                   size = 1L,
+                   replace = TRUE)
+    ]
+    if (K == 2)
+        return(b)
 
     # 3) compute the first K-2 archetypes by iteratively running AA and sampling
     # from the points distal to the current archetype convex-hull.
     eps <- ifelse(sparse, 1e-8, 0)
     for (k in 3:K) {
         A <- X[b[1:(k - 1)], , drop = FALSE]  # current archetypes
-        S <- proj_l1(fit_nnls(X, t(A)), eps = eps)
-        res <- X - S %*% A
-        dists <- rowSums(res * res)  # squared residuals
-        b[k] <- .sample_distal_points(dists, 1L)
-    }
-    b
-}
 
-aa_pp_mc <- function(X, K, batch_size = m, m = NULL, ...) {
-    # AA++ initialization for Archetypal Analysis - Mair and Brefeld, 2019
-    # approximate AA++ initialization by sampling m points each time
-
-    # if K is 2 AA++ reduces to kmeans++
-    if (K == 2) return(kmeans_pp(X, K, ...))
-
-    # if n equal m it reduces to AA++
-    if (nrow(X) == batch_size) return(aa_pp(X, K, ...))
-
-    # 1) randomly select the first archetype
-    b <- integer(K)  # indices of archetypes
-    b[1] <- sample(nrow(X), 1L)
-
-    # 2) sample the second archetype from points distal to the first
-    b[2] <- .sample_distal_points(.dist2(X, X[b[1], ]), 1L)
-
-    # 3) compute the first K-2 archetypes by iteratively running AA.
-    eps <- ifelse(inherits(X, "sparseMatrix"), 1e-8, 0)
-    for (k in 3:K) {
-        A <- X[b[1:(k - 1)], , drop = FALSE]  # current archetypes
-
-        batch <- sample(nrow(X), batch_size, replace = TRUE)
-        S <- proj_l1(fit_nnls(X[batch, , drop = FALSE], t(A)), eps = eps)
-        res <- X[batch, , drop = FALSE] - S %*% A
+        available <- setdiff(seq_len(nrow(X)), b[1:(k - 1)])
+        current_batch_size <- if (is.null(batch_size)) NULL else min(batch_size, length(available))
+        batch <- .aa_sample(
+            X[available, , drop = FALSE],
+            size = current_batch_size,
+            type = batch_type,
+            replace = batch_replace
+        )
+        candidates <- available[batch]
+        X_candidates <- X[candidates, , drop = FALSE]
+        S <- proj_l1(fit_nnls(X_candidates, t(A)), eps = eps)
+        res <- X_candidates - S %*% A
         dists <- rowSums(res * res)  # squared residuals
         dists[!is.finite(dists)] <- 0
-
-        ib <- 1L
-        for (j in seq_along(dists))
-            if (dists[j] > stats::runif(1) * dists[ib])
-                ib <- j
-        b[k] <- batch[ib]
+        b[k] <- candidates[
+            .aa_sample(dists, size = 1L, replace = TRUE)
+        ]
     }
     b
 }
@@ -513,17 +576,6 @@ hull_outmost <- function(X,
 }
 
 # Sample points proportionally to their distance from a reference point
-.sample_distal_points <- function(dists, size = 1) {
-    N <- length(dists)
-    p <- as.numeric(dists)
-    p[!is.finite(p)] <- 0
-    p[p < 0] <- 0
-    if (sum(p) <= 0)
-        return(sample(N, size = size, replace = TRUE))
-
-    sample(N, size = size, replace = TRUE, prob = p)
-}
-
 .aa_normalize_row_indices <- function(ind, n, row_names = NULL) {
     stopifnot(mode(ind) %in% c("numeric", "logical", "character"))
     if (mode(ind) == "logical") {

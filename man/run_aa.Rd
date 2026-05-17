@@ -78,12 +78,13 @@ furthest-first).}
 \item{\code{"random"}}{uniformly random sample of K rows.}
 \item{\code{"dirichlet"}}{random convex combinations sampled from a
 Dirichlet distribution. Default for \code{"directional"}.}
-\item{\code{"aa_pp"} / \code{"aa_pp_mc"}}{AA++ and its MCMC approximation
-(Mair & Sjölund 2023).}
-\item{\code{"coreset_initfn"}}{furthest-sum on a coreset subsample
-(Mair & Brefeld 2019).}
+\item{\code{"aa_pp"}}{AA++ initialization (Mair & Sjölund 2023). Pass
+\code{batch_size} in \code{init_args} to use a Monte Carlo-inspired variant.}
 \item{\code{"hull_outmost"}}{hull-candidate outmost-vote ranking.}
 }
+Any initializer can receive \code{batch_size}, \code{batch_type}, and
+\code{batch_replace} through \code{init_args}; \code{batch_type = "distal"} implements
+coreset-style candidate sampling (Mair & Brefeld 2019).
 See \code{vignette("initialization", package = "YAAAP")} for a comparison.}
 
 \item{init_args}{list of additional arguments for the initialization function.}

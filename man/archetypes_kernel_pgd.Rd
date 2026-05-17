@@ -116,6 +116,12 @@ data but less efficient.
 To use a precomputed Gram matrix, compute it externally, pass it as \code{x},
 and set \code{kernel = "precomputed"}. Supply the original data as the \code{data}
 argument if you want input-space \code{coordinates} in the output.
+
+Kernel initializers that can be expressed through row selections or
+coefficient matrices are supported: \code{"random"}, \code{"furthest_first"},
+\code{"kmeans_pp"}, \code{"furthest_sum"}, and \code{"dirichlet"}. Candidate batching can
+be requested through \code{init_args = list(batch_size = ..., batch_type = ...)};
+distal batching uses distances implied by the Gram matrix.
 }
 
 \subsection{Archetype coordinates}{

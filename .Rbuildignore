@@ -4,3 +4,12 @@
 ^\.lintr$
 ^\.positai$
 ^\.claude$
+^\.gitignore$
+^\.Rhistory$
+^vignettes/\.Rhistory$
+^\.git$
+^\.vscode$
+^\.\.Rcheck$
+^vignettes/.*\.html$
+^vignettes/.*_cache$
+^vignettes/.*_files$

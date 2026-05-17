@@ -5,19 +5,13 @@ test_that("aa_init covers every initialization method", {
         "furthest_first",
         "kmeans_pp",
         "furthest_sum",
-        "coreset_initfn",
         "aa_pp",
-        "aa_pp_mc",
         "hull_outmost"
     )
 
     for (method in methods) {
         set.seed(1)
         args <- list(X = X, K = 3L, method = method)
-        if (method == "coreset_initfn")
-            args[["m"]] <- 25L
-        if (method == "aa_pp_mc")
-            args[["batch_size"]] <- 25L
         if (method == "hull_outmost")
             args[["hull_method"]] <- "projected"
 
@@ -34,8 +28,12 @@ test_that("aa_init covers every initialization method", {
 test_that("aa_init validates required method arguments", {
     X <- scale(toy_matrix())
 
-    expect_error(aa_init(X, K = 3L, method = "coreset_initfn"), "m")
-    suppressWarnings(expect_error(aa_init(X, K = 3L, method = "aa_pp_mc")))
+    expect_error(aa_init(X, K = 3L, method = "coreset_initfn"), "should be one of")
+    expect_error(aa_init(X, K = 3L, method = "aa_pp_mc", batch_size = 25L), "should be one of")
+    expect_error(aa_init(X, K = 3L, method = "random", batch_size = 2L), "batch_size")
+    expect_error(aa_init(X, K = 3L, method = "random", batch_size = nrow(X) + 1L), "batch_size")
+    expect_error(aa_init(X, K = 3L, method = "random", batch_type = "bad"), "should be one of")
+    expect_error(aa_init(X, K = 3L, method = "random", batch_replace = NA), "batch_replace")
     expect_error(aa_init(X, K = 3L, method = "hull_outmost", hull_method = "bad"),
                  "should be one of")
     expect_error(aa_init(X, K = 3L, method = "hull_outmost", projected_dim = 0),
@@ -102,6 +100,47 @@ test_that("aa_init passes refinement_steps to furthest_sum", {
     expect_named(init, c("A", "B"))
     expect_matrix_dim(init[["A"]], 4L, 2L)
     expect_matrix_dim(init[["B"]], 4L, 20L)
+    expect_row_stochastic(init[["B"]])
+    expect_equal(init[["A"]], init[["B"]] %*% X, tolerance = 1e-8)
+})
+
+test_that("aa_init applies distal batching by default", {
+    X <- rbind(
+        matrix(0, nrow = 8L, ncol = 2L),
+        c(10, 0),
+        c(-5, 8.660254),
+        c(-5, -8.660254)
+    )
+
+    set.seed(1)
+    init <- aa_init(X, K = 3L, method = "random", batch_size = 3L)
+
+    selected <- which(colSums(init[["B"]]) > 0)
+    expect_equal(sort(selected), 9:11)
+    expect_equal(init[["A"]], init[["B"]] %*% X, tolerance = 1e-8)
+})
+
+test_that("batched dirichlet uses only sampled candidate rows", {
+    X <- scale(toy_matrix())[1:20, , drop = FALSE]
+
+    set.seed(11)
+    init <- aa_init(X, K = 4L, method = "dirichlet", batch_size = 6L)
+
+    active <- which(colSums(init[["B"]]) > 0)
+    expect_length(active, 6L)
+    expect_row_stochastic(init[["B"]])
+    expect_equal(init[["A"]], init[["B"]] %*% X, tolerance = 1e-8)
+})
+
+test_that("aa_pp accepts batch_size as its mini-batch approximation", {
+    X <- scale(toy_matrix())[1:30, , drop = FALSE]
+
+    set.seed(12)
+    init <- aa_init(X, K = 4L, method = "aa_pp", batch_size = 10L, batch_type = "uniform")
+
+    expect_named(init, c("A", "B"))
+    expect_matrix_dim(init[["A"]], 4L, 2L)
+    expect_matrix_dim(init[["B"]], 4L, 30L)
     expect_row_stochastic(init[["B"]])
     expect_equal(init[["A"]], init[["B"]] %*% X, tolerance = 1e-8)
 })
