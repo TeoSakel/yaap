@@ -20,7 +20,6 @@ archetypes_nnls(
   max_kappa = 1000,
   eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
-  ols_solver = c("qr", "ginv", "BFGS"),
   bigM = NULL,
   max_no_update = 5L
 )
@@ -58,15 +57,13 @@ archetypes_nnls(
 
 \item{verbose}{whether to print progress messages (default: FALSE)}
 
-\item{ols_solver}{method for solving the OLS problem min_A X = SA (default: "qr")}
-
 \item{bigM}{large constant to enforce simplex constraint, or \code{NULL} to set it automatically.}
 
 \item{max_no_update}{maximum consecutive iterations without improvement before
 considering NNLS stalled (default: 5)}
 }
 \value{
-An object of class \code{\link{archetypes}}.
+An object of class \code{archetypes}.
 }
 \description{
 Fits archetypal analysis (AA) by alternating between a non-negative
@@ -87,13 +84,7 @@ gradient descent, such as sparse inputs.
 \subsection{OLS and big-M}{
 
 The A-update solves \verb{min_A ||X - SA||_F^2} as an unconstrained least-squares
-problem. Three solvers are available via \code{ols_solver}:
-
-\describe{
-\item{\code{"qr"}}{QR factorisation via \code{qr.solve()}; fast and numerically stable (default).}
-\item{\code{"ginv"}}{Moore-Penrose pseudoinverse via \code{MASS::ginv()}; use when S is rank-deficient.}
-\item{\code{"BFGS"}}{Gradient-based optimisation; slow, provided for reference.}
-}
+problem via QR factorisation.
 
 \code{bigM} is the weight of the row appended to enforce the sum-to-one constraint.
 When \code{NULL} (default) it is set automatically from the data scale. Increase it

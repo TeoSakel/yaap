@@ -44,3 +44,46 @@ test_that("fit_simplex projects data onto archetype simplex", {
     expect_named(as.data.frame(S), rownames(A))
     expect_row_stochastic(S)
 })
+
+test_that("fit_simplex QP path errors when quadprog is unavailable", {
+    A <- matrix(c(0, 0, 1, 0, 0, 1), ncol = 2L, byrow = TRUE)
+    X <- matrix(c(0.2, 0.2), ncol = 2L)
+
+    testthat::local_mocked_bindings(
+        .aa_require_namespace = function(pkg, feature) {
+            stop("mocked missing quadprog", call. = FALSE)
+        },
+        .package = "YAAAP"
+    )
+
+    expect_error(
+        fit_simplex(A, X, method = "QP"),
+        "mocked missing quadprog"
+    )
+})
+
+test_that("matrix initialization reports missing quadprog clearly", {
+    X <- matrix(
+        c(
+            0, 0,
+            1, 0,
+            0, 1
+        ),
+        ncol = 2L,
+        byrow = TRUE
+    )
+    init <- X
+
+    testthat::local_mocked_bindings(
+        .aa_require_namespace = function(pkg, feature) {
+            stop(sprintf("missing %s for %s", pkg, feature), call. = FALSE)
+        },
+        .package = "YAAAP"
+    )
+
+    expect_error(
+        .aa_matrix_init(X, K = 3L, init = init, eps = 0),
+        "missing quadprog for matrix-valued `init`",
+        fixed = TRUE
+    )
+})

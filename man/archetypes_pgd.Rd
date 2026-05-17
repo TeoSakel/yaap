@@ -84,7 +84,7 @@ missing and sparse structural zeros are treated as missing.}
 line-search update before PGD stops as stalled (default: 5)}
 }
 \value{
-An object of class \code{\link{archetypes}}
+An object of class \code{archetypes}
 }
 \description{
 Fits an archetypal analysis (AA) model by minimising the reconstruction error

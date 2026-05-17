@@ -114,7 +114,7 @@
 #' case.  Sample-level `weights` re-weight rows in the loss but do not affect
 #' the preprocessing step.
 #'
-#' @returns An object of class \code{\link{archetypes}}
+#' @returns An object of class \code{archetypes}
 #'
 #' @examples
 #' toy <- read.csv(system.file("extdata", "toy.csv", package = "YAAAP"))
@@ -754,9 +754,7 @@ archetypes_pgd <- function(x,
 
     row_rss <- .aa_trace_row_rss(row_xss, S, XAt, AAt)
     row_weights <- weight_fun(row_rss)
-    .aa_check_row_weights(row_weights, nrow(X))
-    if (.aa_trivial_row_weights(row_weights))
-        row_weights <- NULL
+    row_weights <- .aa_check_row_weights(row_weights, nrow(X))
 
     S_weighted <- .aa_weight_rows(S, row_weights)
     StS <- crossprod(S_weighted, S)

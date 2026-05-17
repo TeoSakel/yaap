@@ -13,7 +13,7 @@ coordinates_fd(
 )
 }
 \arguments{
-\item{object}{An object of class \code{\link{archetypes}}.}
+\item{object}{An object of class \code{archetypes}.}
 
 \item{data}{Optional \code{fda::fd} object to use as the source for the basis and
 functional data names. Defaults to \code{object$data}.}

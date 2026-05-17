@@ -45,7 +45,7 @@
 #' instead for a more efficient solver with support for missing data, sample
 #' weights, and metric scaling.
 #'
-#' @returns An object of class \code{\link{archetypes}}.
+#' @returns An object of class \code{archetypes}.
 #'
 #' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'

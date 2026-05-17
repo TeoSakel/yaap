@@ -67,7 +67,7 @@
 #' on the hemisphere.
 #'
 #' @returns An object of class \code{\link{directional_archetypes}}, extending
-#'   \code{\link{archetypes}}.
+#'   \code{archetypes}.
 #'
 #' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'

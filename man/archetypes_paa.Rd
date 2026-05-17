@@ -56,7 +56,7 @@ archetypes_paa(
 line-search update before stopping as stalled (default: 5)}
 }
 \value{
-An object of class \code{\link{archetypes}}.
+An object of class \code{archetypes}.
 }
 \description{
 Fits probabilistic archetypal analysis (PAA) by minimising the

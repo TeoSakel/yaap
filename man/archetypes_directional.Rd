@@ -67,7 +67,7 @@ line-search update before stopping as stalled (default: 5)}
 }
 \value{
 An object of class \code{\link{directional_archetypes}}, extending
-\code{\link{archetypes}}.
+\code{archetypes}.
 }
 \description{
 Fits directional archetypal analysis (DAA) via projected gradient descent,

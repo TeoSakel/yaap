@@ -932,7 +932,7 @@ AIC.kernel_archetypes <- function(object, ...)
 #' is mainly useful for models fitted with [run_aa()] on `fda::fd` input, where
 #' the optimizer stores coordinates as a coefficient matrix.
 #'
-#' @param object An object of class \code{\link{archetypes}}.
+#' @param object An object of class \code{archetypes}.
 #' @param data Optional `fda::fd` object to use as the source for the basis and
 #'   functional data names. Defaults to `object$data`.
 #' @param basis Optional `fda` basis object. Used when `data` is not available.

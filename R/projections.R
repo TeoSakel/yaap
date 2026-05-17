@@ -123,7 +123,10 @@ fit_qp <- function(A,
                    project = NULL,
                    lambda = 1e-8,
                    row_sum_bounds = c(1, 1),
+                   feature = 'fit_simplex(method = "QP")',
                    ...) {
+
+    .aa_require_namespace("quadprog", feature)
 
     N <- nrow(X)
     K <- nrow(A)

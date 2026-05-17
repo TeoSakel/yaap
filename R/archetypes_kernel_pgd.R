@@ -83,7 +83,7 @@
 #' alternative view of their positions in the feature space.
 #'
 #' @returns An object of class \code{\link{kernel_archetypes}}, extending
-#'   \code{\link{archetypes}}.
+#'   \code{archetypes}.
 #'
 #' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'
@@ -305,11 +305,7 @@ archetypes_kernel_pgd <- function(x,
     XAt <- G %*% t(aB)
     row_rss <- pmax(diagG - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
     row_weights <- if (is.null(weight_fun)) NULL else weight_fun(row_rss)
-    if (!is.null(row_weights)) {
-        .aa_check_row_weights(row_weights, nrow(G))
-        if (.aa_trivial_row_weights(row_weights))
-            row_weights <- NULL
-    }
+    row_weights <- .aa_check_row_weights(row_weights, nrow(G))
     xss <- sum(.aa_weight_rows(diagG, row_weights))
     rss <- sum(.aa_weight_rows(row_rss, row_weights))
     S_weighted <- .aa_weight_rows(S, row_weights)
@@ -399,9 +395,7 @@ archetypes_kernel_pgd <- function(x,
         row_rss <- pmax(diagG - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
         if (!is.null(weight_fun)) {
             row_weights <- weight_fun(row_rss)
-            .aa_check_row_weights(row_weights, nrow(G))
-            if (.aa_trivial_row_weights(row_weights))
-                row_weights <- NULL
+            row_weights <- .aa_check_row_weights(row_weights, nrow(G))
             xss <- sum(.aa_weight_rows(diagG, row_weights))
             rss <- sum(.aa_weight_rows(row_rss, row_weights))
             S_weighted <- .aa_weight_rows(S, row_weights)

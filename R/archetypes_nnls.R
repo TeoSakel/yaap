@@ -1,7 +1,7 @@
 #' Archetypal Analysis using Non-Negative Least Squares
 #'
 #' Fits archetypal analysis (AA) by alternating between a non-negative
-#' least-squares (NNLS) step for sample compositions and an ordinary
+#' least-squares (NNLS) step for convex-mixtures ($S$, $B$) and an ordinary
 #' least-squares (OLS) step for archetype coordinates.
 #'
 #' @param x data matrix (rows = samples, columns = dimensions)
@@ -13,7 +13,8 @@
 #'   [archetypes_pgd()] for details (default: TRUE).
 #' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
 #' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
-#' @param sd_threshold threshold for feature standard deviation to filter low-variance features (default: 1e-6).
+#' @param sd_threshold threshold for feature standard deviation to filter
+#'   low-variance features (default: 1e-6).
 #' @param max_iter maximum number of iterations (default: 100)
 #' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
 #' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
@@ -21,10 +22,10 @@
 #' @param eps small positive number to ensure numerical stability
 #'   (default: 0 for sparse input 1e-8 for dense)
 #' @param verbose whether to print progress messages (default: FALSE)
-#' @param ols_solver method for solving the OLS problem min_A X = SA (default: "qr")
-#' @param bigM large constant to enforce simplex constraint, or `NULL` to set it automatically.
-#' @param max_no_update maximum consecutive iterations without improvement before
-#'   considering NNLS stalled (default: 5)
+#' @param bigM large constant to enforce simplex constraint,
+#'   or `NULL` to set it automatically.
+#' @param max_no_update maximum consecutive iterations without improvement
+#'   before considering NNLS stalled (default: 5)
 #'
 #' @details
 #' ## NNLS solver
@@ -34,25 +35,20 @@
 #' The NNLS solver reformulates each S-update as a non-negative least-squares
 #' problem with a simplex-constraint row appended (the "big-M" trick), making it
 #' well-suited for settings where NNLS is more numerically stable than projected
-#' gradient descent, such as sparse inputs.
+#' gradient descent, such as sparse inputs. The archetype composition matrix B
+#' is also updated via NNLS.
 #'
 #' ## OLS and big-M
 #'
 #' The A-update solves `min_A ||X - SA||_F^2` as an unconstrained least-squares
-#' problem. Three solvers are available via `ols_solver`:
+#' problem via QR factorisation.
 #'
-#' \describe{
-#'   \item{`"qr"`}{QR factorisation via `qr.solve()`; fast and numerically stable (default).}
-#'   \item{`"ginv"`}{Moore-Penrose pseudoinverse via `MASS::ginv()`; use when S is rank-deficient.}
-#'   \item{`"BFGS"`}{Gradient-based optimisation; slow, provided for reference.}
-#' }
+#' `bigM` is the weight of the row appended to enforce the simplex (sum-to-one) constraint.
+#' When `NULL` (default) it is set automatically based heuristics. If it fails
+#' to enforce the simplex constraint, warning messages will ask you to increase it.
+#' if the solver is slow or numerically unstable try decreasing it.
 #'
-#' `bigM` is the weight of the row appended to enforce the sum-to-one constraint.
-#' When `NULL` (default) it is set automatically from the data scale. Increase it
-#' if compositions drift from the simplex; decrease it if the solver is slow or
-#' numerically unstable.
-#'
-#' @returns An object of class \code{\link{archetypes}}.
+#' @returns An object of class \code{archetypes}.
 #'
 #' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'
@@ -80,10 +76,9 @@ archetypes_nnls <- function(x,
                             max_kappa = 1000,
                             eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                             verbose = FALSE,
+                            max_no_update = 5L,
                             # NNLS specific
-                            ols_solver = c("qr", "ginv", "BFGS"),
-                            bigM = NULL,
-                            max_no_update = 5L) {
+                            bigM = NULL) {
     .aa_fit_engine(
         call = match.call(),
         x = x,
@@ -102,17 +97,14 @@ archetypes_nnls <- function(x,
         max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
-        ols_solver = ols_solver,
         bigM = bigM,
         max_no_update = max_no_update
     )
 }
 
 .aa_nnls_block <- function(ctx,
-                           ols_solver = c("qr", "ginv", "BFGS"),
                            bigM = NULL,
                            max_no_update = 5L) {
-    ols_solver <- match.arg(ols_solver)
     list(
         check = function(ctx) {
             .aa_euclidean_check(ctx)
@@ -145,7 +137,6 @@ archetypes_nnls <- function(x,
                     ),
                     init_vars,
                     list(
-                        ols_solver = ols_solver,
                         max_no_update = as.integer(max_no_update)
                     )
                 )
@@ -169,9 +160,9 @@ archetypes_nnls <- function(x,
     }
 
     xss <- xss %||% norm(X, "F")^2  # computed once
-    AAt <- tcrossprod(A)     # (K x K) archetype Gram matrix
-    XAt <- tcrossprod(X, A)  # (N x K) projection of data onto archetypes
-    StS <- crossprod(S)      # (K x K) archetype score Gram matrix
+    AAt <- tcrossprod(A)     # (K x K)
+    XAt <- tcrossprod(X, A)  # (N x K)
+    StS <- crossprod(S)      # (K x K)
     rss <- xss - 2 * sum(S * XAt) + sum(StS * AAt)
 
     list(
@@ -198,9 +189,7 @@ archetypes_nnls <- function(x,
 
     row_rss <- .aa_trace_row_rss(row_xss, S, XAt, AAt)
     row_weights <- weight_fun(row_rss)
-    .aa_check_row_weights(row_weights, nrow(X))
-    if (.aa_trivial_row_weights(row_weights))
-        row_weights <- NULL
+    row_weights <- .aa_check_row_weights(row_weights, nrow(X))
 
     S_weighted <- .aa_weight_rows(S, row_weights)
     list(
@@ -230,7 +219,6 @@ archetypes_nnls <- function(x,
                          B,
                          S,
                          loss,
-                         ols_solver,
                          max_no_update) {
     # Nomenclature following arXiv:2504.12392v1:
     #   X ~ SA (N x M) Data Matrix
@@ -284,8 +272,13 @@ archetypes_nnls <- function(x,
         S_raw <- fit_nnls(X, t(A), use_svd = FALSE) # Project X to A-simplex
         max_simplex_error <- max(max_simplex_error, max(abs(rowSums(S_raw) - 1)))
         S <- project(S_raw, eps = eps)
-        # A update
-        A <- fit_ols(S, X, method = ols_solver, row_weights = row_weights)
+        # A update: X = SA
+        if (is.null(row_weights)) {
+            A <- qr.solve(S, X)
+        } else {
+            sqrt_weights <- sqrt(row_weights)
+            A <- qr.solve(S * sqrt_weights, X * sqrt_weights)
+        }
         # B update
         B_raw <- fit_nnls(A, Xt, use_svd = FALSE) # Project A to X-simplex
         max_simplex_error <- max(max_simplex_error, max(abs(rowSums(B_raw) - 1)))
@@ -382,54 +375,4 @@ fit_nnls <- function(Y, X, use_svd = FALSE) {
     for (i in seq_len(nrow(Y)))
         Beta[i, ] <- stats::coef(nnls::nnls(X, Y[i, ]))
     Beta
-}
-
-# Fit Ordinary Least Squares (OLS) for every column of X
-#
-# This function solves the problem: $\min_{A} ||X - SA||_F$
-#
-# @param S data matrix (rows = samples, columns = archetypes)
-# @param X data matrix (rows = samples, columns = dimensions)
-# @param method method to use for solving the OLS problem (default: "qr")
-# @param a0 initial guess for the coefficients (optional)
-# @param row_weights optional vector of row weights
-# @param ... additional arguments passed to the solver
-fit_ols <- function(S, X, method, a0 = NULL, row_weights = NULL, ...) {
-    # Solve min ||X - S %*% A||_F
-    if (!.aa_trivial_row_weights(row_weights)) {
-        sqrt_weights <- sqrt(row_weights)
-        S <- S * sqrt_weights
-        X <- X * sqrt_weights
-    }
-
-    if (tolower(method) == "qr") return(qr.solve(S, X))
-    if (tolower(method) == "ginv") return(MASS::ginv(S) %*% X)
-    # TODO: test if computing Gram matrix is faster than using `qr.solve` or `ginv`
-    # TODO: if "qr" return StS from Gram matrix as it's part of computation
-    # A = solve(t(S) %*% S) %*% t(S) %*% X
-
-    # method is one of the `optim` methods (if not an error will be thrown)
-    M <- ncol(X)
-    K <- ncol(S)
-    a0 <- a0 %||% apply(X, 2L, function(x) stats::rnorm(K, mean(x), stats::sd(x)))  # random initial guess
-
-    a0 <- as.vector(a0)
-    stopifnot(length(a0) == K * M)
-
-    # Squared Frobenius objective for smooth BFGS optimization.
-    fn <- function(a) {
-        A <- matrix(a, nrow = K, ncol = M)
-        R <- X - S %*% A
-        norm(R, "F")^2
-    }
-
-    # d/dA ||X - S %*% A||_F^2 = -2 * t(S) %*% (X - S %*% A)
-    gr <- function(a) {
-        A <- matrix(a, nrow = K, ncol = M)
-        R <- X - S %*% A
-        as.vector(-2 * crossprod(S, R))
-    }
-
-    res <- stats::optim(a0, fn, gr, method = method)
-    matrix(res$par, nrow = K, ncol = M)
 }

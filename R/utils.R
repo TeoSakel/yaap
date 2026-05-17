@@ -39,6 +39,33 @@ is_all_positive <- function(x) is_all_finite(x) && all(x > 0)
 
 is_all_non_negative <- function(x) is_all_finite(x) && all(x >= 0)
 
+.aa_require_namespace <- function(pkg, feature) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+        err <- simpleError(
+            sprintf("Package `%s` is required for %s. Install it to use this path.", pkg, feature)
+        )
+        err[["pkg"]] <- pkg
+        err[["feature"]] <- feature
+        class(err) <- c("aa_missing_namespace_error", class(err))
+        stop(err)
+    }
+    invisible(TRUE)
+}
+
+.aa_ginv <- function(x, tol = sqrt(.Machine$double.eps)) {
+    s <- svd(x)
+    if (!length(s[["d"]]))
+        return(matrix(0, nrow = ncol(x), ncol = nrow(x)))
+
+    cutoff <- tol * max(s[["d"]])
+    keep <- s[["d"]] > cutoff
+    if (!any(keep))
+        return(matrix(0, ncol = nrow(x), nrow = ncol(x)))
+
+    s[["v"]][, keep, drop = FALSE] %*%
+        (t(s[["u"]][, keep, drop = FALSE]) / s[["d"]][keep])
+}
+
 is_row_stochastic <- function(x, tol = sqrt(.Machine$double.eps)) {
     Sx <- tryCatch(rowSums(x), error = function(e) NULL)
     if (is.null(Sx)) return(FALSE)
@@ -67,20 +94,18 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     ifelse(u <= c, (1 - (u / c)^2)^2, 0)
 }
 
-.aa_trivial_row_weights <- function(row_weights) {
-    is.null(row_weights) || all(row_weights == 1)
-}
-
 .aa_weight_rows <- function(X, row_weights = NULL) {
-    if (.aa_trivial_row_weights(row_weights))
+    if (is.null(row_weights))
         return(X)
     X * row_weights
 }
 
 .aa_check_row_weights <- function(row_weights, n) {
+    if (is.null(row_weights))
+        return(NULL)
     stopifnot("row_weights must match rows in X" = length(row_weights) == n)
     stopifnot("row_weights must be finite and non-negative" = is_all_non_negative(row_weights))
-    invisible(TRUE)
+    if (all(row_weights == 1)) NULL else row_weights
 }
 
 # Centered log-ratio transform after row closure, with zero replacement.
@@ -206,7 +231,7 @@ effic <- function(X, Y) {
     if (is.null(cx)) {
         warning("cov(X) is singular; using Moore-Penrose pseudo-inverse for efficiency.",
                 call. = FALSE)
-        return(sum(diag(MASS::ginv(Sx) %*% Sy)))
+        return(sum(diag(.aa_ginv(Sx) %*% Sy)))
     }
 
     # since trace(AB) = sum(A * t(B)) = sum(A * B) when symmetric
@@ -679,12 +704,24 @@ effic <- function(X, Y) {
     nm <- .aa_init_names(init)
     a_lo <- max(1 - delta, ifelse(eps > 0, eps, 1e-8))
     a_hi <- 1 + delta
-    B <- fit_qp(
-        A = X,
-        X = init,
-        eps = eps,
-        project = if (delta == 0) proj_l1 else NULL,
-        row_sum_bounds = c(a_lo, a_hi)
+    B <- tryCatch(
+        fit_qp(
+            A = X,
+            X = init,
+            eps = eps,
+            project = if (delta == 0) proj_l1 else NULL,
+            row_sum_bounds = c(a_lo, a_hi),
+            feature = "matrix-valued `init`"
+        ),
+        aa_missing_namespace_error = function(e) {
+            if (identical(e[["pkg"]], "quadprog")) {
+                stop(
+                    "Matrix-valued `init` requires the `quadprog` package. Install `quadprog` to use custom archetype coordinates.",
+                    call. = FALSE
+                )
+            }
+            stop(e)
+        }
     )
     A <- B %*% X
     err <- norm(A - init, type = "F")

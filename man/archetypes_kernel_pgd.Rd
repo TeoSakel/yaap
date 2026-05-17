@@ -78,7 +78,7 @@ line-search update before stopping as stalled (default: 5)}
 }
 \value{
 An object of class \code{\link{kernel_archetypes}}, extending
-\code{\link{archetypes}}.
+\code{archetypes}.
 }
 \description{
 Fits archetypal analysis (AA) in a reproducing kernel Hilbert space (RKHS)
