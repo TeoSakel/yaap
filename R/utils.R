@@ -163,7 +163,7 @@ scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
 }
 
 
-# Compute pairwise squared distances between columns of X and Y
+# Compute pairwise squared distances between rows of X and Y
 .pdist2 <- function(X, Y) {
     # both x and y must be in the same dimensional space
     stopifnot(ncol(X) == ncol(Y))
