@@ -1,0 +1,427 @@
+---
+title: "Tidymodels Workflows with yaap"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+vignette: >
+  %\VignetteIndexEntry{Tidymodels Workflows with yaap}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>",
+    fig.width = 7,
+    fig.height = 5,
+    fig.align = "center",
+    warning = FALSE
+)
+set.seed(42)
+par(bty = "n")
+```
+
+## Overview
+
+`yaap` fits archetypal analysis (AA) models. In a tidymodels workflow,
+it is best understood as an unsupervised decomposition or feature-extraction
+tool, closer in role to `recipes::step_pca()` than to a supervised `parsnip`
+model specification. `yaap` learns archetype coordinates and sample
+composition weights, then exposes those results through interfaces that work
+naturally with the tidymodels ecosystem:
+
+- `step_archetypes()` is a `recipes` step that learns archetypes during
+  `prep()` and returns archetype composition weights during `bake()`.
+- `tune_archetypes()` fits a grid of AA models over candidate values of `K`, the
+  number of archetypes.
+
+This vignette uses only lightweight pieces of the ecosystem. Because AA is an
+unsupervised representation method, the examples focus on preprocessing,
+feature extraction, and model inspection rather than on `parsnip` fitting.
+
+```{r libraries, message = FALSE}
+library(yaap)
+library(generics)
+library(recipes)
+library(tune)
+```
+
+The examples use the built-in `USArrests` data, the same data used in the
+`recipes::step_pca()` examples. The four numeric variables are on different
+scales, so the recipes below normalize them before fitting either PCA or AA.
+State regions are used only for visualization.
+
+```{r load-usarrests}
+arrests <- USArrests
+state <- rownames(arrests)
+region <- state.region[match(state, state.name)]
+region_cols <- c(
+    "Northeast" = "#0072B2",
+    "South" = "#D55E00",
+    "North Central" = "#009E73",
+    "West" = "#CC79A7"
+)
+
+head(data.frame(state = state, region = region, arrests, row.names = NULL))
+table(region)
+```
+
+```{r plot-usarrests, fig.cap = "USArrests data: murder and assault rates by state region."}
+plot(
+    arrests$Murder, arrests$Assault,
+    pch = 19, cex = 0.75,
+    col = region_cols[as.character(region)],
+    xlab = "Murder arrests per 100,000",
+    ylab = "Assault arrests per 100,000",
+    main = "USArrests",
+    frame.plot = FALSE
+)
+legend(
+    "topleft",
+    legend = names(region_cols),
+    col = region_cols,
+    pch = 19,
+    bty = "n"
+)
+```
+
+## Choosing K with Scree, Elbow, and AIC
+
+The main tuning parameter in archetypal analysis is `K`: the number of
+archetypes. A traditional exploratory approach, also familiar from the classic
+`archetypes` package, is to fit a sequence of models and inspect a screeplot or
+elbow plot. The elbow is the smallest `K` after which reconstruction quality
+improves only modestly.
+
+`yaap` also provides an adapted AIC-like criterion for Euclidean Gaussian AA
+models. This is a `yaap`-specific model-selection helper; it is not part of
+the classic `archetypes` package workflow. It is useful for comparing candidate
+`K` values on the same data, but it is still a model-selection aid rather
+than a substitute for scientific judgment.
+
+Here we fit `K = 1, ..., 6` to the normalized arrest variables. The
+one-archetype baseline is useful for RSS and $R^2$, but the adapted AIC can be
+undefined for `K = 1`, so we score the grid by RSS and compute AIC separately
+where it is defined.
+
+```{r k-selection-fit}
+rss <- function(fit) {
+    utils::tail(fit$loss$loss, 1L)
+}
+
+aic_or_na <- function(fit) {
+    if (nrow(fit$coordinates) == 1L) NA_real_ else AIC(fit)
+}
+
+arrests_scaled <- as.data.frame(scale(arrests))
+rownames(arrests_scaled) <- state
+
+set.seed(42)
+ens_k <- tune_archetypes(
+    arrests_scaled,
+    K = 1:6,
+    nrep = 1,
+    init = "furthest_sum",
+    max_iter = 100,
+    tol_r2 = 0,
+    max_kappa = Inf,
+    eval = rss,
+    eval_name = "rss"
+)
+
+k_tbl <- summary(ens_k)
+k_tbl$AIC <- vapply(ens_k$fits, aic_or_na, numeric(1L))
+selected_ix <- which.min(k_tbl$AIC)
+selected_K <- k_tbl$K[selected_ix]
+fit <- ens_k$fits[[selected_ix]]
+analysis_K <- 3L
+
+knitr::kable(
+    k_tbl[, c("K", "rss", "r2", "AIC")],
+    digits = c(0, 1, 3, 1)
+)
+```
+
+```{r k-selection-plot, results = "hold", fig.width = 9, fig.height = 3.5, out.width = "100%", fig.cap = "RSS, unexplained variance, and adapted AIC across candidate values of K."}
+op <- par(mfrow = c(1, 3), mar = c(4, 4, 2.5, 0.5), bty = "n")
+
+plot(
+    k_tbl$K, k_tbl$rss,
+    type = "b", pch = 19,
+    col = "steelblue4",
+    frame.plot = FALSE,
+    xlab = "Number of archetypes (K)",
+    ylab = "Reconstruction loss",
+    main = "RSS"
+)
+abline(v = selected_K, lty = 2, col = "firebrick")
+
+plot(
+    k_tbl$K, 1 - k_tbl$r2,
+    type = "b", pch = 19,
+    col = "steelblue4",
+    frame.plot = FALSE,
+    xlab = "Number of archetypes (K)",
+    ylab = expression(1 - R^2),
+    main = "Unexplained Variance"
+)
+abline(v = selected_K, lty = 2, col = "firebrick")
+
+plot(
+    k_tbl$K, k_tbl$AIC,
+    type = "b", pch = 19,
+    col = "steelblue4",
+    frame.plot = FALSE,
+    xlab = "Number of archetypes (K)",
+    ylab = "Adapted AIC",
+    main = "Information Criterion"
+)
+abline(v = selected_K, lty = 2, col = "firebrick")
+
+par(op)
+```
+
+For these normalized variables, the adapted AIC favours `K = 2`. The recipe
+examples below use `K = 3` as a visualization choice: it matches the familiar
+three-component `step_pca()` example and lets each state be drawn on a regular
+simplex by its three archetype composition weights.
+
+```{r best-model}
+k_tbl[selected_ix, c("K", "rss", "r2", "AIC")]
+selected_K
+analysis_K
+```
+
+In real analyses these plots should be treated as diagnostics, not as automatic
+rules. AA optimization is non-convex, so single-restart curves can be noisy and
+may not decrease monotonically for every larger `K`. Use more restarts and
+domain knowledge when the elbow or information criterion is ambiguous.
+
+## Using Archetypes in Recipes
+
+`step_archetypes()` turns AA into a preprocessing step. During `prep()`, the
+step fits archetypes on the selected numeric predictors. During `bake()`, it
+projects data onto the learned archetype simplex and returns one composition
+column per archetype.
+
+The recipes argument is called `num_comp`, following tidymodels naming
+conventions, but it is the same quantity as `K`.
+
+```{r recipe-fit}
+rec_base <- recipe(~ ., data = arrests) |>
+    step_normalize(all_numeric())
+
+rec <- rec_base |>
+    step_archetypes(
+        all_numeric(),
+        num_comp = analysis_K,
+        seed = 42,
+        options = list(
+            init = "furthest_sum",
+            max_iter = 100,
+            tol_r2 = 0,
+            max_kappa = Inf
+        )
+    )
+
+rec_prep <- prep(rec, training = arrests)
+rec_prep
+```
+
+```{r recipe-bake}
+baked <- bake(rec_prep, new_data = arrests)
+head(data.frame(state = state, region = region, baked, row.names = NULL))
+
+aa_cols <- paste0("A", seq_len(analysis_K))
+range(rowSums(as.matrix(baked[, aa_cols])))
+```
+
+By default, the original numeric predictors are removed and replaced by
+composition columns named `A1`, `A2`, and so on. Set
+`keep_original_cols = TRUE` when both the normalized predictors and archetype
+weights should be retained.
+
+```{r recipe-keep-original}
+rec_keep <- rec_base |>
+    step_archetypes(
+        all_numeric(),
+        num_comp = analysis_K,
+        keep_original_cols = TRUE,
+        seed = 42,
+        options = list(
+            max_iter = 100,
+            tol_r2 = 0,
+            max_kappa = Inf
+        )
+    ) |>
+    prep(training = arrests)
+
+head(data.frame(
+    state = state,
+    region = region,
+    bake(rec_keep, new_data = arrests),
+    row.names = NULL
+))
+```
+
+## Comparing `step_archetypes()` with `step_pca()`
+
+The closest tidymodels analogy for `yaap` is `recipes::step_pca()`: both steps
+learn an unsupervised representation of the numeric predictors during `prep()`.
+The outputs have different meanings. PCA returns orthogonal score columns such
+as `PC1`, `PC2`, and `PC3`; AA returns composition weights such as `A1`, `A2`,
+and `A3` that are non-negative and sum to one for each state.
+
+The two recipes below are trained in parallel on the same normalized arrest
+variables.
+
+```{r compare-pca-aa}
+rec_aa <- rec_base |>
+    step_archetypes(
+        all_numeric(),
+        num_comp = analysis_K,
+        seed = 42,
+        options = list(
+            init = "furthest_sum",
+            max_iter = 100,
+            tol_r2 = 0,
+            max_kappa = Inf
+        )
+    ) |>
+    prep(training = arrests)
+
+rec_pca <- rec_base |>
+    step_pca(all_numeric(), num_comp = analysis_K) |>
+    prep(training = arrests)
+
+aa_scores <- bake(rec_aa, new_data = arrests)
+pca_scores <- bake(rec_pca, new_data = arrests)
+
+head(data.frame(
+    state = state,
+    region = region,
+    pca_scores,
+    aa_scores,
+    row.names = NULL
+))
+```
+
+The PCA step returns orthogonal score columns. The AA step returns convex
+composition weights over three estimated archetypal states. Inspecting both
+trained steps highlights the difference: PCA loadings describe directions of
+variation, while AA coordinates describe extreme profiles in the normalized
+feature space.
+
+```{r compare-pca-aa-tidy}
+tidy(rec_pca, number = 2, type = "variance")
+tidy(rec_aa, number = 2)
+```
+
+```{r compare-pca-aa-plot, fig.width = 6, fig.height = 5, fig.cap = "PCA scores for USArrests, coloured by state region."}
+rng <- extendrange(c(pca_scores$PC1, pca_scores$PC2))
+plot(
+    pca_scores$PC1, pca_scores$PC2,
+    xlim = rng, ylim = rng,
+    pch = 19, cex = 0.75,
+    col = region_cols[as.character(region)],
+    xlab = "PC1", ylab = "PC2",
+    main = "step_pca()",
+    frame.plot = FALSE
+)
+abline(h = 0, v = 0, col = "grey85")
+legend(
+    "topleft",
+    legend = names(region_cols),
+    col = region_cols,
+    pch = 19,
+    bty = "n"
+)
+```
+
+The PCA plot is a rotated coordinate system for the original variables. The AA
+representation keeps mixture weights over interpretable extremes. Those weights
+can be inspected directly on the archetype simplex.
+
+## Declaring Tunable Parameters
+
+`step_archetypes()` declares `num_comp` and `delta` as tunable recipe
+parameters. This lets the step participate in a larger tidymodels tuning
+workflow when the rest of the modeling pipeline supplies resampling, metrics,
+and an outcome.
+
+```{r tunable}
+rec_tune <- rec_base |>
+    step_archetypes(
+        all_numeric(),
+        num_comp = tune(),
+        delta = tune()
+    )
+
+tunable(rec_tune$steps[[2L]])
+```
+
+For unsupervised AA exploration, `tune_archetypes()` is often the most direct
+tool. For supervised modeling pipelines, use `step_archetypes()` inside the
+broader tidymodels workflow and tune `num_comp` alongside the downstream model
+parameters.
+
+## Regional Simplex View
+
+For `K = 3`, the fitted AA compositions can be drawn on the regular simplex.
+Each point is one state, placed by its three archetype weights and coloured by
+Census region.
+
+```{r simplex-region-plot, fig.width = 6, fig.height = 6, fig.cap = "USArrests archetype simplex, coloured by state region."}
+aa_cols <- grep("^A[0-9]+$", names(aa_scores), value = TRUE)
+aa_mat <- as.matrix(aa_scores[, aa_cols])
+simplex_xy <- cbind(
+    x = aa_mat[, "A2"] + 0.5 * aa_mat[, "A3"],
+    y = sqrt(3) / 2 * aa_mat[, "A3"]
+)
+
+plot(
+    simplex_xy,
+    type = "n",
+    xlim = c(0, 1),
+    ylim = c(0, sqrt(3) / 2),
+    asp = 1,
+    axes = FALSE,
+    xlab = "", ylab = "",
+    main = "USArrests AA Simplex",
+    frame.plot = FALSE
+)
+polygon(
+    c(0, 1, 0.5),
+    c(0, 0, sqrt(3) / 2),
+    border = "grey55",
+    col = NA,
+    lwd = 1.2
+)
+text(
+    c(-0.03, 1.03, 0.5),
+    c(-0.03, -0.03, sqrt(3) / 2 + 0.04),
+    labels = aa_cols,
+    xpd = NA
+)
+points(
+    simplex_xy,
+    pch = 19,
+    cex = 0.8,
+    col = region_cols[as.character(region)]
+)
+legend(
+    "topright",
+    legend = names(region_cols),
+    col = region_cols,
+    pch = 19,
+    bty = "n"
+)
+```
+
+The simplex view answers a different question from PCA. PCA spreads states along
+directions that explain variance in the standardized arrest rates. AA asks how
+each state can be represented as a mixture of extreme arrest-rate profiles, so
+near-corner states have more concentrated archetype weights and interior states
+blend multiple profiles.
