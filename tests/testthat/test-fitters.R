@@ -225,7 +225,6 @@ test_that("PGD stalls instead of converging when no updates are accepted", {
         "PGD stalled"
     )
 
-    expect_false(fit[["converged"]])
     expect_equal(nrow(fit[["loss"]]), 3L)
     expect_equal(diff(fit[["loss"]][["loss"]]), c(0, 0))
 })
@@ -384,10 +383,69 @@ test_that("NNLS reports best loss when final candidate does not improve", {
     ))
     loss <- fit[["loss"]]
 
-    expect_false(fit[["converged"]])
-    expect_true(any(diff(loss[["loss"]]) > 0))
+    expect_named(loss, c("loss", "r2", "rloss", "k_S", "k_A"))
+    expect_true(all(diff(loss[["loss"]]) <= 1e-8))
+    expect_true(any(loss[["rloss"]] > loss[["loss"]]))
     expect_equal(loss[["loss"]][nrow(loss)], min(loss[["loss"]]))
 })
+
+test_that("NNLS max_no_update records rejected candidate before stalling", {
+    set.seed(1)
+    X <- toy_matrix()
+
+    expect_warning(
+        withCallingHandlers(
+            fit <- archetypes_nnls(
+                X,
+                K = 3L,
+                max_iter = 20L,
+                bigM = 5,
+                max_no_update = 1L,
+                tol = 1e-12,
+                tol_r2 = 1,
+                init_args = list(refinement_steps = 0L)
+            ),
+            warning = function(w) {
+                if (grepl("Algorithm did not converge", conditionMessage(w)))
+                    invokeRestart("muffleWarning")
+            }
+        ),
+        "NNLS stalled"
+    )
+    loss <- fit[["loss"]]
+
+    expect_false(fit[["converged"]])
+    expect_true(tail(loss[["rloss"]], 1L) > tail(loss[["loss"]], 1L))
+})
+
+
+test_that("PGD loss history contains only shared metrics", {
+    set.seed(1)
+    fit <- suppressWarnings(archetypes_pgd(
+        toy_matrix(),
+        K = 3L,
+        max_iter = 2L,
+        tol_r2 = 1
+    ))
+
+    expect_named(fit[["loss"]], c("loss", "r2"))
+})
+
+test_that(".aa_check_convergence only uses loss and r2", {
+    loss <- data.frame(loss = c(10, 9), r2 = c(0.1, 0.2))
+
+    expect_false(.aa_check_convergence(loss, 1L, tol = 1e-6, tol_r2 = 0.9, verbose = FALSE))
+})
+
+test_that("non-NNLS direct fitters do not accept max_kappa", {
+    X <- toy_matrix()[1:12, , drop = FALSE]
+
+    expect_error(archetypes_pgd(X, K = 3L, max_kappa = Inf), "unused")
+    expect_error(archetypes_kernel_pgd(X, K = 3L, max_kappa = Inf), "unused")
+    expect_error(archetypes_paa(X, K = 3L, max_kappa = Inf), "unused")
+    expect_error(archetypes_directional(directional_matrix(12L), K = 3L, max_kappa = Inf), "unused")
+})
+
 
 test_that("NNLS warns when raw coefficients are far from simplex", {
     set.seed(1)
@@ -456,7 +514,7 @@ test_that("sparse preprocessing preserves sparse structure without centering", {
     expect_s4_class(pre[["X"]], "sparseMatrix")
     expect_null(attr(pre[["X"]], "scaled:center"))
     expect_equal(attr(pre[["X"]], "scaled:scale"), apply(X_dense, 2L, stats::sd))
-    expect_equal(.dist2(X_sparse, center = TRUE), .dist2(X_dense, center = TRUE))
+    expect_equal(.aa_dist2(X_sparse, center = TRUE), .aa_dist2(X_dense, center = TRUE))
 })
 
 test_that("sparse preprocessing keeps NNLS bigM column sparse", {

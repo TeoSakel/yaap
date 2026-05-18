@@ -11,9 +11,6 @@
 #' @param max_iter maximum number of outer iterations (default: 100)
 #' @param tol convergence tolerance based on directional residual loss (default: 1e-6)
 #' @param tol_r2 convergence tolerance based on directional R\eqn{^2} (default: 0.9999)
-#' @param max_kappa accepted for consistency with other fitters; directional AA
-#'   does not solve by matrix inversion, so condition numbers are not computed
-#'   (default: 1000)
 #' @param eps small positive number for numerical stability (default: 1e-8)
 #' @param verbose whether to print progress messages (default: FALSE)
 #' @param hemisphere hemisphere handling. `"pca"` flips generator rows onto the
@@ -91,7 +88,6 @@ archetypes_directional <- function(x,
                                    max_iter = 100L,
                                    tol = 1e-6,
                                    tol_r2 = 0.9999,
-                                   max_kappa = 1000,
                                    eps = 1e-8,
                                    verbose = FALSE,
                                    hemisphere = c("pca", "none"),
@@ -113,7 +109,6 @@ archetypes_directional <- function(x,
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
-        max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
         missing = FALSE,
@@ -347,9 +342,10 @@ archetypes_directional <- function(x,
     A <- A0
     Y <- S %*% A
     xss <- norm(X_loss, "F")^2
-    terms <- .aa_directional_terms(X_loss, Y, xss)
-    loss <- .aa_new_loss(max_iter + 1L)
-    loss <- .aa_directional_update_loss(loss, 1L, terms)
+    terms <- .aa_directional_loss(X_loss, Y, xss)
+    loss <- list(loss = rep(NA_real_, max_iter + 1L), r2 = rep(NA_real_, max_iter + 1L))
+    loss[["loss"]][1L] <- terms[["rss"]]
+    loss[["r2"]][1L] <- 1 - terms[["rss"]] / terms[["xss"]]
     converged <- FALSE
     no_update <- 0L
     step_S <- step_size
@@ -373,7 +369,7 @@ archetypes_directional <- function(x,
         for (k in seq_len(max_iter_optimizer)) {
             S_new <- proj_l1(S - step_S * grad_S, eps = eps)
             Y_new <- S_new %*% A
-            terms_new <- .aa_directional_terms(X_loss, Y_new, xss)
+            terms_new <- .aa_directional_loss(X_loss, Y_new, xss)
             if (terms_new[["rss"]] < terms[["rss"]]) {
                 S <- S_new
                 Y <- Y_new
@@ -395,7 +391,7 @@ archetypes_directional <- function(x,
             B_new <- proj_l1(B - step_B * grad_B, eps = eps)
             A_new <- B_new %*% X_flip
             Y_new <- S %*% A_new
-            terms_new <- .aa_directional_terms(X_loss, Y_new, xss)
+            terms_new <- .aa_directional_loss(X_loss, Y_new, xss)
             if (terms_new[["rss"]] < terms[["rss"]]) {
                 B <- B_new
                 A <- A_new
@@ -431,8 +427,9 @@ archetypes_directional <- function(x,
         }
 
         no_update <- 0L
-        loss <- .aa_directional_update_loss(loss, j, terms)
-        converged <- .aa_check_convergence(loss, i, tol, tol_r2, Inf, verbose)
+        loss[["loss"]][j] <- terms[["rss"]]
+        loss[["r2"]][j] <- 1 - terms[["rss"]] / terms[["xss"]]
+        converged <- .aa_check_convergence(loss, i, tol, tol_r2, verbose)
         if (converged) break
     }
 
@@ -447,7 +444,7 @@ archetypes_directional <- function(x,
     )
 }
 
-.aa_directional_terms <- function(X_loss, Y, xss = norm(X_loss, "F")^2) {
+.aa_directional_loss <- function(X_loss, Y, xss = norm(X_loss, "F")^2) {
     # Computes the Watson loss between X_loss and Y (equation 3),
     # along with intermediate terms used for gradient computation  z, q, and v
     z <- rowSums(X_loss * Y) # (N x 1) vector of x_i^T xhat_i
@@ -467,11 +464,6 @@ archetypes_directional <- function(x,
     -2 * alpha * (X_loss - Y * alpha)
 }
 
-.aa_directional_update_loss <- function(loss, i, terms) {
-    loss[["loss"]][i] <- terms[["rss"]]
-    loss[["r2"]][i] <- 1 - terms[["rss"]] / terms[["xss"]]
-    loss
-}
 
 .aa_directional_fit_S <- function(X_loss,
                                   A,
@@ -489,7 +481,7 @@ archetypes_directional <- function(x,
     X_gen <- .aa_unit_rows(X_loss)
     S <- fit_simplex(.aa_unit_rows(A), X_gen, eps = eps)
     Y <- S %*% A
-    terms <- .aa_directional_terms(X_loss, Y, xss)
+    terms <- .aa_directional_loss(X_loss, Y, xss)
     step_S <- step_size
     for (i in seq_len(max_iter)) {
         grad_Y <- .aa_directional_grad_Y(X_loss, Y, terms[["z"]], terms[["q"]])
@@ -499,7 +491,7 @@ archetypes_directional <- function(x,
         for (k in seq_len(max_iter_optimizer)) {
             S_new <- proj_l1(S - step_S * grad_S, eps = eps)
             Y_new <- S_new %*% A
-            terms_new <- .aa_directional_terms(X_loss, Y_new, xss)
+            terms_new <- .aa_directional_loss(X_loss, Y_new, xss)
             if (terms_new[["rss"]] < terms[["rss"]]) {
                 S <- S_new
                 Y <- Y_new

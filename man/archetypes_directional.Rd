@@ -13,7 +13,6 @@ archetypes_directional(
   max_iter = 100L,
   tol = 1e-06,
   tol_r2 = 0.9999,
-  max_kappa = 1000,
   eps = 1e-08,
   verbose = FALSE,
   hemisphere = c("pca", "none"),
@@ -40,10 +39,6 @@ archetypes_directional(
 \item{tol}{convergence tolerance based on directional residual loss (default: 1e-6)}
 
 \item{tol_r2}{convergence tolerance based on directional R\eqn{^2} (default: 0.9999)}
-
-\item{max_kappa}{accepted for consistency with other fitters; directional AA
-does not solve by matrix inversion, so condition numbers are not computed
-(default: 1000)}
 
 \item{eps}{small positive number for numerical stability (default: 1e-8)}
 

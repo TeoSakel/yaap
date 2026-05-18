@@ -9,7 +9,6 @@ test_that("tune_archetypes expands K, replicates, and atomic tuning arguments", 
         delta = c(0, 0.05),
         max_iter = 2L,
         tol_r2 = 0,
-        max_kappa = Inf,
         eval = function(fit) utils::tail(fit[["loss"]][["loss"]], 1L),
         eval_name = "score"
     )
@@ -35,7 +34,6 @@ test_that("tune_archetypes expands multiple initialization methods", {
         init = c("random", "furthest_sum"),
         max_iter = 1L,
         tol_r2 = 0,
-        max_kappa = Inf
     )
 
     expect_equal(nrow(ens[["grid"]]), 2L)
@@ -61,7 +59,6 @@ test_that("summary and best use existing ensemble metrics", {
         direction = "maximize",
         max_iter = 1L,
         tol_r2 = 0,
-        max_kappa = Inf
     )
     expect_equal(calls, 2L)
     expect_equal(nrow(summary(ens)), 2L)
@@ -79,7 +76,7 @@ test_that("summary and best use existing ensemble metrics", {
 test_that("composition consistency is symmetric with unit diagonal", {
     fit <- manual_fit()
     expect_equal(
-        .nmi(fit[["compositions"]], fit[["compositions"]]),
+        .aa_nmi(fit[["compositions"]], fit[["compositions"]]),
         1,
         tolerance = 1e-8
     )
@@ -89,7 +86,7 @@ test_that("composition consistency is symmetric with unit diagonal", {
         tolerance = 1e-8
     )
 
-    ens <- new_archetypes_ensemble(
+    ens <- .aa_new_archetypes_ensemble(
         data = fit[["data"]],
         fits = list(a = fit, b = fit),
         grid = data.frame(model_id = c("a", "b"), K = 3L, replicate = 1L),
@@ -105,7 +102,7 @@ test_that("composition consistency is symmetric with unit diagonal", {
     expect_true(is_all_finite(score))
     expect_equal(score, t(score))
     expect_equal(unname(diag(score)), c(1, 1), tolerance = 1e-8)
-    expect_error(.nmi(fit[["compositions"]] * 2, fit[["compositions"]]), "row-stochastic")
+    expect_error(.aa_nmi(fit[["compositions"]] * 2, fit[["compositions"]]), "row-stochastic")
 })
 
 test_that("coordinate consistency returns NA for decreasing K and uses column variance denominator", {
@@ -122,7 +119,7 @@ test_that("coordinate consistency returns NA for decreasing K and uses column va
         loss = loss,
         data = X
     )
-    ens <- new_archetypes_ensemble(
+    ens <- .aa_new_archetypes_ensemble(
         data = X,
         fits = list(k3 = fit3, k4 = fit4),
         grid = data.frame(model_id = c("k3", "k4"), K = c(3L, 4L), replicate = 1L),

@@ -17,7 +17,7 @@ archetypes <- function(coordinates = NULL,
                        weights = NULL,
                        fit_info = list()) {
     call <- call %||% match.call()
-    loss <- loss %||% data.frame(loss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
+    loss <- loss %||% data.frame(loss = NA_real_, r2 = NA_real_)
 
     # Dimension checks
     K <- if (!is.null(coordinates)) nrow(coordinates) else nrow(coefficients)
@@ -561,7 +561,7 @@ AIC.archetypes <- function(object, ...) {
     }
     # rss   <- object[["loss"]][["loss"]]
     X_hat <- with(object, compositions %*% coordinates)
-    eta <- tryCatch(effic(X, X_hat), error = function(e) NA_real_)
+    eta <- tryCatch(.aa_effic(X, X_hat), error = function(e) NA_real_)
     if (!is.finite(eta) || eta <= 0) {
         warning(paste("Adapted AIC is undefined because the efficiency term",
                       "is non-positive or non-finite; returning NA."),
@@ -757,7 +757,7 @@ kernel_archetypes <- function(coefficients,
                               weights = NULL,
                               fit_info = list()) {
     call <- call %||% match.call()
-    loss <- loss %||% data.frame(loss = NA_real_, r2 = NA_real_, k_S = NA_real_, k_A = NA_real_)
+    loss <- loss %||% data.frame(loss = NA_real_, r2 = NA_real_)
     stopifnot("Gram matrix dimensions must match number of samples" =
                   identical(dim(gram), c(ncol(coefficients), ncol(coefficients))))
     out <- archetypes(

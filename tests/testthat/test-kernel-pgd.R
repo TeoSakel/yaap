@@ -65,6 +65,7 @@ test_that("kernel PGD fits an RBF kernel and returns coordinates", {
     expect_row_stochastic(fit[["coefficients"]])
     expect_row_stochastic(fit[["compositions"]])
     expect_true(is_all_finite(fit[["loss"]][["loss"]]))
+    expect_named(fit[["loss"]], c("loss", "r2"))
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
     expect_equal(fit[["coordinates"]], fit[["coefficients"]] %*% X)
     expect_error(

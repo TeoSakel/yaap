@@ -22,7 +22,6 @@
 #' @param max_iter maximum number of outer iterations (default: 100)
 #' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
 #' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
-#' @param max_kappa maximum condition number warning threshold (default: 1000)
 #' @param eps small positive number to ensure numerical stability (default: 1e-8)
 #' @param verbose whether to print progress messages (default: FALSE)
 #' @param delta maximum allowed relaxation of archetype convexity constraint (default: 0)
@@ -110,7 +109,6 @@ archetypes_kernel_pgd <- function(x,
                                   max_iter = 100L,
                                   tol = 1e-6,
                                   tol_r2 = 0.9999,
-                                  max_kappa = 1000,
                                   eps = 1e-8,
                                   verbose = FALSE,
                                   delta = 0,
@@ -135,7 +133,6 @@ archetypes_kernel_pgd <- function(x,
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
-        max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
         missing = FALSE,
@@ -217,7 +214,6 @@ archetypes_kernel_pgd <- function(x,
                 max_iter = ctx[["max_iter"]],
                 tol = ctx[["tol"]],
                 tol_r2 = ctx[["tol_r2"]],
-                max_kappa = ctx[["max_kappa"]],
                 eps = ctx[["eps"]],
                 verbose = ctx[["verbose"]],
                 B = init_vars[["B"]],
@@ -264,7 +260,6 @@ archetypes_kernel_pgd <- function(x,
                                max_iter,
                                tol,
                                tol_r2,
-                               max_kappa,
                                eps,
                                verbose,
                                B,
@@ -311,12 +306,9 @@ archetypes_kernel_pgd <- function(x,
     S_weighted <- .aa_weight_rows(S, row_weights)
     StS <- crossprod(S_weighted, S)
     StG <- crossprod(S_weighted, G)
-    loss_terms <- list(rss = rss, xss = xss, StS = StS, AAt = AAt)
 
-    loss <- .aa_update_loss(
-        loss, 1L, loss_terms, verbose = verbose, max_kappa = max_kappa,
-        k_A = "gram"
-    )
+    loss[["loss"]][1L] <- rss
+    loss[["r2"]][1L] <- 1 - rss / xss
     converged <- FALSE
 
     step_S <- step_size
@@ -402,11 +394,8 @@ archetypes_kernel_pgd <- function(x,
             StS <- crossprod(S_weighted, S)
             StG <- crossprod(S_weighted, G)
         }
-        loss_terms <- list(rss = rss, xss = xss, StS = StS, AAt = AAt)
-        loss <- .aa_update_loss(
-            loss, i + 1L, loss_terms, verbose = verbose, max_kappa = max_kappa,
-            k_A = "gram"
-        )
+        loss[["loss"]][i + 1L] <- rss
+        loss[["r2"]][i + 1L] <- 1 - rss / xss
 
         # Check for accepted update; if none, shrink steps and check for stall
         if (!accepted_update) {
@@ -434,7 +423,7 @@ archetypes_kernel_pgd <- function(x,
         }
 
         no_update <- 0L
-        converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
+        converged <- .aa_check_convergence(loss, i, tol, tol_r2, verbose)
         if (converged) break
     }
 
@@ -509,22 +498,22 @@ archetypes_kernel_pgd <- function(x,
     switch(
         kernel,
         linear = tcrossprod(X),
-        rbf = rbf_kernel(X, sigma = sigma),
-        laplace = laplace_kernel(X, sigma = sigma),
-        polynomial = polynomial_kernel(X, gamma, degree, coef0)
+        rbf = .aa_rbf_kernel(X, sigma = sigma),
+        laplace = .aa_laplace_kernel(X, sigma = sigma),
+        polynomial = .aa_polynomial_kernel(X, gamma, degree, coef0)
     )
 }
 
-.auto_rbf_sigma <- function(D) {
+.aa_auto_rbf_sigma <- function(D) {
     d_upper <- if (is.matrix(D)) D[upper.tri(D)] else as.vector(D)
     d_90    <- d_upper[d_upper <= stats::quantile(d_upper, 0.9)]
-    sigma   <- .otsu_threshold(d_90) * 0.75
+    sigma   <- .aa_otsu_threshold(d_90) * 0.75
     if (!is.finite(sigma) || sigma <= 0) 1 else sigma
 }
 
-rbf_kernel <- function(X, sigma = NULL) {
+.aa_rbf_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X)
-    sigma <- sigma %||% .auto_rbf_sigma(D)
+    sigma <- sigma %||% .aa_auto_rbf_sigma(D)
     stopifnot("`sigma` must be a positive finite number" = is_positive(sigma))
     G <- exp(-0.5 * (D / sigma)^2)
     # convert to full symmetric matrix at the end to avoid redundant computations
@@ -533,9 +522,9 @@ rbf_kernel <- function(X, sigma = NULL) {
     G
 }
 
-laplace_kernel <- function(X, sigma = NULL) {
+.aa_laplace_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X, method = "manhattan")
-    sigma <- sigma %||% .auto_rbf_sigma(D)
+    sigma <- sigma %||% .aa_auto_rbf_sigma(D)
     stopifnot("`sigma` must be a positive finite number" = is_positive(sigma))
     G <- exp(-D / sigma)
     # convert to full symmetric matrix at the end to avoid redundant computations
@@ -544,7 +533,7 @@ laplace_kernel <- function(X, sigma = NULL) {
     G
 }
 
-polynomial_kernel <- function(X, gamma, degree, coef0) {
+.aa_polynomial_kernel <- function(X, gamma, degree, coef0) {
     stopifnot("`degree` must be a positive finite number" = is_positive(degree))
     stopifnot("`coef0` must be a finite number" = is_number(coef0))
     gamma <- gamma %||% (1 / ncol(X))
@@ -600,7 +589,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
             init = B,
             B = B,
             S = S,
-            loss = .aa_new_loss(L)
+            loss = list(loss = rep(NA_real_, L), r2 = rep(NA_real_, L))
         ))
     }
 
@@ -617,7 +606,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
             init = B,
             B = B,
             S = S,
-            loss = .aa_new_loss(L)
+            loss = list(loss = rep(NA_real_, L), r2 = rep(NA_real_, L))
         ))
     }
 
@@ -647,7 +636,7 @@ polynomial_kernel <- function(X, gamma, degree, coef0) {
         init = B,
         B = B,
         S = S,
-        loss = .aa_new_loss(L)
+        loss = list(loss = rep(NA_real_, L), r2 = rep(NA_real_, L))
     )
 }
 

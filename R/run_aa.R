@@ -17,7 +17,7 @@
 #'   \item{`coordinates`}{(K x M) archetype coordinates in the original feature space.}
 #'   \item{`coefficients`}{(K x N) weights expressing each archetype as a convex combination of samples.}
 #'   \item{`compositions`}{(N x K) row-stochastic weights expressing each sample as a convex combination of archetypes.}
-#'   \item{`loss`}{data frame of per-iteration metrics (`loss`, `r2`, `k_S`, `k_A`).}
+#'   \item{`loss`}{data frame of per-iteration metrics. All fitters include `loss` and `r2`; additional diagnostic columns are method-specific.}
 #'   \item{`converged`}{logical convergence flag.}
 #'   \item{`data`}{original data passed to the fitter.}
 #'   \item{`call`}{the matched call.}
@@ -150,7 +150,7 @@ run_aa.formula <- function(formula,
 #' @param max_iter maximum number of outer iterations (default: 100).
 #' @param tol convergence tolerance on the residual sum of squares (default: 1e-6).
 #' @param tol_r2 convergence tolerance on R\eqn{^2} (default: 0.9999).
-#' @param max_kappa maximum condition number for the archetype matrix (default: 1000).
+#' @param max_kappa maximum condition number warning threshold for `method = "nnls"` (default: 1000).
 #' @param eps small positive number for numerical stability
 #'   (default: 0 for sparse input, 1e-8 for dense).
 #' @param verbose whether to print progress messages (default: `FALSE`).
@@ -456,7 +456,7 @@ run_aa.fd <- function(x, K, ...) {
         attr(X, "scaled:scale") <- scale
     }
 
-    X <- .filter_low_variance(X, sd_threshold)
+    X <- .aa_filter_low_variance(X, sd_threshold)
     mask <- attr(X, "mask")
 
     if (identical(scale_mode, "matrix")) {
@@ -574,8 +574,8 @@ run_aa.fd <- function(x, K, ...) {
     init_vars <- do.call(init, args = c(list(X = X, K = ctx[["K"]]), init_args))
     rownames(init_vars[["A"]]) <- .aa_init_names(init_vars[["A"]])
     rownames(init_vars[["B"]]) <- rownames(init_vars[["A"]])
-    init_vars[["S"]] <- .init_S(X, init_vars[["A"]], eps = ctx[["eps"]])
-    init_vars[["loss"]] <- .aa_new_loss(L)
+    init_vars[["S"]] <- .aa_init_S(X, init_vars[["A"]], eps = ctx[["eps"]])
+    init_vars[["loss"]] <- list(loss = rep(NA_real_, L), r2 = rep(NA_real_, L))
     init_vars
 }
 

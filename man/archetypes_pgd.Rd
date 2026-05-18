@@ -17,7 +17,6 @@ archetypes_pgd(
   max_iter = 100L,
   tol = 1e-06,
   tol_r2 = 0.9999,
-  max_kappa = 1000,
   eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
   missing = any(is.na(x)),
@@ -58,8 +57,6 @@ low-variance features (default: 1e-6)}
 \item{tol}{convergence tolerance based on residual sum of squares (default: 1e-6)}
 
 \item{tol_r2}{convergence tolerance based on R^2 (default: 0.9999)}
-
-\item{max_kappa}{maximum condition number for archetypes (default: 1000)}
 
 \item{eps}{small positive number to ensure numerical stability
 (default: 0 for sparse input 1e-8 for dense)}
@@ -152,9 +149,7 @@ scale for a particular dataset.
 
 Convergence is declared when the relative decrease in RSS between successive
 accepted updates falls below \code{tol} (default 1e-6) \emph{or} \eqn{R^2} exceeds
-\code{tol_r2} (default 0.9999).  If \code{max_kappa} is exceeded by the condition
-number of the archetype matrix, a warning is issued and the iteration is
-logged but optimisation continues.
+\code{tol_r2} (default 0.9999).
 }
 
 \subsection{Preprocessing}{

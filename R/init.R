@@ -153,8 +153,8 @@ aa_init <- function(X,
 
     # Edge case for K=1: return the point closest to the mean (the "archemean")
     if (K == 1) {
-        ind <- which.min(.dist2(X, center = TRUE))
-        return(.ind_to_init(X, ind, sparse = sparse))
+        ind <- which.min(.aa_dist2(X, center = TRUE))
+        return(.aa_ind_to_init(X, ind, sparse = sparse))
     }
 
     batch <- .aa_sample(
@@ -197,8 +197,8 @@ aa_init <- function(X,
         return(.aa_expand_init_batch(result, X, batch, sparse = sparse))
     }
     if (method == "aa_pp")
-        return(.ind_to_init(X, result, sparse = sparse))
-    .ind_to_init(X, batch[result], sparse = sparse)
+        return(.aa_ind_to_init(X, result, sparse = sparse))
+    .aa_ind_to_init(X, batch[result], sparse = sparse)
 }
 
 .aa_validate_batch_size <- function(batch_size, n, K, replace = FALSE) {
@@ -225,7 +225,7 @@ aa_init <- function(X,
     prob <- if (!has_rows && identical(type, "distal")) {
         x
     } else if (identical(type, "distal")) {
-        .dist2(x, center = TRUE)
+        .aa_dist2(x, center = TRUE)
     } else {
         NULL
     }
@@ -252,12 +252,12 @@ furthest_first <- function(X, K, distances = NULL, center_dists = NULL, ...) {
     b <- integer(K)  # indices of archetypes
 
     # 1) randomly select the first archetype
-    dists <- center_dists %||% .dist2(X, center = TRUE)
+    dists <- center_dists %||% .aa_dist2(X, center = TRUE)
     b[1L] <- .aa_sample(dists, size = 1L, replace = TRUE)
 
     # 2) compute next K-1 archetypes by selecting the furthest from current set
     for (k in seq_len(K - 1L)) {
-        dists <- .dist_to_nearest_archetype(X, b[1:k], distances = distances)
+        dists <- .aa_dist_to_nearest_archetype(X, b[1:k], distances = distances)
         b[k + 1L] <- which.max(dists)
     }
 
@@ -271,12 +271,12 @@ kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"),
     b <- integer(K)  # indices of archetypes
 
     # 1) randomly select the first archetype
-    dists <- center_dists %||% .dist2(X, center = TRUE)
+    dists <- center_dists %||% .aa_dist2(X, center = TRUE)
     b[1L] <- .aa_sample(dists, size = 1L, replace = TRUE)
 
     # 2) compute next K-1 archetypes by sampling from the points furthest from the current set
     for (k in seq_len(K - 1)) {
-        dists <- .dist_to_nearest_archetype(X, b[1:k], distances = distances)
+        dists <- .aa_dist_to_nearest_archetype(X, b[1:k], distances = distances)
         b[k + 1L] <- .aa_sample(dists, size = 1L, replace = TRUE)
     }
 
@@ -300,7 +300,7 @@ furthest_sum <- function(X, K, distances = NULL, refinement_steps = 10L, ...) {
 
     get_dists <- function(ind) {
         if (is.null(distances))
-            return(.dist2(X, X[ind, , drop = FALSE]))
+            return(.aa_dist2(X, X[ind, , drop = FALSE]))
         distances[, ind]
     }
 
@@ -359,7 +359,7 @@ aa_pp <- function(X,
     )
     second_candidates <- available[second_batch]
     b[2L] <- second_candidates[
-        .aa_sample(.dist2(X[second_candidates, , drop = FALSE], X[b[1L], ]),
+        .aa_sample(.aa_dist2(X[second_candidates, , drop = FALSE], X[b[1L], ]),
                    size = 1L,
                    replace = TRUE)
     ]
@@ -382,7 +382,7 @@ aa_pp <- function(X,
         )
         candidates <- available[batch]
         X_candidates <- X[candidates, , drop = FALSE]
-        S <- proj_l1(fit_nnls(X_candidates, t(A)), eps = eps)
+        S <- proj_l1(.aa_solve_nnls(X_candidates, t(A)), eps = eps)
         res <- X_candidates - S %*% A
         dists <- rowSums(res * res)  # squared residuals
         dists[!is.finite(dists)] <- 0
@@ -567,11 +567,11 @@ hull_outmost <- function(X,
 # Compute the distance to the nearest archetype for each sample
 # X is a matrix of samples
 # ind is a vector of indices selecting the archetypes from X
-.dist_to_nearest_archetype <- function(X, ind, distances = NULL) {
+.aa_dist_to_nearest_archetype <- function(X, ind, distances = NULL) {
     if (!is.null(distances))
         return(matrixStats::rowMins(distances[, ind, drop = FALSE]))
     A <- X[ind, , drop = FALSE]  # archetypes
-    dists <- .pdist2(A, X)
+    dists <- .aa_pdist2(A, X)
     matrixStats::colMins(dists)
 }
 
@@ -593,7 +593,7 @@ hull_outmost <- function(X,
 }
 
 # Initialize variables for Archetypal Analysis
-.ind_to_init <- function(X, ind, sparse) {
+.aa_ind_to_init <- function(X, ind, sparse) {
     # make sure ind is positive indices selecting rows
     ind <- .aa_normalize_row_indices(ind, nrow(X), rownames(X))
     nm <- names(ind) %||% paste0("A", seq_along(ind))
@@ -604,8 +604,8 @@ hull_outmost <- function(X,
     list(A = A, B = B)
 }
 
-.init_S <- function(X, A, eps = 0) {
-    S <- proj_l1(1 / .pdist2(X, A), eps = eps)  # init S by similarity score
+.aa_init_S <- function(X, A, eps = 0) {
+    S <- proj_l1(1 / .aa_pdist2(X, A), eps = eps)  # init S by similarity score
     S[is.nan(S)] <- 1 # NaNs = Inf/Inf for the archetypes
     S
 }

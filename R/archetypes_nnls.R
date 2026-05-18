@@ -38,6 +38,10 @@
 #' gradient descent, such as sparse inputs. The archetype composition matrix B
 #' is also updated via NNLS.
 #'
+#' The returned `loss` history stores `loss` as the best objective seen so
+#' far and `rloss` as the current iterate objective. The `rloss`, `k_S`, and
+#' `k_A` columns are NNLS diagnostics and are not used for model selection.
+#'
 #' ## OLS and big-M
 #'
 #' The A-update solves `min_A ||X - SA||_F^2` as an unconstrained least-squares
@@ -131,9 +135,9 @@ archetypes_nnls <- function(x,
                         eps = ctx[["eps"]],
                         verbose = ctx[["verbose"]],
                         loss_fun = if (ctx[["robust"]])
-                            .aa_nnls_weighted_loss_terms
+                            .aa_nnls_weighted_loss
                         else
-                            .aa_nnls_loss_terms
+                            .aa_nnls_loss
                     ),
                     init_vars,
                     list(
@@ -149,7 +153,7 @@ archetypes_nnls <- function(x,
     )
 }
 
-.aa_nnls_loss_terms <- function(X, A, S, xss = NULL, ...) {
+.aa_nnls_loss <- function(X, A, S, xss = NULL, ...) {
     # computes RSS using the trace formulation used in the pgd version
     # eventhough this is not the bottleneck in the NNLS version
 
@@ -176,7 +180,7 @@ archetypes_nnls <- function(x,
     )
 }
 
-.aa_nnls_weighted_loss_terms <- function(X, A, S, weight_fun, row_xss = NULL, ...) {
+.aa_nnls_weighted_loss <- function(X, A, S, weight_fun, row_xss = NULL, ...) {
     iM <- attr(X, "bigM")
     if (!is.null(iM)) {
         X <- X[, -iM, drop = FALSE]
@@ -206,6 +210,31 @@ archetypes_nnls <- function(x,
     )
 }
 
+.aa_nnls_diagnostics <- function(loss, i, loss_terms, max_kappa, k_A = NA_real_) {
+    if ((i - 1L) %% 10 != 0L)
+        return(loss)
+
+    if (max_kappa > 1) {
+        loss[["k_S"]][i] <- sqrt(1 / rcond(loss_terms[["StS"]]))
+        loss[["k_A"]][i] <- if (is.na(k_A)) {
+            kappa(loss_terms[["A"]], exact = TRUE)
+        } else {
+            k_A
+        }
+    } else {
+        loss[["k_S"]][i] <- max_kappa
+        loss[["k_A"]][i] <- max_kappa
+    }
+
+    k_S <- loss[["k_S"]][i]
+    k_A <- loss[["k_A"]][i]
+    if ((!is.na(k_S) && k_S > max_kappa) || (!is.na(k_A) && k_A > max_kappa)) {
+        fmt <- "Warning: Condition number exceeded max_kappa (k_S=%.1f, k_A=%.1f)"
+        warning(sprintf(fmt, k_S, k_A), call. = FALSE)
+    }
+    loss
+}
+
 .aa_fit_nnls <- function(X,
                          weight_fun,
                          max_iter,
@@ -232,21 +261,26 @@ archetypes_nnls <- function(x,
     xss <- loss_terms[["xss"]]
     row_xss <- loss_terms[["row_xss"]]
     row_weights <- loss_terms[["row_weights"]]
-    loss[["k_A"]][1L] <- kappa(A, exact = TRUE)
-    loss <- .aa_update_loss(
+    best_loss_terms <- loss_terms
+    L <- length(loss[["loss"]])
+    loss[["rloss"]] <- rep(NA_real_, L)
+    loss[["k_S"]] <- rep(NA_real_, L)
+    loss[["k_A"]] <- rep(NA_real_, L)
+    loss[["loss"]][1L] <- best_loss_terms[["rss"]]
+    loss[["r2"]][1L] <- 1 - best_loss_terms[["rss"]] / best_loss_terms[["xss"]]
+    loss[["rloss"]][1L] <- loss_terms[["rss"]]
+    loss <- .aa_nnls_diagnostics(
         loss,
         1L,
-        loss_terms,
-        verbose = verbose,
-        max_kappa = max_kappa
+        loss_terms = loss_terms,
+        max_kappa = max_kappa,
+        k_A = kappa(A, exact = TRUE)
     )
     converged <- FALSE
     no_update <- 0L
     max_simplex_error <- 0
     project <- proj_l1
-    best_loss_terms <- loss_terms
     best_args <- list(A = A, B = B, S = S)
-    last_update_accepted <- TRUE
 
     # edge case: if max_iter = 0 return initial solution without any updates
     if (max_iter == 0L) {
@@ -269,7 +303,7 @@ archetypes_nnls <- function(x,
     for (i in seq_len(max_iter)) {
         j <- i + 1L  # loss row to update
         # S update
-        S_raw <- fit_nnls(X, t(A), use_svd = FALSE) # Project X to A-simplex
+        S_raw <- .aa_solve_nnls(X, t(A), use_svd = FALSE) # Project X to A-simplex
         max_simplex_error <- max(max_simplex_error, max(abs(rowSums(S_raw) - 1)))
         S <- project(S_raw, eps = eps)
         # A update: X = SA
@@ -280,7 +314,7 @@ archetypes_nnls <- function(x,
             A <- qr.solve(S * sqrt_weights, X * sqrt_weights)
         }
         # B update
-        B_raw <- fit_nnls(A, Xt, use_svd = FALSE) # Project A to X-simplex
+        B_raw <- .aa_solve_nnls(A, Xt, use_svd = FALSE) # Project A to X-simplex
         max_simplex_error <- max(max_simplex_error, max(abs(rowSums(B_raw) - 1)))
         B <- project(B_raw, eps = eps)
         # Final A update to ensure A = BX
@@ -296,22 +330,13 @@ archetypes_nnls <- function(x,
             row_xss = row_xss
         )
         row_weights <- loss_terms[["row_weights"]]
-        loss <- .aa_update_loss(
-            loss,
-            j,
-            loss_terms,
-            verbose = verbose,
-            max_kappa = max_kappa
-        )
 
         if (loss_terms[["rss"]] < best_loss_terms[["rss"]]) {
             best_loss_terms <- loss_terms
             best_args <- list(A = A, B = B, S = S)
             no_update <- 0L
-            last_update_accepted <- TRUE
         } else {
             no_update <- no_update + 1L
-            last_update_accepted <- FALSE
 
             if (verbose) {
                 fmt <- paste(
@@ -321,6 +346,15 @@ archetypes_nnls <- function(x,
                 message(sprintf(fmt, i, no_update, max_no_update))
             }
             if (no_update >= max_no_update) {
+                loss[["loss"]][j] <- best_loss_terms[["rss"]]
+                loss[["r2"]][j] <- 1 - best_loss_terms[["rss"]] / best_loss_terms[["xss"]]
+                loss[["rloss"]][j] <- loss_terms[["rss"]]
+                loss <- .aa_nnls_diagnostics(
+                    loss,
+                    j,
+                    loss_terms = loss_terms,
+                    max_kappa = max_kappa
+                )
                 fmt <- paste(
                     "NNLS stalled: no loss improvement after",
                     "%d consecutive candidate updates"
@@ -330,18 +364,19 @@ archetypes_nnls <- function(x,
             }
         }
 
-        # Check convergence
-        converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
-        if (converged) break
-    }
-    if (!last_update_accepted) {
-        loss <- .aa_update_loss(
+        loss[["loss"]][j] <- best_loss_terms[["rss"]]
+        loss[["r2"]][j] <- 1 - best_loss_terms[["rss"]] / best_loss_terms[["xss"]]
+        loss[["rloss"]][j] <- loss_terms[["rss"]]
+        loss <- .aa_nnls_diagnostics(
             loss,
-            i + 1L,
-            best_loss_terms,
-            verbose = FALSE,
+            j,
+            loss_terms = loss_terms,
             max_kappa = max_kappa
         )
+
+        # Check convergence
+        converged <- .aa_check_convergence(loss, i, tol, tol_r2, verbose)
+        if (converged) break
     }
     if (max_simplex_error > 0.05) {
         fmt <- paste(
@@ -361,7 +396,7 @@ archetypes_nnls <- function(x,
 # @param Y data matrix (rows = samples, columns = dimensions)
 # @param X data matrix (rows = samples, columns = dimensions)
 # @param use_svd logical, whether to use SVD for dimensionality reduction (default: FALSE)
-fit_nnls <- function(Y, X, use_svd = FALSE) {
+.aa_solve_nnls <- function(Y, X, use_svd = FALSE) {
     # min ||Y - Beta %*% X||_2 s.t. Beta >= 0
 
     if (use_svd) {

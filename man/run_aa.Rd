@@ -110,7 +110,7 @@ columns are dropped before fitting (default: 1e-6).}
 
 \item{tol_r2}{convergence tolerance on R\eqn{^2} (default: 0.9999).}
 
-\item{max_kappa}{maximum condition number for the archetype matrix (default: 1000).}
+\item{max_kappa}{maximum condition number warning threshold for \code{method = "nnls"} (default: 1000).}
 
 \item{eps}{small positive number for numerical stability
 (default: 0 for sparse input, 1e-8 for dense).}
@@ -126,7 +126,7 @@ An object of class \code{archetypes} with components:
 \item{\code{coordinates}}{(K x M) archetype coordinates in the original feature space.}
 \item{\code{coefficients}}{(K x N) weights expressing each archetype as a convex combination of samples.}
 \item{\code{compositions}}{(N x K) row-stochastic weights expressing each sample as a convex combination of archetypes.}
-\item{\code{loss}}{data frame of per-iteration metrics (\code{loss}, \code{r2}, \code{k_S}, \code{k_A}).}
+\item{\code{loss}}{data frame of per-iteration metrics. All fitters include \code{loss} and \code{r2}; additional diagnostic columns are method-specific.}
 \item{\code{converged}}{logical convergence flag.}
 \item{\code{data}}{original data passed to the fitter.}
 \item{\code{call}}{the matched call.}

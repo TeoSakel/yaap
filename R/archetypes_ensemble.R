@@ -86,7 +86,7 @@ tune_archetypes <- function(data,
         metrics[[eval_name]][i] <- .aa_eval_fit(eval, fit)
     }
 
-    new_archetypes_ensemble(
+    .aa_new_archetypes_ensemble(
         data = data,
         fits = fits,
         grid = grid,
@@ -99,7 +99,7 @@ tune_archetypes <- function(data,
     )
 }
 
-new_archetypes_ensemble <- function(data,
+.aa_new_archetypes_ensemble <- function(data,
                                     fits,
                                     grid,
                                     metrics,
@@ -226,11 +226,11 @@ consistency.archetypes <- function(x,
     what <- match.arg(what)
     switch(
         what,
-        compositions = .nmi(
+        compositions = .aa_nmi(
             .aa_consistency_weights(x, "compositions"),
             .aa_consistency_weights(y, "compositions")
         ),
-        coefficients = .nmi(
+        coefficients = .aa_nmi(
             .aa_consistency_weights(x, "coefficients"),
             .aa_consistency_weights(y, "coefficients")
         ),
@@ -388,7 +388,7 @@ summary.archetypes_ensemble <- function(object, ...)
     x / row_total
 }
 
-.nmi <- function(x, y) {
+.aa_nmi <- function(x, y) {
     stopifnot("Consistency matrices must have the same number of rows." = nrow(x) == nrow(y))
     stopifnot("Consistency matrices must be row-stochastic." = is_row_stochastic(x) && is_row_stochastic(y))
     n <- nrow(x)
@@ -453,7 +453,7 @@ summary.archetypes_ensemble <- function(object, ...)
 .aa_greedy_coordinate_d2 <- function(ax, ay) {
     available <- seq_len(nrow(ay))
     d2 <- numeric(nrow(ax))
-    distances <- .pdist2(ax, ay)
+    distances <- .aa_pdist2(ax, ay)
     for (i in seq_len(nrow(ax))) {
         best <- which.min(distances[i, available])
         d2[[i]] <- distances[i, available[[best]]]

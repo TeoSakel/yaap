@@ -20,8 +20,8 @@ archetypes_nnls(
   max_kappa = 1000,
   eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
-  bigM = NULL,
-  max_no_update = 5L
+  max_no_update = 5L,
+  bigM = NULL
 )
 }
 \arguments{
@@ -42,7 +42,8 @@ archetypes_nnls(
 
 \item{tukey_c}{tuning constant for Tukey bisquare weights (default: 4.685)}
 
-\item{sd_threshold}{threshold for feature standard deviation to filter low-variance features (default: 1e-6).}
+\item{sd_threshold}{threshold for feature standard deviation to filter
+low-variance features (default: 1e-6).}
 
 \item{max_iter}{maximum number of iterations (default: 100)}
 
@@ -57,17 +58,18 @@ archetypes_nnls(
 
 \item{verbose}{whether to print progress messages (default: FALSE)}
 
-\item{bigM}{large constant to enforce simplex constraint, or \code{NULL} to set it automatically.}
+\item{max_no_update}{maximum consecutive iterations without improvement
+before considering NNLS stalled (default: 5)}
 
-\item{max_no_update}{maximum consecutive iterations without improvement before
-considering NNLS stalled (default: 5)}
+\item{bigM}{large constant to enforce simplex constraint,
+or \code{NULL} to set it automatically.}
 }
 \value{
 An object of class \code{archetypes}.
 }
 \description{
 Fits archetypal analysis (AA) by alternating between a non-negative
-least-squares (NNLS) step for sample compositions and an ordinary
+least-squares (NNLS) step for convex-mixtures ($S$, $B$) and an ordinary
 least-squares (OLS) step for archetype coordinates.
 }
 \details{
@@ -78,7 +80,12 @@ archetypes fixed) and the archetype coordinates A (holding compositions fixed).
 The NNLS solver reformulates each S-update as a non-negative least-squares
 problem with a simplex-constraint row appended (the "big-M" trick), making it
 well-suited for settings where NNLS is more numerically stable than projected
-gradient descent, such as sparse inputs.
+gradient descent, such as sparse inputs. The archetype composition matrix B
+is also updated via NNLS.
+
+The returned \code{loss} history stores \code{loss} as the best objective seen so
+far and \code{rloss} as the current iterate objective. The \code{rloss}, \code{k_S}, and
+\code{k_A} columns are NNLS diagnostics and are not used for model selection.
 }
 
 \subsection{OLS and big-M}{
@@ -86,10 +93,10 @@ gradient descent, such as sparse inputs.
 The A-update solves \verb{min_A ||X - SA||_F^2} as an unconstrained least-squares
 problem via QR factorisation.
 
-\code{bigM} is the weight of the row appended to enforce the sum-to-one constraint.
-When \code{NULL} (default) it is set automatically from the data scale. Increase it
-if compositions drift from the simplex; decrease it if the solver is slow or
-numerically unstable.
+\code{bigM} is the weight of the row appended to enforce the simplex (sum-to-one) constraint.
+When \code{NULL} (default) it is set automatically based heuristics. If it fails
+to enforce the simplex constraint, warning messages will ask you to increase it.
+if the solver is slow or numerically unstable try decreasing it.
 }
 }
 \examples{

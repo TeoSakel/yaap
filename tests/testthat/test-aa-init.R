@@ -154,7 +154,7 @@ test_that("aa_init uses stable archetype names instead of selected data row name
     expect_equal(rownames(init[["A"]]), c("A1", "A2", "A3"))
     expect_equal(rownames(init[["B"]]), c("A1", "A2", "A3"))
 
-    named <- .ind_to_init(X, stats::setNames(c(2L, 4L), c("left", "right")), sparse = FALSE)
+    named <- .aa_ind_to_init(X, stats::setNames(c(2L, 4L), c("left", "right")), sparse = FALSE)
 
     expect_equal(rownames(named[["A"]]), c("left", "right"))
     expect_equal(rownames(named[["B"]]), c("left", "right"))

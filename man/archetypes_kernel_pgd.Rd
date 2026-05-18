@@ -17,7 +17,6 @@ archetypes_kernel_pgd(
   max_iter = 100L,
   tol = 1e-06,
   tol_r2 = 0.9999,
-  max_kappa = 1000,
   eps = 1e-08,
   verbose = FALSE,
   delta = 0,
@@ -56,8 +55,6 @@ so input-space \code{coordinates} can be returned.}
 \item{tol}{convergence tolerance based on residual sum of squares (default: 1e-6)}
 
 \item{tol_r2}{convergence tolerance based on R\eqn{^2} (default: 0.9999)}
-
-\item{max_kappa}{maximum condition number warning threshold (default: 1000)}
 
 \item{eps}{small positive number to ensure numerical stability (default: 1e-8)}
 

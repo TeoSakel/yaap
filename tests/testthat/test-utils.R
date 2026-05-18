@@ -30,25 +30,25 @@ test_that("row weight validation returns NULL for trivial weights", {
     expect_equal(check_row_weights(c(1, 0.5, 1), 3L), c(1, 0.5, 1))
 })
 
-test_that("effic uses a pseudo-inverse when cov(X) is singular", {
-    effic <- get("effic", asNamespace("yaap"))
+test_that(".aa_effic uses a pseudo-inverse when cov(X) is singular", {
+    .aa_effic <- get(".aa_effic", asNamespace("yaap"))
     ginv <- get(".aa_ginv", asNamespace("yaap"))
     X <- matrix(seq_len(12), nrow = 3L)
     Y <- X / 2
 
     expect_warning(
-        eta <- effic(X, Y),
+        eta <- .aa_effic(X, Y),
         "pseudo-inverse"
     )
     expect_equal(eta, sum(diag(ginv(stats::cov(X)) %*% stats::cov(Y))))
     expect_true(is_number(eta))
 })
 
-test_that("effic keeps Cholesky path for positive definite covariance", {
-    effic <- get("effic", asNamespace("yaap"))
+test_that(".aa_effic keeps Cholesky path for positive definite covariance", {
+    .aa_effic <- get(".aa_effic", asNamespace("yaap"))
     X <- as.matrix(iris[1:50, 1:4])
     Y <- X / 2
 
-    expect_warning(eta <- effic(X, Y), NA)
+    expect_warning(eta <- .aa_effic(X, Y), NA)
     expect_equal(eta, sum(stats::cov(Y) * chol2inv(chol(stats::cov(X)))))
 })

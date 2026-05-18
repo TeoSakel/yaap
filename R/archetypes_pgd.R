@@ -21,7 +21,6 @@
 #' @param max_iter maximum number of iterations (default: 100)
 #' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
 #' @param tol_r2 convergence tolerance based on R^2 (default: 0.9999)
-#' @param max_kappa maximum condition number for archetypes (default: 1000)
 #' @param eps small positive number to ensure numerical stability
 #'   (default: 0 for sparse input 1e-8 for dense)
 #' @param verbose whether to print progress messages (default: FALSE)
@@ -97,9 +96,7 @@
 #'
 #' Convergence is declared when the relative decrease in RSS between successive
 #' accepted updates falls below `tol` (default 1e-6) *or* \eqn{R^2} exceeds
-#' `tol_r2` (default 0.9999).  If `max_kappa` is exceeded by the condition
-#' number of the archetype matrix, a warning is issued and the iteration is
-#' logged but optimisation continues.
+#' `tol_r2` (default 0.9999).
 #'
 #' ## Preprocessing
 #'
@@ -138,7 +135,6 @@ archetypes_pgd <- function(x,
                            max_iter = 100L,
                            tol = 1e-6,
                            tol_r2 = 0.9999,
-                           max_kappa = 1000,
                            eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                            verbose = FALSE,
                            missing = any(is.na(x)),
@@ -164,7 +160,6 @@ archetypes_pgd <- function(x,
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
-        max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
         missing = missing,
@@ -184,7 +179,7 @@ archetypes_pgd <- function(x,
                           max_iter_optimizer = 10L,
                           step_shrinkage = 0.5,
                           max_no_update = 5L) {
-    loss_fun <- if (ctx[["robust"]]) .aa_pgd_weighted_loss_terms else .aa_pgd_loss_terms
+    loss_fun <- if (ctx[["robust"]]) .aa_pgd_weighted_loss else .aa_pgd_loss
     fit_fun <- if (ctx[["missing"]]) .aa_fit_pgd_missing else .aa_fit_pgd
 
     list(
@@ -210,7 +205,6 @@ archetypes_pgd <- function(x,
                 max_iter = ctx[["max_iter"]],
                 tol = ctx[["tol"]],
                 tol_r2 = ctx[["tol_r2"]],
-                max_kappa = ctx[["max_kappa"]],
                 eps = ctx[["eps"]],
                 verbose = ctx[["verbose"]]
             )
@@ -248,7 +242,6 @@ archetypes_pgd <- function(x,
                                 max_iter,
                                 tol,
                                 tol_r2,
-                                max_kappa,
                                 eps,
                                 verbose,
                                 A,
@@ -294,18 +287,9 @@ archetypes_pgd <- function(x,
     R <- .aa_pgd_missing_resid(M, S, A, X)  # residuals matrix
     xss <- norm(X, "F")^2  # X sum of squares; invariant for fixed X
     rss <- norm(R, "F")^2  # residual sum of squares -> objective to minimize
-    loss_terms <- list(
-        rss = rss,
-        xss = xss,
-        A = A
-    )
-    loss <- .aa_update_loss(
-        loss,
-        1L,
-        loss_terms,
-        verbose = verbose,
-        max_kappa = 1
-    )
+    loss_terms <- list(rss = rss, xss = xss, A = A)
+    loss[["loss"]][1L] <- rss
+    loss[["r2"]][1L] <- 1 - rss / xss
 
     # Edge case: if max_iter = 0 return initial fit
     if (max_iter == 0) {
@@ -399,13 +383,8 @@ archetypes_pgd <- function(x,
             no_update <- no_update + 1L
 
             # Copy previous loss entries to keep history.
-            loss <- .aa_update_loss(
-                loss,
-                i + 1L,
-                loss_terms,
-                verbose = verbose,
-                max_kappa = 1
-            )
+            loss[["loss"]][i + 1L] <- loss_terms[["rss"]]
+            loss[["r2"]][i + 1L] <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
 
             if (no_update >= max_no_update) {
                 fmt <- paste(
@@ -435,16 +414,11 @@ archetypes_pgd <- function(x,
                 xss = xss,
                 A = A
             )
-            loss <- .aa_update_loss(
-                loss,
-                i + 1L,
-                loss_terms,
-                verbose = verbose,
-                max_kappa = 1
-            )
+            loss[["loss"]][i + 1L] <- loss_terms[["rss"]]
+            loss[["r2"]][i + 1L] <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
 
             no_update <- 0L
-            converged <- .aa_check_convergence(loss, i, tol, tol_r2, 1, verbose)
+            converged <- .aa_check_convergence(loss, i, tol, tol_r2, verbose)
             if (converged) break
         }
     }
@@ -466,7 +440,6 @@ archetypes_pgd <- function(x,
                         max_iter,
                         tol,
                         tol_r2,
-                        max_kappa,
                         eps,
                         verbose,
                         loss_fun,
@@ -522,13 +495,8 @@ archetypes_pgd <- function(x,
         X, A, S,
         weight_fun = weight_fun
     )
-    loss <- .aa_update_loss(
-        loss,
-        1L,
-        loss_terms,
-        verbose = verbose,
-        max_kappa = max_kappa
-    )
+    loss[["loss"]][1L] <- loss_terms[["rss"]]
+    loss[["r2"]][1L] <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
 
     # Edge case: if max_iter = 0 return initial fit
     if (max_iter == 0) {
@@ -639,13 +607,8 @@ archetypes_pgd <- function(x,
             no_update <- no_update + 1L
 
             # Copy previous loss entries to keep history
-            loss <- .aa_update_loss(
-                loss,
-                i + 1L,
-                loss_terms,
-                verbose = verbose,
-                max_kappa = max_kappa
-            )
+            loss[["loss"]][i + 1L] <- loss_terms[["rss"]]
+            loss[["r2"]][i + 1L] <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
 
             if (no_update >= max_no_update) {
                 fmt <- paste(
@@ -683,13 +646,8 @@ archetypes_pgd <- function(x,
                 AAt = AAt,
                 XAt = XAt
             )
-            loss <- .aa_update_loss(
-                loss,
-                i + 1L,
-                loss_terms,
-                verbose = verbose,
-                max_kappa = max_kappa
-            )
+            loss[["loss"]][i + 1L] <- loss_terms[["rss"]]
+            loss[["r2"]][i + 1L] <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
 
             # Refresh cached terms. In the weighted route, robust reweighting
             # changes S_weighted and therefore StS, StX, StXXt, xss, and rss.
@@ -703,7 +661,7 @@ archetypes_pgd <- function(x,
             StXXt <- loss_terms[["StXXt"]]
 
             no_update <- 0L
-            converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
+            converged <- .aa_check_convergence(loss, i, tol, tol_r2, verbose)
             if (converged) break
         }
     }
@@ -721,7 +679,7 @@ archetypes_pgd <- function(x,
     )
 }
 
-.aa_pgd_loss_terms <- function(X, A, S, xss = NULL, rss = NULL,
+.aa_pgd_loss <- function(X, A, S, xss = NULL, rss = NULL,
                                StS = NULL, StX = NULL, AAt = NULL, XAt = NULL,
                                StXXt = NULL,
                                ...) {
@@ -746,7 +704,7 @@ archetypes_pgd <- function(x,
     )
 }
 
-.aa_pgd_weighted_loss_terms <- function(X, A, S, weight_fun, row_xss = NULL,
+.aa_pgd_weighted_loss <- function(X, A, S, weight_fun, row_xss = NULL,
                                         AAt = NULL, XAt = NULL, ...) {
     row_xss <- row_xss %||% rowSums(X * X)
     AAt     <- AAt     %||% tcrossprod(A)

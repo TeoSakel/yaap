@@ -73,7 +73,7 @@ step_archetypes <- function(
     rlang::check_installed(c("recipes", "withr"), reason = "required by step_archetypes()")
     recipes::add_step(
         recipe,
-        step_archetypes_new(
+        .aa_step_archetypes_new(
             terms              = rlang::enquos(...),
             role               = role,
             trained            = trained,
@@ -92,7 +92,7 @@ step_archetypes <- function(
     )
 }
 
-step_archetypes_new <- function(
+.aa_step_archetypes_new <- function(
     terms, role, trained, num_comp, delta, fit_method, options,
     reconstruct, keep_original_cols, res, col_names, seed, skip, id
 ) {
@@ -129,7 +129,7 @@ prep.step_archetypes <- function(x, training, info = NULL, ...) {
 
     res <- withr::with_seed(x$seed, do.call(run_aa, aa_args))
 
-    step_archetypes_new(
+    .aa_step_archetypes_new(
         terms              = x$terms,
         role               = x$role,
         trained            = TRUE,

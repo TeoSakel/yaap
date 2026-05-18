@@ -39,33 +39,6 @@ is_all_positive <- function(x) is_all_finite(x) && all(x > 0)
 
 is_all_non_negative <- function(x) is_all_finite(x) && all(x >= 0)
 
-.aa_require_namespace <- function(pkg, feature) {
-    if (!requireNamespace(pkg, quietly = TRUE)) {
-        err <- simpleError(
-            sprintf("Package `%s` is required for %s. Install it to use this path.", pkg, feature)
-        )
-        err[["pkg"]] <- pkg
-        err[["feature"]] <- feature
-        class(err) <- c("aa_missing_namespace_error", class(err))
-        stop(err)
-    }
-    invisible(TRUE)
-}
-
-.aa_ginv <- function(x, tol = sqrt(.Machine$double.eps)) {
-    s <- svd(x)
-    if (!length(s[["d"]]))
-        return(matrix(0, nrow = ncol(x), ncol = nrow(x)))
-
-    cutoff <- tol * max(s[["d"]])
-    keep <- s[["d"]] > cutoff
-    if (!any(keep))
-        return(matrix(0, ncol = nrow(x), nrow = ncol(x)))
-
-    s[["v"]][, keep, drop = FALSE] %*%
-        (t(s[["u"]][, keep, drop = FALSE]) / s[["d"]][keep])
-}
-
 is_row_stochastic <- function(x, tol = sqrt(.Machine$double.eps)) {
     Sx <- tryCatch(rowSums(x), error = function(e) NULL)
     if (is.null(Sx)) return(FALSE)
@@ -108,19 +81,8 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     if (all(row_weights == 1)) NULL else row_weights
 }
 
-# Centered log-ratio transform after row closure, with zero replacement.
-.aa_clr <- function(X, zero_replace = sqrt(.Machine$double.eps)) {
-    totals <- rowSums(X)
-    if (any(totals <= 0))
-        stop("Cannot apply clr transform to rows with non-positive total", call. = FALSE)
-    closed <- X / totals
-    closed <- pmax(closed, zero_replace)
-    log_closed <- log(closed)
-    log_closed - rowMeans(log_closed)
-}
-
 # Scale data without forcing sparse inputs through dense centering.
-scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
+.aa_scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
     is_sparse <- inherits(X, "sparseMatrix")
     X_attrs <- attributes(X)
 
@@ -138,8 +100,13 @@ scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
 
     if (!isFALSE(center)) {
         X <- sweep(as.matrix(X), 2L, center, "-")
-        if (is_sparse)
-            warning("Centering matrices breaks sparsity; consider using `center = FALSE`", call. = FALSE)
+        if (is_sparse) {
+            msg <- paste(
+                "Centering matrices breaks sparsity;",
+                "consider using `center = FALSE`.",
+            )
+            warning(msg, call. = FALSE)
+        }
         is_sparse <- FALSE
     }
 
@@ -176,7 +143,7 @@ scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
 # Mathematical Subroutines -----------------------------------------------------
 
 # Compute squared Euclidean distance of each sample from center
-.dist2 <- function(X, center = FALSE) {
+.aa_dist2 <- function(X, center = FALSE) {
     x2 <- rowSums(X * X)
     if (isFALSE(center))
         return(x2)
@@ -189,7 +156,7 @@ scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
 
 
 # Compute pairwise squared distances between rows of X and Y
-.pdist2 <- function(X, Y) {
+.aa_pdist2 <- function(X, Y) {
     # both x and y must be in the same dimensional space
     stopifnot(ncol(X) == ncol(Y))
 
@@ -198,9 +165,34 @@ scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
     pmax(D2, 0)     # ensure non-negative distances
 }
 
+.aa_ginv <- function(x, tol = sqrt(.Machine$double.eps)) {
+    s <- svd(x)
+    if (!length(s[["d"]]))
+        return(matrix(0, nrow = ncol(x), ncol = nrow(x)))
+
+    cutoff <- tol * max(s[["d"]])
+    keep <- s[["d"]] > cutoff
+    if (!any(keep))
+        return(matrix(0, ncol = nrow(x), nrow = ncol(x)))
+
+    s[["v"]][, keep, drop = FALSE] %*%
+        (t(s[["u"]][, keep, drop = FALSE]) / s[["d"]][keep])
+}
+
+# Centered log-ratio transform after row closure, with zero replacement.
+.aa_clr <- function(X, zero_replace = sqrt(.Machine$double.eps)) {
+    totals <- rowSums(X)
+    if (any(totals <= 0))
+        stop("Cannot apply clr transform to rows with non-positive total", call. = FALSE)
+    closed <- X / totals
+    closed <- pmax(closed, zero_replace)
+    log_closed <- log(closed)
+    log_closed - rowMeans(log_closed)
+}
+
 # Otsu's method for 1-D data: finds the threshold maximising between-class
 # variance.  Returns NA when the input is empty or has a single unique value.
-.otsu_threshold <- function(x, n_bins = 256L) {
+.aa_otsu_threshold <- function(x, n_bins = 256L) {
     x <- x[is.finite(x)]
     if (length(x) == 0L) return(NA_real_)
     rng <- range(x)
@@ -221,7 +213,7 @@ scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
 
 # Clustering efficiency between original matrix X and reconstructed matrix Y
 # (based on the cluster means)
-effic <- function(X, Y) {
+.aa_effic <- function(X, Y) {
     # X, Y: data matrices (N×M), rows = samples, cols = features
     Sx <- stats::cov(X)  # (M×M)
     Sy <- stats::cov(Y)
@@ -285,28 +277,32 @@ effic <- function(X, Y) {
 # Archetypes Fitting Subroutines -----------------------------------------------------
 
 .aa_check_fit_controls <- function(ctx, n = nrow(ctx[["x"]])) {
-    stopifnot("max_iter must be a non-negative integer" = is_count(ctx[["max_iter"]], start_from = 0L))
+    stopifnot("max_iter must be a non-negative integer" =
+                  is_count(ctx[["max_iter"]], start_from = 0L))
     stopifnot("tol must be positive" = is_positive(ctx[["tol"]]))
     stopifnot("tol_r2 must be between (0, 1)" = ctx[["tol_r2"]] >= 0 && ctx[["tol_r2"]] <= 1)
     stopifnot("K must be a positive integer less than or equal to the number of samples" =
                   is_count(ctx[["K"]]) && ctx[["K"]] <= n)
-    stopifnot("max_kappa must be >=1" = identical(ctx[["max_kappa"]], Inf) || (is_number(ctx[["max_kappa"]]) && ctx[["max_kappa"]] >= 1))
+    stopifnot("max_kappa must be >=1" =
+                  identical(ctx[["max_kappa"]], Inf) ||
+                  (is_number(ctx[["max_kappa"]]) && ctx[["max_kappa"]] >= 1))
     stopifnot("eps must be non-negative" = is_non_negative(ctx[["eps"]]))
     stopifnot("robust must be TRUE or FALSE" = is_logical(ctx[["robust"]]))
     stopifnot("tukey_c must be positive" = is_positive(ctx[["tukey_c"]]))
     invisible(TRUE)
 }
 
-# TODO: add more metrics Some ideas:A
-#  - A_drift = norm(A_new - A) / norm(A): stability of solution
-#  - min(dist(A)): detect near duplicates warning about K too large
-#  - S_drift similarly, B_drift only if delta > 0
-#  - A restart A_drift for nrep > 1 (only the final solutions are compared after aligning the archetypes with Hungarian algorithm)
-.aa_new_loss <- function(L) {
-    list(loss = rep(NA_real_, L),
-         r2   = rep(NA_real_, L),
-         k_S  = rep(NA_real_, L),
-         k_A  = rep(NA_real_, L))
+.aa_require_namespace_for <- function(pkg, feature) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+        err <- simpleError(
+            sprintf("Package `%s` is required for %s. Install it to use this path.", pkg, feature)
+        )
+        err[["pkg"]] <- pkg
+        err[["feature"]] <- feature
+        class(err) <- c("aa_missing_namespace_error", class(err))
+        stop(err)
+    }
+    invisible(TRUE)
 }
 
 .aa_check_scale <- function(scale, p) {
@@ -348,22 +344,22 @@ effic <- function(X, Y) {
     if (K == nrow(data)) { # X = A
         if (verbose)
             message("K equals number of samples, returning identity archetypes")
-        out <- .identity_archetypes(data)
+        out <- .aa_identity_fit(data)
     } else if (K == 1L) { # Archetype = mean of X
         if (verbose) message("K equals 1, returning mean archetype")
-        out <- .mean_archetype(data)
+        out <- .aa_mean_fit(data)
     }
     out
 }
 
 # Edge case K == N: each sample is its own archetype
-.identity_archetypes <- function(X, call = NULL) {
+.aa_identity_fit <- function(X, call = NULL) {
     A <- X
     rownames(A) <- paste0("A", seq_len(nrow(X)))  # remove row names for consistency
     S <- B <- diag(nrow(X))
     colnames(B) <- rownames(S) <- rownames(X)
     rownames(B) <- colnames(S) <- rownames(A)
-    loss <- data.frame(loss = 0, r2 = 1, k_S = 1, k_A = kappa(A))
+    loss <- data.frame(loss = 0, r2 = 1)
 
     archetypes(
         call         = NULL,
@@ -379,7 +375,7 @@ effic <- function(X, Y) {
 }
 
 # Edge case K == 1: single archetype at mean of X
-.mean_archetype <- function(X) {
+.aa_mean_fit <- function(X) {
     x_mean <- colMeans(X)
     A <- matrix(
         x_mean,
@@ -402,7 +398,7 @@ effic <- function(X, Y) {
 
     xss <- norm(X, type = "F")^2
     rss <- xss - nrow(X) * as.numeric(x_mean %*% x_mean)
-    loss <- data.frame(loss = rss, r2 = 1 - rss / xss, k_S = 1, k_A = 1)
+    loss <- data.frame(loss = rss, r2 = 1 - rss / xss)
 
     archetypes(
         call         = NULL,
@@ -418,7 +414,7 @@ effic <- function(X, Y) {
 }
 
 # Remove features (columns of X) with low variance
-.filter_low_variance <- function(X, sd_threshold) {
+.aa_filter_low_variance <- function(X, sd_threshold) {
     sd_vals <- attr(X, "scaled:scale") %||% matrixStats::colSds(X)
     mask <- sd_vals >= sd_threshold
     M <- sum(mask)
@@ -444,7 +440,6 @@ effic <- function(X, Y) {
     }
     X
 }
-
 
 .aa_preprocess_missing <- function(data, sd_threshold, verbose, scale = TRUE) {
     if (is.matrix(scale) || inherits(scale, "Matrix"))
@@ -497,7 +492,7 @@ effic <- function(X, Y) {
             attr(X, "scaled:center") <- stats[["mean"]]
     }
 
-    X <- .filter_low_variance(X, sd_threshold)
+    X <- .aa_filter_low_variance(X, sd_threshold)
     mask <- attr(X, "mask")
     if (!is.null(mask))
         M <- M[, mask, drop = FALSE]
@@ -683,8 +678,8 @@ effic <- function(X, Y) {
         return(paste0("A", seq_len(nrow(A))))
 
     stopifnot("Archetype names must not be missing" = !any(is.na(nm)))
-    stopifnot("Archetype names must not be empty" = all(nzchar(nm)))
-    stopifnot("Archetype names must be unique" = !anyDuplicated(nm))
+    stopifnot("Archetype names must not be empty"   = all(nzchar(nm)))
+    stopifnot("Archetype names must be unique"      = !anyDuplicated(nm))
     nm
 }
 
@@ -705,7 +700,7 @@ effic <- function(X, Y) {
     a_lo <- max(1 - delta, ifelse(eps > 0, eps, 1e-8))
     a_hi <- 1 + delta
     B <- tryCatch(
-        fit_qp(
+        .aa_fit_qp(
             A = X,
             X = init,
             eps = eps,
@@ -715,10 +710,11 @@ effic <- function(X, Y) {
         ),
         aa_missing_namespace_error = function(e) {
             if (identical(e[["pkg"]], "quadprog")) {
-                stop(
-                    "Matrix-valued `init` requires the `quadprog` package. Install `quadprog` to use custom archetype coordinates.",
-                    call. = FALSE
+                msg <- paste(
+                    "Matrix-valued `init` requires the `quadprog` package.",
+                    "Install `quadprog` to use custom archetype coordinates."
                 )
+                stop(msg, call. = FALSE)
             }
             stop(e)
         }
@@ -739,8 +735,8 @@ effic <- function(X, Y) {
     list(
         A = A,
         B = B,
-        S = .init_S(X, A, eps = eps),
-        loss = .aa_new_loss(L)
+        S = .aa_init_S(X, A, eps = eps),
+        loss = list(loss = rep(NA_real_, L), r2 = rep(NA_real_, L))
     )
 }
 
@@ -748,51 +744,16 @@ effic <- function(X, Y) {
     pmax(row_xss - 2 * rowSums(S * XAt) + rowSums(S * (S %*% AAt)), 0)
 }
 
-.aa_update_loss <- function(loss, i, loss_terms, verbose, max_kappa = 1,
-                            k_A = c("exact", "gram")) {
-    k_A <- match.arg(k_A)
-    # Update loss metrics: add row "i" (current iteration) to the loss dataframe
-    loss[["loss"]][i] <- loss_terms[["rss"]]
-    loss[["r2"]][i]  <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
-
-    # Compute condition numbers
-    if ((i - 1L) %% 10 != 0)
-        return(loss)  # only update kappa every 10 iterations for efficiency
-
-    if (max_kappa > 1) {
-        # S tends to be long and skinny (N >> K), so use rcond for better stability
-        # A tends to be roughly square (K ~ M), so use kappa directly
-        loss[["k_S"]][i] <- sqrt(1 / rcond(loss_terms[["StS"]]))
-        if (identical(k_A, "gram")) {
-            loss[["k_A"]][i] <- sqrt(1 / rcond(loss_terms[["AAt"]]))
-        } else if (is.na(loss[["k_A"]][i])) {
-            loss[["k_A"]][i] <- kappa(loss_terms[["A"]], exact = TRUE)
-        }
-    } else {
-        loss[["k_S"]][i] <- max_kappa
-        if (is.na(loss[["k_A"]][i])) loss[["k_A"]][i] <- max_kappa
-    }
-    loss
-}
-
 # Check convergence based on relative loss improvement and R2 threshold
-.aa_check_convergence <- function(loss, i, tol, tol_r2, max_kappa, verbose) {
-    j <- i + 1L  # save some typing...
-    # Main
+.aa_check_convergence <- function(loss, i, tol, tol_r2, verbose) {
+    j <- i + 1L
     converged <- with(
         loss,
         abs(loss[j] - loss[i]) < tol * loss[i] || r2[j] > tol_r2
     )
-    # Warnings/Messages
     if (verbose && i %% 10 == 0) {
         fmt <- "Iteration %d: loss = %.4f, R2 = %.3f"
         message(sprintf(fmt, i, loss[["loss"]][j], loss[["r2"]][j]))
-    }
-    k_S <- loss[["k_S"]][j]
-    k_A <- loss[["k_A"]][j]
-    if ((!is.na(k_S) && k_S > max_kappa) || (!is.na(k_A) && k_A > max_kappa)) {
-        fmt <- "Warning: Condition number exceeded max_kappa (k_S=%.1f, k_A=%.1f)"
-        warning(sprintf(fmt, k_S, k_A), call. = FALSE)
     }
     converged
 }

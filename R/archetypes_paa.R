@@ -13,7 +13,6 @@
 #' @param max_iter maximum number of outer iterations (default: 100)
 #' @param tol convergence tolerance based on objective loss (default: 1e-6)
 #' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
-#' @param max_kappa maximum condition number warning threshold (default: 1000)
 #' @param eps small positive number for numerical stability (default: 1e-8)
 #' @param verbose whether to print progress messages (default: FALSE)
 #' @param step_size initial line-search step size (default: 1.0)
@@ -66,7 +65,6 @@ archetypes_paa <- function(x,
                            max_iter = 100L,
                            tol = 1e-6,
                            tol_r2 = 0.9999,
-                           max_kappa = 1000,
                            eps = 1e-8,
                            verbose = FALSE,
                            step_size = 1.0,
@@ -88,7 +86,6 @@ archetypes_paa <- function(x,
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
-        max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
         missing = FALSE,
@@ -145,7 +142,6 @@ archetypes_paa <- function(x,
                 max_iter = ctx[["max_iter"]],
                 tol = ctx[["tol"]],
                 tol_r2 = ctx[["tol_r2"]],
-                max_kappa = ctx[["max_kappa"]],
                 eps = ctx[["eps"]],
                 verbose = ctx[["verbose"]],
                 A0 = init_vars[["A"]],
@@ -252,7 +248,6 @@ archetypes_paa <- function(x,
                             max_iter,
                             tol,
                             tol_r2,
-                            max_kappa,
                             eps,
                             verbose,
                             A0,
@@ -278,8 +273,8 @@ archetypes_paa <- function(x,
     Y <- S %*% A
     obj <- spec[["objective"]](X, Y)
     loss_ref <- max(obj, .Machine$double.eps)
-    loss_terms <- list(rss = obj, xss = loss_ref, StS = crossprod(S), A = A)
-    loss <- .aa_update_loss(loss, 1L, loss_terms, verbose = verbose, max_kappa = max_kappa)
+    loss[["loss"]][1L] <- obj
+    loss[["r2"]][1L] <- 1 - obj / loss_ref
     converged <- FALSE
     no_update <- 0L
     step_S <- step_size
@@ -360,14 +355,9 @@ archetypes_paa <- function(x,
         }
 
         no_update <- 0L
-        loss_terms <- list(
-            rss = obj,
-            xss = loss_ref,
-            StS = if (i %% 10L == 0L && max_kappa > 1) crossprod(S) else NULL,
-            A = A
-        )
-        loss <- .aa_update_loss(loss, j, loss_terms, verbose = verbose, max_kappa = max_kappa)
-        converged <- .aa_check_convergence(loss, i, tol, tol_r2, max_kappa, verbose)
+        loss[["loss"]][j] <- obj
+        loss[["r2"]][j] <- 1 - obj / loss_ref
+        converged <- .aa_check_convergence(loss, i, tol, tol_r2, verbose)
         if (converged) break
     }
 

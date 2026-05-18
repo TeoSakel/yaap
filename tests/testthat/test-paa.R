@@ -53,6 +53,7 @@ test_that("archetypes_paa fits supported families with shared invariants", {
         expect_row_stochastic(fit[["coefficients"]])
         expect_row_stochastic(fit[["compositions"]])
         expect_true(is_all_finite(fit[["loss"]][["loss"]]))
+        expect_named(fit[["loss"]], c("loss", "r2"))
         expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
     }
 })

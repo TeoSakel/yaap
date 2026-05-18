@@ -1,7 +1,7 @@
 test_that("archetypes_directional fits spherical data with expected invariants", {
     set.seed(1)
     X <- directional_matrix()
-    fit <- archetypes_directional(X, K = 3L, max_iter = 10L, tol_r2 = 0.9, max_kappa = Inf)
+    fit <- archetypes_directional(X, K = 3L, max_iter = 10L, tol_r2 = 0.9)
 
     expect_s3_class(fit, "directional_archetypes")
     expect_s3_class(fit, "archetypes")
@@ -13,6 +13,7 @@ test_that("archetypes_directional fits spherical data with expected invariants",
     expect_row_stochastic(fit[["coefficients"]])
     expect_row_stochastic(fit[["compositions"]])
     expect_true(is_all_finite(fit[["loss"]][["loss"]]))
+    expect_named(fit[["loss"]], c("loss", "r2"))
     expect_true(is_all_finite(fitted(fit)))
     expect_true(is_all_finite(residuals(fit)))
     S_pred <- predict(fit, X[1:5, ], max_iter = 3L)
@@ -29,8 +30,7 @@ test_that("directional loss is monotone non-increasing", {
         directional_matrix(),
         K = 3L,
         max_iter = 12L,
-        tol_r2 = 1,
-        max_kappa = Inf
+        tol_r2 = 1
     )
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
 })
@@ -40,14 +40,13 @@ test_that("directional AA is stable to polarity flips", {
     signs <- rep(c(-1, 1), length.out = nrow(X))
 
     set.seed(3)
-    fit <- archetypes_directional(X, K = 3L, max_iter = 12L, tol_r2 = 1, max_kappa = Inf)
+    fit <- archetypes_directional(X, K = 3L, max_iter = 12L, tol_r2 = 1)
     set.seed(3)
     fit_flip <- archetypes_directional(
         X * signs,
         K = 3L,
         max_iter = 12L,
-        tol_r2 = 1,
-        max_kappa = Inf
+        tol_r2 = 1
     )
 
     final_r2 <- tail(fit[["loss"]][["r2"]], 1L)
@@ -63,8 +62,7 @@ test_that("run_aa dispatches to directional fitter", {
         K = 3L,
         method = "directional",
         max_iter = 5L,
-        tol_r2 = 0.9,
-        max_kappa = Inf
+        tol_r2 = 0.9
     )
 
     expect_s3_class(fit, "directional_archetypes")

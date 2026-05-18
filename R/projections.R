@@ -107,8 +107,8 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     method <- match.arg(method)
     S <- switch(
         method,
-        nnls = project(fit_nnls(X, t(A)), eps = eps),  # TODO: add bigM?
-        QP   = fit_qp(A, X, eps, proj_l1, lambda)
+        nnls = project(.aa_solve_nnls(X, t(A)), eps = eps),  # TODO: add bigM?
+        QP   = .aa_fit_qp(A, X, eps, proj_l1, lambda)
     )
 
     # Prepare output
@@ -117,7 +117,7 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     S
 }
 
-fit_qp <- function(A,
+.aa_fit_qp <- function(A,
                    X,
                    eps,
                    project = NULL,
@@ -126,7 +126,7 @@ fit_qp <- function(A,
                    feature = 'fit_simplex(method = "QP")',
                    ...) {
 
-    .aa_require_namespace("quadprog", feature)
+    .aa_require_namespace_for("quadprog", feature)
 
     N <- nrow(X)
     K <- nrow(A)
