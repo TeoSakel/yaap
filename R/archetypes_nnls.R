@@ -11,8 +11,11 @@
 #' @param weights optional vector of sample weights (default: NULL)
 #' @param scale scaling or metric embedding used before fitting; see
 #'   [archetypes_pgd()] for details (default: TRUE).
-#' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
-#' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
+#' @param robust robust row reweighting selector. Use `FALSE` for ordinary
+#'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
+#'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
+#'   "MM"` is not supported because it is not applicable to AA.
+#' @param robust_args list of tuning arguments passed to the robust psi function.
 #' @param sd_threshold threshold for feature standard deviation to filter
 #'   low-variance features (default: 1e-6).
 #' @param max_iter maximum number of iterations (default: 100)
@@ -72,7 +75,7 @@ archetypes_nnls <- function(x,
                             weights = NULL,
                             scale = TRUE,
                             robust = FALSE,
-                            tukey_c = 4.685,
+                            robust_args = list(),
                             sd_threshold = 1e-6,
                             max_iter = 100L,
                             tol = 1e-6,
@@ -93,7 +96,7 @@ archetypes_nnls <- function(x,
         weights = weights,
         scale = scale,
         robust = robust,
-        tukey_c = tukey_c,
+        robust_args = robust_args,
         sd_threshold = sd_threshold,
         max_iter = max_iter,
         tol = tol,
@@ -127,14 +130,14 @@ archetypes_nnls <- function(x,
                 c(
                     list(
                         X = prep[["X"]],
-                        weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["tukey_c"]]),
+                        weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["robust_args"]]),
                         max_iter = ctx[["max_iter"]],
                         tol = ctx[["tol"]],
                         tol_r2 = ctx[["tol_r2"]],
                         max_kappa = ctx[["max_kappa"]],
                         eps = ctx[["eps"]],
                         verbose = ctx[["verbose"]],
-                        loss_fun = if (ctx[["robust"]])
+                        loss_fun = if (!identical(ctx[["robust"]], FALSE))
                             .aa_nnls_weighted_loss
                         else
                             .aa_nnls_loss

@@ -143,8 +143,11 @@ run_aa.formula <- function(formula,
 #'   standardization; `FALSE` leaves columns on their original scale; a
 #'   positive numeric vector divides by user-supplied scale factors; a symmetric
 #'   positive-definite matrix applies the corresponding feature metric.
-#' @param robust whether to use Tukey bisquare row reweighting (default: `FALSE`).
-#' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685).
+#' @param robust robust row reweighting selector. Use `FALSE` for ordinary
+#'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
+#'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
+#'   "MM"` is not supported because it is not applicable to AA.
+#' @param robust_args list of tuning arguments passed to the robust psi function.
 #' @param sd_threshold threshold for feature standard deviation below which
 #'   columns are dropped before fitting (default: 1e-6).
 #' @param max_iter maximum number of outer iterations (default: 100).
@@ -171,7 +174,7 @@ run_aa.default <- function(x,
                            weights = NULL,
                            scale = TRUE,
                            robust = FALSE,
-                           tukey_c = 4.685,
+                           robust_args = list(),
                            sd_threshold = 1e-6,
                            max_iter = 100L,
                            tol = 1e-6,
@@ -202,7 +205,7 @@ run_aa.default <- function(x,
         weights = weights,
         scale = scale,
         robust = robust,
-        tukey_c = tukey_c,
+        robust_args = robust_args,
         sd_threshold = sd_threshold,
         max_iter = max_iter,
         tol = tol,
@@ -269,7 +272,7 @@ run_aa.fd <- function(x, K, ...) {
                            weights = NULL,
                            scale = TRUE,
                            robust = FALSE,
-                           tukey_c = 4.685,
+                           robust_args = list(),
                            sd_threshold = 1e-6,
                            max_iter = 100L,
                            tol = 1e-6,
@@ -302,7 +305,7 @@ run_aa.fd <- function(x, K, ...) {
         weights = weights,
         scale = scale,
         robust = robust,
-        tukey_c = tukey_c,
+        robust_args = robust_args,
         sd_threshold = sd_threshold,
         max_iter = max_iter,
         tol = tol,
@@ -346,13 +349,6 @@ run_aa.fd <- function(x, K, ...) {
     fit[["loss"]][["loss"]][fit[["i"]] + 1L]
 }
 
-# TODO: refactor to work like MASS::rlm()
-.aa_weight_fun <- function(robust, tukey_c) {
-    if (!robust)
-        return(NULL)
-    function(row_rss) .aa_bisquare_weights(row_rss, c = tukey_c)
-}
-
 .aa_check_x <- function(x, missing = FALSE, validate_values = TRUE) {
     stopifnot("data must be a matrix-like object" =
                   is.matrix(x) || inherits(x, "data.frame") ||
@@ -380,8 +376,8 @@ run_aa.fd <- function(x, K, ...) {
 .aa_check_missing_route <- function(ctx) {
     if (!identical(ctx[["method"]], "pgd") && ctx[["missing"]])
         stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
-    if (ctx[["missing"]] && ctx[["robust"]])
-        stop("`robust = TRUE` is not supported with `missing = TRUE`.", call. = FALSE)
+    if (ctx[["missing"]] && !identical(ctx[["robust"]], FALSE))
+        stop("`robust` is not supported with `missing = TRUE`.", call. = FALSE)
     if (ctx[["missing"]] && !is.null(ctx[["weights"]]))
         stop("`weights` are not supported with `missing = TRUE`.", call. = FALSE)
     if (ctx[["missing"]] && (is.matrix(ctx[["scale"]]) || inherits(ctx[["scale"]], "Matrix")))
@@ -621,7 +617,9 @@ run_aa.fd <- function(x, K, ...) {
         init <- if (is.function(init)) "function" else "matrix"
     fit_info <- fit_info %|p|% list(
         family = prep[["family"]] %||% ctx[["family"]] %||% "gaussian",
-        robust = isTRUE(ctx[["robust"]]),
+        robust = !identical(ctx[["robust"]], FALSE),
+        robust_psi = .aa_robust_label(ctx[["robust"]]) %||% NA_character_,
+        robust_args = I(list(ctx[["robust_args"]])),
         missing = isTRUE(ctx[["missing"]]),
         delta = fit[["delta"]] %||% 0,
         init = init,

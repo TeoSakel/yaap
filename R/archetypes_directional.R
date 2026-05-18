@@ -138,8 +138,8 @@ archetypes_directional <- function(x,
                     call. = FALSE
                 )
             }
-            if (ctx[["robust"]]) {
-                stop("`robust = TRUE` is not supported for `method = 'directional'`.",
+            if (!identical(ctx[["robust"]], FALSE)) {
+                stop("`robust` is not supported for `method = 'directional'`.",
                     call. = FALSE
                 )
             }

@@ -55,16 +55,63 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 
 # Weighting Function for Robust Archetypal Analysis ---------------------------------------------
 
-# Tukey's bisquare row weights from squared row residual norms.
-.aa_bisquare_weights <- function(row_rss, c = 4.685) {
-    stopifnot("`c` must be positive" = is_positive(c))
-    row_resid <- sqrt(pmax(row_rss, 0))
-    scale <- stats::mad(row_resid, center = 0)
-    if (!is.finite(scale) || scale <= .Machine$double.eps)
-        return(rep(1, length(row_rss)))
+.aa_robust_label <- function(robust) {
+    if (identical(robust, FALSE))
+        return(NULL)
+    if (identical(robust, TRUE))
+        return("psi.bisquare")
+    if (is_non_empty_string(robust))
+        return(robust)
+    if (is.function(robust))
+        return("function")
+    NULL
+}
 
-    u <- row_resid / scale
-    ifelse(u <= c, (1 - (u / c)^2)^2, 0)
+.aa_resolve_robust <- function(robust, robust_args = list()) {
+    if (identical(robust, FALSE))
+        return(NULL)
+
+    stopifnot("`robust_args` must be a list." = is.list(robust_args))
+    if (any(names(robust_args) %in% c("u", "deriv")))
+        stop("`robust_args` cannot include `u` or `deriv`.", call. = FALSE)
+
+    if (identical(robust, TRUE))
+        robust <- "psi.bisquare"
+
+    error_msg <- "`robust` must be FALSE, TRUE, a MASS psi function name, or a function."
+    if (is_non_empty_string(robust)) {
+        .aa_require_namespace_for("MASS", "character `robust` psi functions")
+        psi_fun <- tryCatch(
+            get(robust, envir = asNamespace("MASS"), mode = "function", inherits = FALSE),
+            error = function(e) NULL
+        )
+        if (!is.function(psi_fun))
+            stop(error_msg, call. = FALSE)
+        return(list(fun = psi_fun, label = robust))
+    }
+
+    if (is.function(robust))
+        return(list(fun = robust, label = "function"))
+    stop(error_msg, call. = FALSE)
+}
+
+.aa_weight_fun <- function(robust, robust_args = list()) {
+    spec <- .aa_resolve_robust(robust, robust_args)
+    if (is.null(spec))
+        return(NULL)
+
+    function(row_rss) {
+        row_resid <- sqrt(pmax(row_rss, 0))
+        scale <- stats::mad(row_resid, center = 0)
+        if (!is.finite(scale) || scale <= .Machine$double.eps)
+            return(rep(1, length(row_rss)))
+
+        weights <- do.call(
+            spec[["fun"]],
+            c(list(u = row_resid / scale, deriv = 0), robust_args)
+        )
+        .aa_check_row_weights(weights, length(row_rss))
+    }
 }
 
 .aa_weight_rows <- function(X, row_weights = NULL) {
@@ -78,7 +125,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
         return(NULL)
     stopifnot("row_weights must match rows in X" = length(row_weights) == n)
     stopifnot("row_weights must be finite and non-negative" = is_all_non_negative(row_weights))
-    if (all(row_weights == 1)) NULL else row_weights
+    row_weights
 }
 
 # Scale data without forcing sparse inputs through dense centering.
@@ -165,20 +212,6 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     pmax(D2, 0)     # ensure non-negative distances
 }
 
-.aa_ginv <- function(x, tol = sqrt(.Machine$double.eps)) {
-    s <- svd(x)
-    if (!length(s[["d"]]))
-        return(matrix(0, nrow = ncol(x), ncol = nrow(x)))
-
-    cutoff <- tol * max(s[["d"]])
-    keep <- s[["d"]] > cutoff
-    if (!any(keep))
-        return(matrix(0, ncol = nrow(x), nrow = ncol(x)))
-
-    s[["v"]][, keep, drop = FALSE] %*%
-        (t(s[["u"]][, keep, drop = FALSE]) / s[["d"]][keep])
-}
-
 # Centered log-ratio transform after row closure, with zero replacement.
 .aa_clr <- function(X, zero_replace = sqrt(.Machine$double.eps)) {
     totals <- rowSums(X)
@@ -223,7 +256,8 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     if (is.null(cx)) {
         warning("cov(X) is singular; using Moore-Penrose pseudo-inverse for efficiency.",
                 call. = FALSE)
-        return(sum(diag(.aa_ginv(Sx) %*% Sy)))
+        .aa_require_namespace_for("MASS", "singular-covariance efficiency fallback")
+        return(sum(diag(MASS::ginv(Sx) %*% Sy)))
     }
 
     # since trace(AB) = sum(A * t(B)) = sum(A * B) when symmetric
@@ -287,8 +321,8 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
                   identical(ctx[["max_kappa"]], Inf) ||
                   (is_number(ctx[["max_kappa"]]) && ctx[["max_kappa"]] >= 1))
     stopifnot("eps must be non-negative" = is_non_negative(ctx[["eps"]]))
-    stopifnot("robust must be TRUE or FALSE" = is_logical(ctx[["robust"]]))
-    stopifnot("tukey_c must be positive" = is_positive(ctx[["tukey_c"]]))
+    stopifnot("robust_args must be a list" = is.list(ctx[["robust_args"]]))
+    .aa_resolve_robust(ctx[["robust"]], ctx[["robust_args"]])
     invisible(TRUE)
 }
 

@@ -559,9 +559,9 @@ their interpretability as extreme prototypes.
 ### Robust fitting
 
 Standard AA minimises squared residuals, making it sensitive to outliers.
-Setting `robust = TRUE` applies **Tukey bisquare** row reweighting: observations
-with large residuals receive reduced
-influence at each iteration, so outliers cannot monopolise an archetype.
+Setting `robust = TRUE` applies MASS-style `"psi.bisquare"` row reweighting:
+observations with large residuals receive reduced influence at each iteration,
+so outliers cannot monopolise an archetype.
 
 Below we augment the `iris` dataset with five outliers and compare the results
 of standard and robust AA.
@@ -657,9 +657,10 @@ panel) one archetype has been pulled toward the outlier cluster; the remaining
 iris samples are spread across a distorted triangle and the clean species
 separation is lost.
 
-When `robust = TRUE`, the tuning constant `tukey_c` (default 4.685) controls the
-breakdown point; smaller values downweight moderately large residuals more
-aggressively.
+The `robust` argument also accepts MASS psi names such as `"psi.huber"` and
+`"psi.hampel"`; pass tuning constants with `robust_args`. See `MASS::rlm()` for
+psi details. The `MASS::rlm()` `method = "MM"` estimator is not supported because
+it is regression-specific and not directly applicable to the AA objective.
 
 ### Missing data
 
@@ -791,9 +792,8 @@ knitr::kable(bench, digits = 2)
 Also, because PGD works directly on the gradient, it can be easily adapted
 to handle extra terms like the slack terms used in the `delta` relaxation
 and missing residuals in the `missing = TRUE` objective. Both methods
-can handle the `robust = TRUE` fitting with Tukey's bisquare reweighting,
-as well as any custom weighting scheme passed via the `scale` and `weights`
-arguments.
+can handle robust psi reweighting, as well as weighting schemes passed via the
+`scale` and `weights` arguments.
 
 ### PGD Algorithm
 
@@ -899,9 +899,9 @@ implements some of them. The most common strategies are:
 
 - **Robust fitting**: Because archetypes are constrained to be convex combinations
   of the data, an outlier can attract an entire archetype to itself, leading to a
-  potentially misleading result. The option `robust = TRUE` applies Tukey bisquare
-  reweighting (tuned by `tukey_c`) to reduce the influence of such observations
-  (see <a href="#robust-fitting">*Robust fitting*</a>).
+  potentially misleading result. The option `robust = TRUE` applies robust psi
+  row reweighting to reduce the influence of such observations (see
+  <a href="#robust-fitting">*Robust fitting*</a>).
 
 - **Delta relaxation**: If the genuine extremes of the underlying data-generating
   process are not observed, standard AA will be unable to recover them. To

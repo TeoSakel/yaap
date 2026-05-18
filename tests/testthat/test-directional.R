@@ -91,7 +91,11 @@ test_that("directional AA validates unsupported and invalid inputs", {
     )
     expect_error(
         run_aa(X, K = 3L, method = "directional", robust = TRUE),
-        "robust = TRUE"
+        "robust"
+    )
+    expect_error(
+        run_aa(X, K = 3L, method = "directional", robust = "psi.huber"),
+        "robust"
     )
     expect_error(
         run_aa(X, K = 3L, method = "directional", scale = FALSE),

@@ -17,8 +17,11 @@
 #'   so input-space `coordinates` can be returned.
 #' @param init initialization method; see [run_aa()] for available options.
 #' @param init_args list of additional arguments for the initialization function.
-#' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
-#' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
+#' @param robust robust row reweighting selector. Use `FALSE` for ordinary
+#'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
+#'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
+#'   "MM"` is not supported because it is not applicable to AA.
+#' @param robust_args list of tuning arguments passed to the robust psi function.
 #' @param max_iter maximum number of outer iterations (default: 100)
 #' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
 #' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
@@ -105,7 +108,7 @@ archetypes_kernel_pgd <- function(x,
                                   init = "furthest_sum",
                                   init_args = list(),
                                   robust = FALSE,
-                                  tukey_c = 4.685,
+                                  robust_args = list(),
                                   max_iter = 100L,
                                   tol = 1e-6,
                                   tol_r2 = 0.9999,
@@ -129,7 +132,7 @@ archetypes_kernel_pgd <- function(x,
         weights = NULL,
         scale = TRUE,
         robust = robust,
-        tukey_c = tukey_c,
+        robust_args = robust_args,
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
@@ -210,7 +213,7 @@ archetypes_kernel_pgd <- function(x,
         fit = function(ctx, prep, init_vars) {
             .aa_fit_kernel_pgd(
                 G = prep[["gram"]],
-                weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["tukey_c"]]),
+                weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["robust_args"]]),
                 max_iter = ctx[["max_iter"]],
                 tol = ctx[["tol"]],
                 tol_r2 = ctx[["tol_r2"]],
@@ -248,7 +251,10 @@ archetypes_kernel_pgd <- function(x,
                 row_names = rownames(prep[["gram"]]),
                 fit_info = list(
                     method = "kernel",
-                    kernel = if (is.function(kernel)) "function" else kernel
+                    kernel = if (is.function(kernel)) "function" else kernel,
+                    robust = !identical(ctx[["robust"]], FALSE),
+                    robust_psi = .aa_robust_label(ctx[["robust"]]) %||% NA_character_,
+                    robust_args = I(list(ctx[["robust_args"]]))
                 )
             )
         }
@@ -793,7 +799,9 @@ archetypes_kernel_pgd <- function(x,
         weights = weights,
         fit_info = fit_info %|p|% list(
             family = "gaussian",
-            robust = !is.null(weights),
+            robust = fit_info[["robust"]] %||% !is.null(weights),
+            robust_psi = fit_info[["robust_psi"]] %||% NA_character_,
+            robust_args = fit_info[["robust_args"]] %||% I(list(list())),
             missing = FALSE,
             delta = delta,
             init = "kernel coefficients",

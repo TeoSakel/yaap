@@ -27,6 +27,7 @@ Suggests:
     geometry,
     irlba,
     knitr,
+    MASS,
     quadprog,
     recipes (>= 1.0.0),
     rmarkdown,

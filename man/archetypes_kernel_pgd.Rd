@@ -13,7 +13,7 @@ archetypes_kernel_pgd(
   init = "furthest_sum",
   init_args = list(),
   robust = FALSE,
-  tukey_c = 4.685,
+  robust_args = list(),
   max_iter = 100L,
   tol = 1e-06,
   tol_r2 = 0.9999,
@@ -46,9 +46,11 @@ so input-space \code{coordinates} can be returned.}
 
 \item{init_args}{list of additional arguments for the initialization function.}
 
-\item{robust}{whether to use Tukey bisquare row reweighting (default: FALSE)}
+\item{robust}{robust row reweighting selector. Use \code{FALSE} for ordinary
+squared error, \code{TRUE} for \code{"psi.bisquare"}, a MASS psi function name,
+or a custom psi function. See \code{\link[MASS:rlm]{MASS::rlm()}} for psi details; \code{method = "MM"} is not supported because it is not applicable to AA.}
 
-\item{tukey_c}{tuning constant for Tukey bisquare weights (default: 4.685)}
+\item{robust_args}{list of tuning arguments passed to the robust psi function.}
 
 \item{max_iter}{maximum number of outer iterations (default: 100)}
 

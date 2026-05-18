@@ -109,8 +109,8 @@ archetypes_paa <- function(x,
         check = function(ctx) {
             if (ctx[["missing"]])
                 stop("`missing = TRUE` is not supported for `method = 'paa'`.", call. = FALSE)
-            if (ctx[["robust"]])
-                stop("`robust = TRUE` is not supported for `method = 'paa'`.", call. = FALSE)
+            if (!identical(ctx[["robust"]], FALSE))
+                stop("`robust` is not supported for `method = 'paa'`.", call. = FALSE)
             if (!is.null(ctx[["weights"]]))
                 stop("`weights` are not supported for `method = 'paa'`.", call. = FALSE)
             .aa_check_fit_controls(ctx)

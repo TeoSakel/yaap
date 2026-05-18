@@ -14,8 +14,11 @@
 #'   scale, a positive numeric vector divides columns by user-supplied scale
 #'   factors, and a symmetric positive-definite matrix applies the corresponding
 #'   feature metric embedding in the original data column space.
-#' @param robust whether to use Tukey bisquare row reweighting (default: FALSE)
-#' @param tukey_c tuning constant for Tukey bisquare weights (default: 4.685)
+#' @param robust robust row reweighting selector. Use `FALSE` for ordinary
+#'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
+#'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
+#'   "MM"` is not supported because it is not applicable to AA.
+#' @param robust_args list of tuning arguments passed to the robust psi function.
 #' @param sd_threshold threshold for feature standard deviation to filter
 #'   low-variance features (default: 1e-6)
 #' @param max_iter maximum number of iterations (default: 100)
@@ -52,13 +55,12 @@
 #'   uniqueness result of Theorem 1 in Mørup & Hansen (2012) no longer holds.
 #'
 #' * **`robust`** switches the loss from ordinary squared error to an
-#'   iteratively re-weighted version based on Tukey bisquare row weights.
-#'   Observations with large residuals receive reduced influence at each
-#'   iteration, so that outliers cannot monopolise archetypes.  The sensitivity
-#'   of the downweighting is controlled by `tukey_c`: smaller values are more
-#'   aggressive, the default of 4.685 is the standard choice for 95% asymptotic
-#'   efficiency under Gaussian noise.  Note that `robust = TRUE` is incompatible
-#'   with `missing = TRUE`.
+#'   iteratively re-weighted version based on MASS-style psi row weights.
+#'   Use `TRUE` for `"psi.bisquare"`, or pass `"psi.huber"`, `"psi.hampel"`,
+#'   or a custom psi function with tuning values in `robust_args`. See
+#'   [MASS::rlm()] for psi details. `method = "MM"` from `MASS::rlm()` is not
+#'   supported because MM estimation is not directly applicable to the AA
+#'   objective. Robust fitting is incompatible with `missing = TRUE`.
 #'
 #' * **`missing`** activates the missing-data objective described in Section 3.5
 #'   of Mørup & Hansen (2012).  When `TRUE`, only observed entries contribute to
@@ -130,7 +132,7 @@ archetypes_pgd <- function(x,
                            weights = NULL,
                            scale = TRUE,
                            robust = FALSE,
-                           tukey_c = 4.685,
+                           robust_args = list(),
                            sd_threshold = 1e-6,
                            max_iter = 100L,
                            tol = 1e-6,
@@ -155,7 +157,7 @@ archetypes_pgd <- function(x,
         weights = weights,
         scale = scale,
         robust = robust,
-        tukey_c = tukey_c,
+        robust_args = robust_args,
         sd_threshold = sd_threshold,
         max_iter = max_iter,
         tol = tol,
@@ -179,7 +181,7 @@ archetypes_pgd <- function(x,
                           max_iter_optimizer = 10L,
                           step_shrinkage = 0.5,
                           max_no_update = 5L) {
-    loss_fun <- if (ctx[["robust"]]) .aa_pgd_weighted_loss else .aa_pgd_loss
+    loss_fun <- if (!identical(ctx[["robust"]], FALSE)) .aa_pgd_weighted_loss else .aa_pgd_loss
     fit_fun <- if (ctx[["missing"]]) .aa_fit_pgd_missing else .aa_fit_pgd
 
     list(
@@ -201,7 +203,7 @@ archetypes_pgd <- function(x,
         fit = function(ctx, prep, init_vars) {
             common_args <- list(
                 X = prep[["X"]],
-                weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["tukey_c"]]),
+                weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["robust_args"]]),
                 max_iter = ctx[["max_iter"]],
                 tol = ctx[["tol"]],
                 tol_r2 = ctx[["tol_r2"]],

@@ -12,7 +12,7 @@ archetypes_pgd(
   weights = NULL,
   scale = TRUE,
   robust = FALSE,
-  tukey_c = 4.685,
+  robust_args = list(),
   sd_threshold = 1e-06,
   max_iter = 100L,
   tol = 1e-06,
@@ -45,9 +45,11 @@ scale, a positive numeric vector divides columns by user-supplied scale
 factors, and a symmetric positive-definite matrix applies the corresponding
 feature metric embedding in the original data column space.}
 
-\item{robust}{whether to use Tukey bisquare row reweighting (default: FALSE)}
+\item{robust}{robust row reweighting selector. Use \code{FALSE} for ordinary
+squared error, \code{TRUE} for \code{"psi.bisquare"}, a MASS psi function name,
+or a custom psi function. See \code{\link[MASS:rlm]{MASS::rlm()}} for psi details; \code{method = "MM"} is not supported because it is not applicable to AA.}
 
-\item{tukey_c}{tuning constant for Tukey bisquare weights (default: 4.685)}
+\item{robust_args}{list of tuning arguments passed to the robust psi function.}
 
 \item{sd_threshold}{threshold for feature standard deviation to filter
 low-variance features (default: 1e-6)}
@@ -104,13 +106,12 @@ censoring.  Use with care: large values remove the interpretability
 guarantee that archetypes are representable as extreme prototypes, and the
 uniqueness result of Theorem 1 in Mørup & Hansen (2012) no longer holds.
 \item \strong{\code{robust}} switches the loss from ordinary squared error to an
-iteratively re-weighted version based on Tukey bisquare row weights.
-Observations with large residuals receive reduced influence at each
-iteration, so that outliers cannot monopolise archetypes.  The sensitivity
-of the downweighting is controlled by \code{tukey_c}: smaller values are more
-aggressive, the default of 4.685 is the standard choice for 95\% asymptotic
-efficiency under Gaussian noise.  Note that \code{robust = TRUE} is incompatible
-with \code{missing = TRUE}.
+iteratively re-weighted version based on MASS-style psi row weights.
+Use \code{TRUE} for \code{"psi.bisquare"}, or pass \code{"psi.huber"}, \code{"psi.hampel"},
+or a custom psi function with tuning values in \code{robust_args}. See
+\code{\link[MASS:rlm]{MASS::rlm()}} for psi details. \code{method = "MM"} from \code{MASS::rlm()} is not
+supported because MM estimation is not directly applicable to the AA
+objective. Robust fitting is incompatible with \code{missing = TRUE}.
 \item \strong{\code{missing}} activates the missing-data objective described in Section 3.5
 of Mørup & Hansen (2012).  When \code{TRUE}, only observed entries contribute to
 the loss and the archetype profiles are normalised entry-wise so that each

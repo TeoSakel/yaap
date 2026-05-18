@@ -661,17 +661,49 @@ test_that("missing-data PGD validates unsupported combinations", {
     X[1, 1] <- NA_real_
 
     expect_error(archetypes_pgd(X, K = 3L, robust = TRUE), "robust")
+    expect_error(archetypes_pgd(X, K = 3L, robust = "psi.huber"), "robust")
     expect_error(archetypes_pgd(X, K = 3L, weights = rep(1, nrow(X))), "weights")
     expect_error(archetypes_pgd(X, K = 3L, scale = diag(ncol(X))), "matrix `scale`")
     expect_error(run_aa(X, K = 3L, method = "nnls"), "missing = TRUE")
 })
 
-test_that("Tukey row weights downweight large row residuals", {
-    weights <- .aa_bisquare_weights(c(0, 1, 4, 1e6))
+test_that("robust fitters accept MASS psi selectors", {
+    testthat::skip_if_not_installed("MASS")
+    set.seed(1)
+    X <- toy_matrix()
+    X[1, ] <- X[1, ] + 25
 
-    expect_equal(weights[1], 1)
-    expect_true(weights[4] < weights[2])
-    expect_equal(.aa_bisquare_weights(rep(0, 4)), rep(1, 4))
+    pgd <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 3L,
+        robust = "psi.huber",
+        robust_args = list(k = 1.345),
+        max_iter = 5L,
+        tol_r2 = 0.95
+    ))
+    nnls <- suppressWarnings(archetypes_nnls(
+        X,
+        K = 3L,
+        robust = "psi.hampel",
+        robust_args = list(a = 2, b = 4, c = 8),
+        max_iter = 3L,
+        tol_r2 = 0.95
+    ))
+    kernel <- suppressWarnings(archetypes_kernel_pgd(
+        X,
+        K = 3L,
+        kernel = "linear",
+        robust = "psi.huber",
+        robust_args = list(k = 1.345),
+        max_iter = 3L,
+        tol_r2 = 0.95
+    ))
+
+    for (fit in list(pgd, nnls, kernel)) {
+        expect_archetypes_fit(fit, K = 3L, n = nrow(X), p = ncol(X))
+        expect_true(fit[["fit_info"]][["robust"]])
+        expect_match(fit[["fit_info"]][["robust_psi"]], "psi\\.(huber|hampel)")
+    }
 })
 
 test_that("robust archetypes fitters keep expected invariants", {
