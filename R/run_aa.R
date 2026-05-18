@@ -331,6 +331,7 @@ run_aa.fd <- function(x, K, ...) {
     if (!is.null(out)) return(out)
 
     # Run multiple restarts and return the best fit
+    # TODO: add parallelization option for multiple restarts
     best_fit <- NULL
     best_loss <- Inf
     for (.nrep_i in seq_len(ctx[["nrep"]])) {
@@ -522,10 +523,12 @@ run_aa.fd <- function(x, K, ...) {
 }
 
 .aa_euclidean_edge_case <- function(ctx, prep) {
-    # TODO: handle missing-data edge cases
-    if (ctx[["missing"]]) return(NULL)
-
-    out <- .aa_checks_edge_cases(prep[["X"]], ctx[["K"]], ctx[["verbose"]])
+    out <- .aa_checks_edge_cases(
+        prep[["X"]],
+        ctx[["K"]],
+        ctx[["verbose"]],
+        M = prep[["M"]]
+    )
     if (is.null(out)) return(NULL)
     .aa_euclidean_output(
         ctx,

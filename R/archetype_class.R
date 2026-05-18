@@ -559,8 +559,31 @@ AIC.archetypes <- function(object, ...) {
                 call. = FALSE)
         return(NA_real_)
     }
-    # rss   <- object[["loss"]][["loss"]]
     X_hat <- with(object, compositions %*% coordinates)
+    npar <- N * (K - 1) + K * (N - 1) + 1  # K_mu + K_beta + 1
+
+    # K = 1 is the mean-model baseline; its reconstruction covariance is zero,
+    # so use eta = 1 and compute RSS on observed entries for missing-data fits.
+    if (K == 1L) {
+        if (isTRUE(object[["fit_info"]][["missing"]])) {
+            if (inherits(X, "sparseMatrix")) {
+                entries <- Matrix::summary(Matrix::drop0(X != 0))
+                if (length(entries[["i"]]) == 0L)
+                    return(NA_real_)
+                idx <- cbind(entries[["i"]], entries[["j"]])
+                rss <- sum((X[idx] - X_hat[idx])^2)
+                nelem <- length(entries[["i"]])
+            } else {
+                observed <- !is.na(X)
+                rss <- sum((X[observed] - X_hat[observed])^2)
+                nelem <- sum(observed)
+            }
+        } else {
+            rss <- norm(X - X_hat, "F")^2
+        }
+        return(log(max(rss / nelem, .Machine$double.xmin)) + 2 * npar / N)
+    }
+
     eta <- tryCatch(.aa_effic(X, X_hat), error = function(e) NA_real_)
     if (!is.finite(eta) || eta <= 0) {
         warning(paste("Adapted AIC is undefined because the efficiency term",
@@ -568,9 +591,9 @@ AIC.archetypes <- function(object, ...) {
                 call. = FALSE)
         return(NA_real_)
     }
-    npar <- N * (K - 1) + K * (N - 1) + 1  # K_mu + K_beta + 1
     rss  <- norm(X - X_hat, "F")^2  # "loss" is not necessarily the RSS on the original data
     log(rss / nelem) + 2 * npar / (N * eta)
+
 }
 
 

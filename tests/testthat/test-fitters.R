@@ -588,6 +588,32 @@ test_that("missing-data PGD supports zero optimizer iterations", {
     expect_true(is_number(fit[["loss"]][["loss"]]))
 })
 
+test_that("missing-data PGD handles K edge cases directly", {
+    X <- missing_test_matrix()
+
+    fit_mean <- archetypes_pgd(
+        X,
+        K = 1L,
+        scale = FALSE,
+        sd_threshold = 0,
+        max_iter = 0L
+    )
+    expect_equal(unname(fit_mean[["coordinates"]][1L, ]), unname(colMeans(X, na.rm = TRUE)))
+    expect_equal(nrow(fit_mean[["loss"]]), 1L)
+    expect_true(is_number(AIC(fit_mean)))
+
+    fit_identity <- archetypes_pgd(
+        X,
+        K = nrow(X),
+        scale = FALSE,
+        sd_threshold = 0,
+        max_iter = 0L
+    )
+    expect_equal(unname(fit_identity[["coefficients"]]), diag(nrow(X)), ignore_attr = TRUE)
+    expect_equal(fit_identity[["loss"]][["loss"]], 0)
+    expect_equal(nrow(fit_identity[["loss"]]), 1L)
+})
+
 test_that("missing-data PGD treats sparse structural zeros as missing", {
     X <- sparse_test_matrix()
 

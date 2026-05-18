@@ -373,26 +373,27 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 
 
 # Check if number of archetypes K corresponds to edge cases (1 or number of samples)
-.aa_checks_edge_cases <- function(data, K, verbose = FALSE) {
+.aa_checks_edge_cases <- function(data, K, verbose = FALSE, M = NULL) {
     out <- NULL
     if (K == nrow(data)) { # X = A
         if (verbose)
             message("K equals number of samples, returning identity archetypes")
-        out <- .aa_identity_fit(data)
+        out <- .aa_identity_fit(data, M = M)
     } else if (K == 1L) { # Archetype = mean of X
         if (verbose) message("K equals 1, returning mean archetype")
-        out <- .aa_mean_fit(data)
+        out <- .aa_mean_fit(data, M = M)
     }
     out
 }
 
 # Edge case K == N: each sample is its own archetype
-.aa_identity_fit <- function(X, call = NULL) {
+.aa_identity_fit <- function(X, M = NULL, call = NULL) {
     A <- X
     rownames(A) <- paste0("A", seq_len(nrow(X)))  # remove row names for consistency
-    S <- B <- diag(nrow(X))
-    colnames(B) <- rownames(S) <- rownames(X)
-    rownames(B) <- colnames(S) <- rownames(A)
+    identity <- if (inherits(X, "sparseMatrix")) Matrix::Diagonal(nrow(X)) else diag(nrow(X))
+    B <- S <- identity
+    dimnames(B) <- list(rownames(A), rownames(X))
+    dimnames(S) <- list(rownames(X), rownames(A))
     loss <- data.frame(loss = 0, r2 = 1)
 
     archetypes(
@@ -409,8 +410,12 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 }
 
 # Edge case K == 1: single archetype at mean of X
-.aa_mean_fit <- function(X) {
-    x_mean <- colMeans(X)
+.aa_mean_fit <- function(X, M = NULL) {
+    n_obs <- if (is.null(M)) rep(nrow(X), ncol(X)) else colSums(M)
+    x_sum <- colSums(X)
+    x2 <- colSums(X * X)
+    x_mean <- x_sum / n_obs
+    x_mean[!is.finite(x_mean)] <- 0
     A <- matrix(
         x_mean,
         nrow = 1L,
@@ -430,9 +435,9 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
         dimnames = list(rownames(X), "A1")
     )
 
-    xss <- norm(X, type = "F")^2
-    rss <- xss - nrow(X) * as.numeric(x_mean %*% x_mean)
-    loss <- data.frame(loss = rss, r2 = 1 - rss / xss)
+    xss <- sum(x2)
+    rss <- sum(pmax(x2 - ifelse(n_obs > 0, x_sum * x_sum / n_obs, 0), 0))
+    loss <- data.frame(loss = rss, r2 = if (xss > 0) 1 - rss / xss else 1)
 
     archetypes(
         call         = NULL,
