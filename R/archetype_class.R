@@ -2,6 +2,21 @@
 
 # Base Archetypes Class -------------------------------------------------------
 
+.aa_canonical_archetype_order <- function(coordinates, coefficients) {
+    key <- if (!is.null(coordinates)) {
+        cbind(as.matrix(coordinates), as.matrix(coefficients))
+    } else {
+        as.matrix(coefficients)
+    }
+    K <- nrow(key)
+    if (K <= 1L)
+        return(seq_len(K))
+
+    key <- as.data.frame(key, optional = TRUE)
+    key[[".index"]] <- seq_len(K)
+    do.call(order, c(key, list(na.last = TRUE)))
+}
+
 # Internal constructor for archetypes S3 objects. Validates dimensions and
 # stochasticity constraints, then wraps the result in the `archetypes` class.
 archetypes <- function(coordinates = NULL,
@@ -36,6 +51,22 @@ archetypes <- function(coordinates = NULL,
         fmt <- "Inconsistent number of samples between compositions (%d) and coefficients (%d)"
         stop(sprintf(fmt, N, ncol(coefficients)))
     }
+    if (ncol(compositions) != K) {
+        fmt <- "ncol(compositions) = %d does not match number of archetypes (%d)"
+        stop(sprintf(fmt, ncol(compositions), K))
+    }
+
+    archetype_order <- .aa_canonical_archetype_order(coordinates, coefficients)
+    if (!identical(archetype_order, seq_len(length(archetype_order)))) {
+        if (!is.null(coordinates))
+            coordinates <- coordinates[archetype_order, , drop = FALSE]
+        coefficients <- coefficients[archetype_order, , drop = FALSE]
+        compositions <- compositions[, archetype_order, drop = FALSE]
+        if (!is.null(init))
+            init <- init[archetype_order, , drop = FALSE]
+        if (length(slack) == length(archetype_order))
+            slack <- slack[archetype_order]
+    }
 
     stopifnot("All slack values must be non-negative" = is_all_non_negative(slack))
     if (any(slack > 0)) {
@@ -47,10 +78,6 @@ archetypes <- function(coordinates = NULL,
     }
 
     # Check Compositions
-    if (ncol(compositions) != K) {
-        fmt <- "ncol(compositions) = %d does not match number of archetypes (%d)"
-        stop(sprintf(fmt, ncol(compositions), K))
-    }
     if (!is_row_stochastic(compositions))
         stop("Compositions must be row-stochastic (each row sums to 1)")
 
@@ -797,6 +824,11 @@ kernel_archetypes <- function(coefficients,
         weights      = weights,
         fit_info     = fit_info
     )
+    if (!is.null(init) && !is.null(rownames(init))) {
+        archetype_names <- rownames(out[["coefficients"]])
+        if (!is.null(archetype_names) && setequal(rownames(init), archetype_names))
+            init <- init[archetype_names, , drop = FALSE]
+    }
     out[["init"]]        <- init
     out[["gram"]]        <- gram
     out[["kernel"]]      <- kernel
