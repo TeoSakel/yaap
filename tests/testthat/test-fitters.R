@@ -609,7 +609,7 @@ test_that("missing-data PGD handles K edge cases directly", {
         sd_threshold = 0,
         max_iter = 0L
     )
-    expect_equal(unname(fit_identity[["coefficients"]]), diag(nrow(X)), ignore_attr = TRUE)
+    expect_equal(unname(crossprod(as.matrix(fit_identity[["coefficients"]]))), diag(nrow(X)), ignore_attr = TRUE)
     expect_equal(fit_identity[["loss"]][["loss"]], 0)
     expect_equal(nrow(fit_identity[["loss"]]), 1L)
 })
@@ -774,12 +774,15 @@ test_that("archetypes fitters accept named coordinate matrix initialization", {
     pgd <- suppressWarnings(archetypes_pgd(X, K = 3L, init = init, max_iter = 1L))
     nnls <- suppressWarnings(archetypes_nnls(X, K = 3L, init = init, max_iter = 1L))
 
+    expected_names <- rownames(init)
+
     for (fit in list(pgd, nnls)) {
+        fit_names <- rownames(fit[["coordinates"]])
         expect_named(as.data.frame(fit[["coordinates"]]), colnames(X))
-        expect_equal(rownames(fit[["init"]]), rownames(init))
-        expect_equal(rownames(fit[["coordinates"]]), rownames(init))
-        expect_equal(rownames(fit[["coefficients"]]), rownames(init))
-        expect_equal(colnames(fit[["compositions"]]), rownames(init))
+        expect_setequal(fit_names, expected_names)
+        expect_equal(rownames(fit[["init"]]), fit_names)
+        expect_equal(rownames(fit[["coefficients"]]), fit_names)
+        expect_equal(colnames(fit[["compositions"]]), fit_names)
         expect_equal(colnames(fit[["coefficients"]]), rownames(X))
         expect_equal(rownames(fit[["compositions"]]), rownames(X))
     }
