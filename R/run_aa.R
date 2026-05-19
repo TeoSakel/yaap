@@ -32,7 +32,7 @@
 #'   [archetypes_directional()], [archetypes_paa()].
 #' Post-fit: [plot.archetypes()], [predict.archetypes()],
 #'   [fitted.archetypes()], [residuals.archetypes()], [anames()].
-#' Model selection: [AIC.archetypes()], [tune_archetypes()].
+#' Model selection: [AIC.archetypes()].
 #' Tidy output: [tidy.archetypes()], [glance.archetypes()], [augment.archetypes()].
 #'
 #' @examples

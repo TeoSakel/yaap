@@ -34,8 +34,6 @@ naturally with the tidymodels ecosystem:
 
 - `step_archetypes()` is a `recipes` step that learns archetypes during
   `prep()` and returns archetype composition weights during `bake()`.
-- `tune_archetypes()` fits a grid of AA models over candidate values of `K`, the
-  number of archetypes.
 
 This vignette uses only lightweight pieces of the ecosystem. Because AA is an
 unsupervised representation method, the examples focus on preprocessing,
@@ -112,30 +110,34 @@ rss <- function(fit) {
 }
 
 aic_or_na <- function(fit) {
-    if (nrow(fit$coordinates) == 1L) NA_real_ else AIC(fit)
+    if (nrow(coordinates(fit)) == 1L) NA_real_ else AIC(fit)
 }
 
 arrests_scaled <- as.data.frame(scale(arrests))
 rownames(arrests_scaled) <- state
 
 set.seed(42)
-ens_k <- tune_archetypes(
-    arrests_scaled,
-    K = 1:6,
-    nrep = 1,
-    init = "furthest_sum",
-    max_iter = 100,
-    tol_r2 = 0,
-    max_kappa = Inf,
-    eval = rss,
-    eval_name = "rss"
-)
+k_values <- 1:6
+fits_k <- lapply(k_values, function(k) {
+    run_aa(
+        arrests_scaled,
+        K = k,
+        init = "furthest_sum",
+        max_iter = 100,
+        tol_r2 = 0,
+        max_kappa = Inf
+    )
+})
 
-k_tbl <- summary(ens_k)
-k_tbl$AIC <- vapply(ens_k$fits, aic_or_na, numeric(1L))
+k_tbl <- data.frame(
+    K = k_values,
+    rss = vapply(fits_k, rss, numeric(1L)),
+    r2 = vapply(fits_k, function(fit) utils::tail(fit$loss$r2, 1L), numeric(1L)),
+    AIC = vapply(fits_k, aic_or_na, numeric(1L))
+)
 selected_ix <- which.min(k_tbl$AIC)
 selected_K <- k_tbl$K[selected_ix]
-fit <- ens_k$fits[[selected_ix]]
+fit <- fits_k[[selected_ix]]
 analysis_K <- 3L
 
 knitr::kable(
@@ -362,9 +364,8 @@ rec_tune <- rec_base |>
 tunable(rec_tune$steps[[2L]])
 ```
 
-For unsupervised AA exploration, `tune_archetypes()` is often the most direct
-tool. For supervised modeling pipelines, use `step_archetypes()` inside the
-broader tidymodels workflow and tune `num_comp` alongside the downstream model
+For supervised modeling pipelines, use `step_archetypes()` inside the broader
+tidymodels workflow and tune `num_comp` alongside the downstream model
 parameters.
 
 ## Regional Simplex View

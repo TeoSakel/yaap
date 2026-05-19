@@ -184,6 +184,6 @@ Solvers: \code{\link[=archetypes_pgd]{archetypes_pgd()}}, \code{\link[=archetype
 \code{\link[=archetypes_directional]{archetypes_directional()}}, \code{\link[=archetypes_paa]{archetypes_paa()}}.
 Post-fit: \code{\link[=plot.archetypes]{plot.archetypes()}}, \code{\link[=predict.archetypes]{predict.archetypes()}},
 \code{\link[=fitted.archetypes]{fitted.archetypes()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}}, \code{\link[=anames]{anames()}}.
-Model selection: \code{\link[=AIC.archetypes]{AIC.archetypes()}}, \code{\link[=tune_archetypes]{tune_archetypes()}}.
+Model selection: \code{\link[=AIC.archetypes]{AIC.archetypes()}}.
 Tidy output: \code{\link[=tidy.archetypes]{tidy.archetypes()}}, \code{\link[=glance.archetypes]{glance.archetypes()}}, \code{\link[=augment.archetypes]{augment.archetypes()}}.
 }

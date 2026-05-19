@@ -11,11 +11,11 @@ test_that("internal helper names follow package conventions", {
     exports <- c(
         "aa_init", "anames", "anames<-", "archetypes_directional",
         "archetypes_kernel_pgd", "archetypes_nnls", "archetypes_paa",
-        "archetypes_pgd", "best", "compositions", "consistency", "coordinates",
+        "archetypes_pgd", "compositions", "consistency", "coordinates",
         "directional_archetypes", "fit_simplex", "kernel_archetypes",
         "onehot", "plot_archetypes_compositions", "plot_archetypes_coordinates",
         "plot_archetypes_loss", "plot_archetypes_profiles", "proj_l1",
-        "proj_simplex", "run_aa", "step_archetypes", "tune_archetypes"
+        "proj_simplex", "run_aa", "step_archetypes"
     )
 
     allowed_bare <- c(
