@@ -3,28 +3,14 @@ test_that("plot.archetypes smoke tests supported plot modes", {
     pdf(NULL)
     on.exit(dev.off(), add = TRUE)
 
-    expect_named(plot(fit, "loss"), c("iteration", "loss", "plot_args"))
-    expect_named(plot(fit, "compositions"), c(
-        "compositions", "row_order", "col_order", "row_hclust",
-        "col_hclust", "col", "barplot_args"
-    ))
-    expect_named(plot(fit, "composition"), c(
-        "compositions", "row_order", "col_order", "row_hclust",
-        "col_hclust", "col", "barplot_args"
-    ))
-    expect_named(plot(fit, "composision"), c(
-        "compositions", "row_order", "col_order", "row_hclust",
-        "col_hclust", "col", "barplot_args"
-    ))
-    expect_named(plot(fit, "ternary"), c("compositions", "plot_args"))
-    expect_named(plot(fit, "simplex"), c("compositions", "plot_args"))
-    expect_named(plot(fit, "profiles"), c(
-        "coordinates", "family", "archetype_names", "barplot_args"
-    ))
-    expect_named(plot(fit, "coordinates"), c(
-        "coordinates", "data", "projection", "pca", "archetype_names",
-        "show_anames", "args.coordinates", "args.data.scatter", "plot_args"
-    ))
+    expect_named(plot(fit, "loss"), c("iteration", "loss"))
+    expect_named(plot(fit, "compositions"), c("sample", "archetype", "weight"))
+    expect_named(plot(fit, "composition"), c("sample", "archetype", "weight"))
+    expect_named(plot(fit, "composision"), c("sample", "archetype", "weight"))
+    expect_s3_class(plot(fit, "ternary"), "data.frame")
+    expect_s3_class(plot(fit, "simplex"), "data.frame")
+    expect_named(plot(fit, "profiles"), c("archetype", "feature", "value"))
+    expect_named(plot(fit, "coordinates"), c("x", "y", "name", "archetype"))
 })
 
 test_that("plot methods leave coordinate-helper arguments in dots", {
@@ -47,8 +33,9 @@ test_that("plot.archetypes profiles uses fixed height but accepts other barplot 
         horiz = TRUE,
         border = NA
     )
-    expect_equal(out[["barplot_args"]][["height"]], coordinates(fit))
-    expect_true(out[["barplot_args"]][["horiz"]])
+    expect_named(out, c("archetype", "feature", "value"))
+    expect_equal(nrow(out), length(coordinates(fit)))
+    expect_equal(out[["value"]], as.vector(coordinates(fit)))
 })
 
 test_that("plot_archetypes_compositions supports matrix-like inputs and clustering", {
@@ -57,10 +44,10 @@ test_that("plot_archetypes_compositions supports matrix-like inputs and clusteri
     on.exit(dev.off(), add = TRUE)
 
     out <- plot_archetypes_compositions(fit[["compositions"]], legend = FALSE)
-    expect_equal(out[["row_order"]], seq_len(nrow(fit[["compositions"]])))
-    expect_equal(out[["col_order"]], seq_len(ncol(fit[["compositions"]])))
-    expect_null(out[["row_hclust"]])
-    expect_null(out[["col_hclust"]])
+    expect_named(out, c("sample", "archetype", "weight"))
+    expect_equal(levels(out[["sample"]]), as.character(seq_len(nrow(fit[["compositions"]]))))
+    expect_equal(levels(out[["archetype"]]), colnames(fit[["compositions"]]))
+    expect_equal(out[["weight"]], as.vector(fit[["compositions"]]))
 
     clustered <- plot_archetypes_compositions(
         as.data.frame(fit[["compositions"]]),
@@ -68,10 +55,10 @@ test_that("plot_archetypes_compositions supports matrix-like inputs and clusteri
         cluster_cols = TRUE,
         legend = FALSE
     )
-    expect_s3_class(clustered[["row_hclust"]], "hclust")
-    expect_s3_class(clustered[["col_hclust"]], "hclust")
-    expect_equal(sort(clustered[["row_order"]]), seq_len(nrow(fit[["compositions"]])))
-    expect_equal(sort(clustered[["col_order"]]), seq_len(ncol(fit[["compositions"]])))
+    expect_named(clustered, c("sample", "archetype", "weight"))
+    expect_equal(sort(levels(clustered[["sample"]])), as.character(seq_len(nrow(fit[["compositions"]]))))
+    expect_equal(sort(levels(clustered[["archetype"]])), sort(colnames(fit[["compositions"]])))
+    expect_equal(nrow(clustered), length(fit[["compositions"]]))
 })
 
 test_that("plot_archetypes_compositions exposes clustering distance and linkage", {
@@ -98,8 +85,9 @@ test_that("plot_archetypes_compositions exposes clustering distance and linkage"
         linkage = "average",
         legend = FALSE
     )
-    expect_identical(clustered[["row_hclust"]][["method"]], "average")
-    expect_identical(clustered[["col_hclust"]][["method"]], "average")
+    expect_named(clustered, c("sample", "archetype", "weight"))
+    expect_equal(sort(levels(clustered[["sample"]])), as.character(seq_len(nrow(S))))
+    expect_equal(sort(levels(clustered[["archetype"]])), paste0("A", seq_len(ncol(S))))
 
     both <- plot_archetypes_compositions(
         S,
@@ -109,8 +97,9 @@ test_that("plot_archetypes_compositions exposes clustering distance and linkage"
         linkage = "single",
         legend = FALSE
     )
-    expect_identical(both[["row_hclust"]][["method"]], "single")
-    expect_identical(both[["col_hclust"]][["method"]], "single")
+    expect_named(both, c("sample", "archetype", "weight"))
+    expect_equal(sort(levels(both[["sample"]])), as.character(seq_len(nrow(S))))
+    expect_equal(sort(levels(both[["archetype"]])), paste0("A", seq_len(ncol(S))))
 })
 
 test_that("plot_archetypes_compositions supports PC1 and AOP ordering", {
@@ -137,10 +126,8 @@ test_that("plot_archetypes_compositions supports PC1 and AOP ordering", {
         cluster_cols = "PC1",
         legend = FALSE
     )
-    expect_equal(pc1[["row_order"]], order(pca[["x"]][, 1L]))
-    expect_equal(pc1[["col_order"]], order(pca[["rotation"]][, 1L]))
-    expect_equal(pc1[["row_hclust"]][["order"]], pc1[["row_order"]])
-    expect_equal(pc1[["col_hclust"]][["order"]], pc1[["col_order"]])
+    expect_equal(levels(pc1[["sample"]]), as.character(order(pca[["x"]][, 1L])))
+    expect_equal(levels(pc1[["archetype"]]), paste0("A", order(pca[["rotation"]][, 1L])))
 
     aop <- plot_archetypes_compositions(
         S,
@@ -148,13 +135,14 @@ test_that("plot_archetypes_compositions supports PC1 and AOP ordering", {
         cluster_cols = "AOP",
         legend = FALSE
     )
-    expect_equal(aop[["row_order"]], order(atan2(pca[["x"]][, 2L], pca[["x"]][, 1L])))
     expect_equal(
-        aop[["col_order"]],
-        order(atan2(pca[["rotation"]][, 2L], pca[["rotation"]][, 1L]))
+        levels(aop[["sample"]]),
+        as.character(order(atan2(pca[["x"]][, 2L], pca[["x"]][, 1L])))
     )
-    expect_equal(aop[["row_hclust"]][["order"]], aop[["row_order"]])
-    expect_equal(aop[["col_hclust"]][["order"]], aop[["col_order"]])
+    expect_equal(
+        levels(aop[["archetype"]]),
+        paste0("A", order(atan2(pca[["rotation"]][, 2L], pca[["rotation"]][, 1L])))
+    )
 
     expect_error(
         plot_archetypes_compositions(S, cluster_rows = "bad", legend = FALSE),
@@ -170,7 +158,8 @@ test_that("plot helpers support plot = FALSE", {
     fit <- manual_fit()
 
     comp <- plot_archetypes_compositions(fit[["compositions"]], plot = FALSE)
-    expect_equal(unname(comp[["compositions"]]), unname(fit[["compositions"]]))
+    expect_named(comp, c("sample", "archetype", "weight"))
+    expect_equal(comp[["weight"]], as.vector(fit[["compositions"]]))
 
     loss <- plot_archetypes_loss(fit[["loss"]], plot = FALSE)
     expect_equal(loss[["loss"]], fit[["loss"]][["loss"]])
@@ -180,7 +169,8 @@ test_that("plot helpers support plot = FALSE", {
         archetype_names = anames(fit),
         plot = FALSE
     )
-    expect_equal(profiles[["coordinates"]], coordinates(fit))
+    expect_named(profiles, c("archetype", "feature", "value"))
+    expect_equal(profiles[["value"]], as.vector(coordinates(fit)))
 
     coords <- plot_archetypes_coordinates(
         coordinates(fit),
@@ -188,13 +178,11 @@ test_that("plot helpers support plot = FALSE", {
         archetype_names = anames(fit),
         plot = FALSE
     )
-    expect_equal(coords[["coordinates"]], coordinates(fit))
-    expect_equal(coords[["data"]], fit[["data"]])
+    expect_named(coords, c("x", "y", "name", "archetype"))
+    expect_equal(unname(as.matrix(coords[!coords[["archetype"]], c("x", "y")])), unname(fit[["data"]]))
+    expect_equal(unname(as.matrix(coords[coords[["archetype"]], c("x", "y")])), unname(coordinates(fit)))
 
-    expect_named(plot(fit, "coordinates", plot = FALSE), c(
-        "coordinates", "data", "projection", "pca", "archetype_names",
-        "show_anames", "args.coordinates", "args.data.scatter", "plot_args"
-    ))
+    expect_named(plot(fit, "coordinates", plot = FALSE), c("x", "y", "name", "archetype"))
 })
 
 test_that("plot_archetypes_coordinates handles coordinates-only and argument routing", {
@@ -203,8 +191,8 @@ test_that("plot_archetypes_coordinates handles coordinates-only and argument rou
     data_col <- c(g1 = "#1b9e77", g2 = "#d95f02")[group]
 
     coords_only <- plot_archetypes_coordinates(coordinates(fit), plot = FALSE)
-    expect_null(coords_only[["data"]])
-    expect_equal(coords_only[["projection"]], "none")
+    expect_named(coords_only, c("x", "y", "name", "archetype"))
+    expect_true(all(coords_only[["archetype"]]))
 
     expect_error(
         plot_archetypes_coordinates(coordinates(fit), projection = "pca", plot = FALSE),
@@ -220,10 +208,9 @@ test_that("plot_archetypes_coordinates handles coordinates-only and argument rou
         args.data.scatter = list(col = data_col, pch = c(1, 2, 3, 4), cex = rep(0.8, 4)),
         plot = FALSE
     )
-    expect_identical(routed[["args.coordinates"]][["col"]], "black")
-    expect_identical(routed[["args.coordinates"]][["pch"]], 17)
-    expect_identical(routed[["args.data.scatter"]][["col"]], data_col)
-    expect_identical(routed[["args.data.scatter"]][["pch"]], c(1, 2, 3, 4))
+    expect_named(routed, c("x", "y", "name", "archetype"))
+    expect_equal(sum(!routed[["archetype"]]), nrow(fit[["data"]]))
+    expect_equal(sum(routed[["archetype"]]), nrow(coordinates(fit)))
 })
 
 test_that("plot.archetypes handles higher-dimensional coordinate projections", {
@@ -235,14 +222,12 @@ test_that("plot.archetypes handles higher-dimensional coordinate projections", {
     pdf(NULL)
     on.exit(dev.off(), add = TRUE)
 
-    expect_equal(plot(fit, "coordinates")[["projection"]], "none")
+    expect_named(plot(fit, "coordinates"), c("x", "y", "z", "w", "name", "archetype"))
     pca <- plot(fit, "coordinates", projection = "pca")
-    expect_equal(pca[["projection"]], "pca")
-    expect_s3_class(pca[["pca"]], "prcomp")
-    expect_false(plot(fit, "coordinates", show_anames = FALSE)[["show_anames"]])
-    expect_false(
-        plot(fit, "coordinates", projection = "pca", show_anames = FALSE)[["show_anames"]]
-    )
+    expect_named(pca, c("PC1", "PC2", "name", "archetype"))
+    expect_equal(nrow(pca), nrow(fit[["data"]]) + nrow(coordinates(fit)))
+    expect_named(plot(fit, "coordinates", show_anames = FALSE), c("x", "y", "z", "w", "name", "archetype"))
+    expect_named(plot(fit, "coordinates", projection = "pca", show_anames = FALSE), c("PC1", "PC2", "name", "archetype"))
 })
 
 test_that("plot.archetypes coordinates supports data vectors with args.data.scatter", {
@@ -261,23 +246,26 @@ test_that("plot.archetypes coordinates supports data vectors with args.data.scat
         cex = 1.4,
         args.data.scatter = list(col = data_col, pch = c(1, 2, 3, 4), cex = rep(0.8, 4))
     )
-    expect_identical(out[["args.coordinates"]][["col"]], "black")
-    expect_identical(out[["args.coordinates"]][["pch"]], 17)
-    expect_identical(out[["args.data.scatter"]][["col"]], data_col)
+    expect_named(out, c("x", "y", "name", "archetype"))
+    expect_equal(sum(!out[["archetype"]]), nrow(fit[["data"]]))
+    expect_equal(sum(out[["archetype"]]), nrow(coordinates(fit)))
 })
 
 test_that("plot.archetypes coordinate defaults can be overridden by helper args", {
     fit <- manual_fit()
 
     no_names <- plot(fit, "coordinates", archetype_names = NULL, plot = FALSE)
-    expect_null(no_names[["archetype_names"]])
+    expect_equal(no_names[["name"]][no_names[["archetype"]]], rownames(coordinates(fit)))
 
     custom_names <- c("left", "middle", "right")
     named <- plot(fit, "coordinates", archetype_names = custom_names, plot = FALSE)
-    expect_identical(named[["archetype_names"]], custom_names)
+    expect_identical(named[["name"]][named[["archetype"]]], custom_names)
 
     no_profile_names <- plot(fit, "profiles", archetype_names = NULL, plot = FALSE)
-    expect_null(no_profile_names[["archetype_names"]])
+    expect_equal(
+        no_profile_names[["archetype"]],
+        rep(rownames(coordinates(fit)), times = ncol(coordinates(fit)))
+    )
 })
 
 test_that("plot.archetypes can subset samples in observation-level plots", {
@@ -290,13 +278,13 @@ test_that("plot.archetypes can subset samples in observation-level plots", {
     on.exit(dev.off(), add = TRUE)
 
     comp <- plot(fit, "compositions", subset = c(1L, 3L), legend = FALSE)
-    expect_equal(rownames(comp[["compositions"]]), sample_names[c(1L, 3L)])
+    expect_equal(sort(levels(comp[["sample"]])), sample_names[c(1L, 3L)])
     simplex <- plot(fit, "ternary", subset = c("s2", "s4"))
-    expect_equal(rownames(simplex[["compositions"]]), c("s2", "s4"))
+    expect_equal(rownames(simplex), c("s2", "s4"))
     coords <- plot(fit, "coordinates", subset = c(TRUE, FALSE, TRUE, FALSE))
-    expect_equal(rownames(coords[["data"]]), sample_names[c(1L, 3L)])
+    expect_equal(coords[["name"]][!coords[["archetype"]]], sample_names[c(1L, 3L)])
     pca <- plot(fit, "coordinates", projection = "pca", subset = c("s1", "s4"))
-    expect_equal(nrow(pca[["data"]]), 2L)
+    expect_equal(sum(!pca[["archetype"]]), 2L)
 
     expect_error(
         plot(fit, "coordinates", subset = c(TRUE, FALSE)),

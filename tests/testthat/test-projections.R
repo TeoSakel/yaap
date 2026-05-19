@@ -50,7 +50,7 @@ test_that("fit_simplex QP path errors when quadprog is unavailable", {
     X <- matrix(c(0.2, 0.2), ncol = 2L)
 
     testthat::local_mocked_bindings(
-        .aa_require_namespace = function(pkg, feature) {
+        .aa_require_namespace_for = function(pkg, feature) {
             stop("mocked missing quadprog", call. = FALSE)
         },
         .package = "yaap"
@@ -75,15 +75,19 @@ test_that("matrix initialization reports missing quadprog clearly", {
     init <- X
 
     testthat::local_mocked_bindings(
-        .aa_require_namespace = function(pkg, feature) {
-            stop(sprintf("missing %s for %s", pkg, feature), call. = FALSE)
+        .aa_require_namespace_for = function(pkg, feature) {
+            err <- simpleError(sprintf("missing %s for %s", pkg, feature))
+            err[["pkg"]] <- pkg
+            err[["feature"]] <- feature
+            class(err) <- c("aa_missing_namespace_error", class(err))
+            stop(err)
         },
         .package = "yaap"
     )
 
     expect_error(
         .aa_matrix_init(X, K = 3L, init = init, eps = 0),
-        "missing quadprog for matrix-valued `init`",
+        "Matrix-valued `init` requires the `quadprog` package",
         fixed = TRUE
     )
 })
