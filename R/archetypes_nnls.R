@@ -389,6 +389,11 @@ archetypes_nnls <- function(x,
         warning(sprintf(fmt, max_simplex_error), call. = FALSE)
     }
 
+    # Final projection to ensure predict(fit, type = "compositions") == S
+    A_fit <- .aa_drop_bigM_column(best_args[["A"]], attr(X, "bigM"))
+    X_fit <- .aa_drop_bigM_column(X, attr(X, "bigM"))
+    best_args[["S"]] <- fit_simplex(A_fit, X_fit, eps = eps)
+
     c(best_args, list(delta = 0, A0 = A0, i = i, loss = loss, converged = converged))
 }
 

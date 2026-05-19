@@ -24,6 +24,7 @@
 #'   \item{`family`}{observation family string (e.g. `"gaussian"`).}
 #'   \item{`init`}{initial archetype coordinates (when available).}
 #'   \item{`slack`, `weights`}{optional relaxation and sample-weight parameters.}
+#'   \item{`feature_map`}{internal metadata mapping new data into the fitted optimization geometry for prediction.}
 #' }
 #'
 #' @seealso
@@ -54,7 +55,7 @@
 #' )
 #'
 #' fit_fd <- run_aa(temp_fd, K = 3, max_iter = 20)
-#' arch_fd <- coordinates_fd(fit_fd)
+#' arch_fd <- coordinates(fit_fd)
 #' }
 #'
 #' @export
@@ -228,9 +229,9 @@ run_aa.default <- function(x,
 #' `run_aa.fd()` fits archetypal analysis to the coefficient matrix of an
 #' `fda::fd` object. The feature scaling is set to the basis inner-product
 #' matrix from `fda::eval.penalty(data$basis, Lfdobj = 0)`, so
-#' `scale` cannot be supplied to this method. The fitted
-#' `coordinates` remain a coefficient matrix; use [coordinates_fd()] to convert
-#' them to an `fda::fd` object on demand.
+#' `scale` cannot be supplied to this method. The internal optimization-space
+#' archetype coordinates are basis coefficients; `coordinates()` returns them in
+#' the original fd representation.
 #'
 #' @exportS3Method
 run_aa.fd <- function(x, K, ...) {
@@ -461,14 +462,15 @@ run_aa.fd <- function(x, K, ...) {
     if (identical(scale_mode, "matrix")) {
         if (!is.null(mask))
             scale <- scale[mask, mask, drop = FALSE]
-        scale_factor <- t(chol(as.matrix(scale)))
+        scale_factor <- t(chol(as.matrix(scale)))  # lower triangular
         X <- as.matrix(X) %*% scale_factor
         retained_names <- names(original_center)
         if (!is.null(mask))
             retained_names <- retained_names[mask]
         colnames(X) <- retained_names
         attr(X, "mask") <- mask
-        attr(X, "scale:factor") <- scale_factor
+        # Compressed storage
+        attr(X, "scale:factor") <- Matrix::pack(as(Matrix::Matrix(scale_factor), "unpackedMatrix"))
     } else if (identical(scale_mode, "vector")) {
         if (!is.null(mask))
             scale <- scale[mask]
@@ -537,7 +539,7 @@ run_aa.fd <- function(x, K, ...) {
         prep,
         list(
             A0 = out[["init"]],
-            A = out[["coordinates"]],
+            A = coordinates(out),
             B = out[["coefficients"]],
             S = out[["compositions"]],
             delta = out[["slack"]],
@@ -582,24 +584,27 @@ run_aa.fd <- function(x, K, ...) {
 
 .aa_euclidean_output <- function(ctx, prep, fit, fit_info = list()) {
     X <- if (!is.null(prep[["output_X"]])) prep[["output_X"]] else prep[["X"]]
-    undo_scale <- prep[["undo_scale"]]
-    if (is.null(undo_scale))
-        undo_scale <- function(A, X) A
+    feature_map <- .aa_euclidean_feature_map(X)
+    feature_map[["eps"]] <- ctx[["eps"]]
 
     j <- fit[["i"]] + 1L
     loss <- as.data.frame(fit[["loss"]])[seq_len(j), , drop = FALSE]
     rownames(loss) <- NULL
 
+    A_feature <- .aa_drop_bigM_column(fit[["A"]], attr(X, "bigM"))
     A <- fit[["A"]]
     A0 <- fit[["A0"]]
     archetype_names <- if (!is.null(A0)) rownames(A0) else rownames(A)
-    A <- undo_scale(A, X)
+    A <- .aa_feature_map_inverse(feature_map, A_feature)
     if (!is.null(A0))
-        A0 <- undo_scale(A0, X)
+        A0 <- .aa_feature_map_inverse(feature_map, .aa_drop_bigM_column(A0, attr(X, "bigM")))
+
+    family <- prep[["family"]] %||% ctx[["family"]] %||% "gaussian"
 
     if (is.null(archetype_names))
         archetype_names <- paste0("A", seq_len(nrow(A)))
     rownames(A) <- rownames(fit[["B"]]) <- colnames(fit[["S"]]) <- archetype_names
+    rownames(A_feature) <- archetype_names
     if (!is.null(A0))
         rownames(A0) <- archetype_names
     colnames(fit[["B"]]) <- rownames(fit[["S"]]) <- rownames(X)
@@ -637,14 +642,15 @@ run_aa.fd <- function(x, K, ...) {
         data         = ctx[["x"]],
         weights      = if (!is.null(fit[["row_weights"]])) fit[["row_weights"]] else attr(prep[["X"]], "weights"),
         init         = A0,
-        coordinates  = A,
         coefficients = fit[["B"]],
         compositions = fit[["S"]],
         slack        = fit[["delta"]] %||% 0,
         loss         = loss,
         converged    = fit[["converged"]],
-        family       = prep[["family"]],
-        fit_info     = fit_info
+        family       = family,
+        fit_info     = fit_info,
+        feature_map  = feature_map,
+        A            = A_feature
     )
 }
 

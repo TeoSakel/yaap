@@ -375,28 +375,29 @@ plot(fit_iris, what = "compositions",
 )
 ```
 
-### Predicting compositions for new observations
+### Predicting reconstructions and compositions for new observations
 
-Once a model is fitted, `predict()` maps new samples into the archetype
-simplex without re-fitting.
+Once a model is fitted, `predict()` reconstructs new samples from the fixed
+archetypes without re-fitting.  Request `type = "compositions"` when you want
+the simplex weights.
 
 ```{r predict}
 new_obs <- matrix(
-  c(5.1, 3.5, 1.4, 0.2,   # setosa-like
-    6.7, 3.0, 5.2, 2.3),  # virginica-like
-  nrow = 2, byrow = TRUE,
-  dimnames = list(c("obs1", "obs2"), colnames(iris[, 1:4]))
+    c(5.1, 3.5, 1.4, 0.2,   # setosa-like
+      6.7, 3.0, 5.2, 2.3),  # virginica-like
+    nrow = 2, byrow = TRUE,
+    dimnames = list(c("obs1", "obs2"), colnames(iris[, 1:4]))
 )
 print(new_obs)
 
 predict(fit_iris, newdata = new_obs)
 ```
 
-By default, each predicted row is non-negative and sums to 1 (`type = "compositions"`).
-If you want "denoised" values in the original feature space, request a reconstruction:
+The default result is on the original feature scale. To inspect the simplex
+weights, request compositions explicitly:
 
-```{r predict-reconstruction}
-predict(fit_iris, newdata = new_obs, type = "reconstruction")
+```{r predict-compositions}
+predict(fit_iris, newdata = new_obs, type = "compositions")
 ```
 
 ## Practical considerations
@@ -594,9 +595,9 @@ archetypes remain near the original data structure.
 ```{r robust-compare, fig.cap = "PCA projection of iris with five added outliers (crosses). Standard AA (red) is distorted towards the outlier cluster; robust AA (blue) closely recovers the reference triangle fitted on the clean data (dashed black)."}
 # Project all archetypes to PC space of data
 pca <- prcomp(X, scale. = TRUE)
-A_std <- predict(pca, fit_std[["coordinates"]])
-A_rob <- predict(pca, fit_rob[["coordinates"]])
-A_ori <- predict(pca, fit_iris[["coordinates"]])   # reference: fitted on clean iris
+A_std <- predict(pca, coordinates(fit_std))
+A_rob <- predict(pca, coordinates(fit_rob))
+A_ori <- predict(pca, coordinates(fit_iris))   # reference: fitted on clean iris
 
 # Plot data points
 plot(pca$x[seq_len(nrow(iris)), ],
@@ -699,7 +700,7 @@ cor(X_hat_miss[idx_miss], X[idx_miss])
 Next, we examine how the missing values affect the archetype positions in feature space.
 
 ```{r missing-compare, fig.width = 6, fig.height=6, fig.cap = "Archetype positions with (red) and without (blue) missing data"}
-A <- rbind(fit_miss[["coordinates"]], fit_iris[["coordinates"]])
+A <- rbind(coordinates(fit_miss), coordinates(fit_iris))
 pairs(rbind(X, A),
       col  = rep(c("gray60", "firebrick", "steelblue"), c(nrow(X), 3, 3)),
       pch  = rep(c(19, 17), c(nrow(X), nrow(A))),
@@ -922,12 +923,13 @@ implements some of them. The most common strategies are:
 |-------------------------------|--------------------------------|
 | Fit a model (matrix)          | `run_aa(X, K, ...)`            |
 | Fit a model (formula)         | `run_aa(y ~ ., data, K, ...)`  |
-| Extract compositions ($S$)    | `fit$compositions`             |
-| Extract coordinates  ($A$)    | `fit$coordinates`              |
+| Extract compositions ($S$)    | `compositions(fit)`            |
+| Extract coordinates  ($A$)    | `coordinates(fit)`             |
 | Extract coefficients ($B$)    | `coef(fit)`                    |
 | Reconstruct data              | `fitted(fit)`                  |
 | Residuals                     | `residuals(fit)`               |
-| Predict new compositions      | `predict(fit, newdata)`        |
+| Predict new reconstructions   | `predict(fit, newdata)`        |
+| Predict new compositions      | `predict(fit, newdata, type = "compositions")` |
 | Rename archetypes             | `anames(fit) <- c(...)`        |
 | Loss / convergence            | `fit$loss`, `fit$converged`    |
 | Feature profile plot          | `plot(fit, "profiles")`        |

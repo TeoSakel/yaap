@@ -80,10 +80,11 @@ test_that("augment.archetypes uses stored data when data = NULL", {
 test_that("augment.archetypes errors when no data available", {
     X <- toy_matrix()
     fit <- archetypes(
-        coordinates  = matrix(1:6, 3, 2),
+        A            = matrix(1:6, 3, 2),
         coefficients = matrix(1/3, 3, 3),
         compositions = matrix(1/3, 3, 3),
-        loss         = data.frame(loss = 0, r2 = 1, k_S = 1, k_A = 1)
+        loss         = data.frame(loss = 0, r2 = 1, k_S = 1, k_A = 1),
+        feature_map  = .aa_identity_feature_map(matrix(1:6, 3, 2))
     )
     expect_error(augment(fit), "Data must be provided")
 })
@@ -134,7 +135,8 @@ test_that("tidy.kernel_archetypes warns and returns empty tibble when coordinate
     G   <- exp(-as.matrix(dist(X))^2 / median(as.matrix(dist(X)))^2)
     fit <- suppressWarnings(run_aa(G, K = 3L, method = "kernel", kernel = "precomputed", max_iter = 5L))
 
-    expect_null(fit[["coordinates"]])
+    expect_false("coordinates" %in% names(fit))
+    expect_null(coordinates(fit))
     expect_warning(td <- tidy(fit), "coordinates")
     expect_equal(nrow(td), 0L)
 })

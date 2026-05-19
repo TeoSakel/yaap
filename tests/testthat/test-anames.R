@@ -13,24 +13,24 @@ test_that("anames gets and sets archetype labels without hiding list components"
     colnames(S) <- rownames(A)
 
     fit <- archetypes(
-        coordinates = A,
+        A = A,
         coefficients = B,
         compositions = S,
         init = A,
-        data = A
+        data = A,
+        feature_map = .aa_identity_feature_map(A)
     )
 
     expect_equal(anames(fit), c("A1", "A3", "A2"))
-    expect_true(all(c("coordinates", "coefficients", "compositions") %in% names(fit)))
+    expect_true(all(c("A", "coefficients", "compositions") %in% names(fit)))
 
     anames(fit) <- c("low", "mid", "high")
 
     expect_equal(anames(fit), c("low", "mid", "high"))
-    expect_equal(rownames(fit[["coordinates"]]), anames(fit))
     expect_equal(rownames(fit[["coefficients"]]), anames(fit))
     expect_equal(colnames(fit[["compositions"]]), anames(fit))
     expect_equal(rownames(fit[["init"]]), anames(fit))
-    expect_true(all(c("coordinates", "coefficients", "compositions") %in% names(fit)))
+    expect_true(all(c("A", "coefficients", "compositions") %in% names(fit)))
 
     expect_error(anames(fit) <- c("a", "b"), "Expected 3 archetype names")
     expect_error(anames(fit) <- c("a", "a", "b"), "unique")
@@ -83,18 +83,20 @@ test_that("archetypes constructor canonicalizes archetype order", {
     )
 
     fit <- archetypes(
-        coordinates = A,
+        A = A,
         coefficients = B,
         compositions = S,
         init = A,
-        data = X
+        data = X,
+        feature_map = .aa_identity_feature_map(A)
     )
 
     expect_equal(anames(fit), c("origin", "top", "right"))
-    expect_equal(unname(fit[["coordinates"]]), matrix(c(0, 0, 0, 1, 1, 0), ncol = 2L, byrow = TRUE))
+    expect_equal(unname(coordinates(fit)), matrix(c(0, 0, 0, 1, 1, 0), ncol = 2L, byrow = TRUE))
     expect_equal(rownames(fit[["coefficients"]]), anames(fit))
     expect_equal(colnames(fit[["compositions"]]), anames(fit))
     expect_equal(rownames(fit[["init"]]), anames(fit))
+    expect_equal(rownames(fit[["A"]]), anames(fit))
     expect_equal(unname(fitted(fit)), unname(S %*% A))
 })
 
@@ -114,9 +116,10 @@ test_that("archetypes constructor canonicalizes without coordinates", {
     rownames(S) <- colnames(B)
 
     fit <- archetypes(
-        coordinates = NULL,
+        A = NULL,
         coefficients = B,
-        compositions = S
+        compositions = S,
+        feature_map = .aa_unsupported_feature_map("manual")
     )
 
     expect_equal(anames(fit), c("third", "second", "first"))
@@ -133,13 +136,11 @@ test_that("anames gets and sets kernel archetype labels", {
     colnames(S) <- rownames(B)
     G <- diag(3L)
     rownames(G) <- colnames(G) <- colnames(B)
-    P <- B
 
     fit <- kernel_archetypes(
         coefficients = B,
         compositions = S,
         gram = G,
-        coordinates = P,
         init = B
     )
 
@@ -150,6 +151,5 @@ test_that("anames gets and sets kernel archetype labels", {
     expect_equal(anames(fit), c("red", "green", "blue"))
     expect_equal(rownames(fit[["coefficients"]]), anames(fit))
     expect_equal(colnames(fit[["compositions"]]), anames(fit))
-    expect_equal(rownames(fit[["coordinates"]]), anames(fit))
     expect_true(all(c("coefficients", "compositions", "gram") %in% names(fit)))
 })

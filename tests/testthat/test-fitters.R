@@ -78,7 +78,7 @@ test_that("run_aa handles formula input", {
     ))
 
     expect_s3_class(fit, "archetypes")
-    expect_matrix_dim(fit[["coordinates"]], 3L, 4L)
+    expect_matrix_dim(coordinates(fit), 3L, 4L)
     expect_matrix_dim(fit[["coefficients"]], 3L, nrow(iris))
     expect_matrix_dim(fit[["compositions"]], nrow(iris), 3L)
     expect_equal(colnames(fit[["data"]]), names(iris)[1:4])
@@ -97,7 +97,7 @@ test_that("run_aa formula input can use the formula environment", {
 
     expect_s3_class(fit, "archetypes")
     expect_matrix_dim(fit[["data"]], nrow(df), 2L)
-    expect_matrix_dim(fit[["coordinates"]], 2L, 2L)
+    expect_matrix_dim(coordinates(fit), 2L, 2L)
     expect_equal(colnames(fit[["data"]]), c("Sepal.Length", "Sepal.Width"))
 })
 
@@ -160,7 +160,8 @@ test_that("run_aa handles fda fd objects through basis coefficients", {
     fit <- suppressWarnings(run_aa(fd, K = 2L, max_iter = 1L, sd_threshold = 0))
 
     expect_s3_class(fit, "archetypes")
-    expect_matrix_dim(fit[["coordinates"]], 2L, 5L)
+    expect_s3_class(coordinates(fit), "fd")
+    expect_matrix_dim(t(stats::coef(coordinates(fit))), 2L, 5L)
     expect_matrix_dim(fit[["init"]], 2L, 5L)
     expect_s3_class(fit[["data"]], "fd")
     expect_matrix_dim(fit[["coefficients"]], 2L, 5L)
@@ -168,16 +169,20 @@ test_that("run_aa handles fda fd objects through basis coefficients", {
     expect_equal(anames(fit), rownames(fit[["coefficients"]]))
     expect_s3_class(fitted(fit), "fd")
     expect_s3_class(residuals(fit), "fd")
-    expect_matrix_dim(predict(fit, fd), 5L, 2L)
+    rec_fd <- predict(fit, fd)
+    expect_s3_class(rec_fd, "fd")
+    expect_equal(predict(fit, fd, type = "compositions"), compositions(fit), tolerance = 1e-6, ignore_attr = TRUE)
+    rec_fd_explicit <- predict(fit, fd, type = "reconstruction")
+    expect_equal(stats::coef(rec_fd_explicit), stats::coef(rec_fd), tolerance = 1e-6, ignore_attr = TRUE)
+    expect_equal(stats::coef(rec_fd), stats::coef(fitted(fit)), tolerance = 1e-6, ignore_attr = TRUE)
 
-    A_fd <- coordinates_fd(fit)
+    A_fd <- coordinates(fit)
     expect_s3_class(A_fd, "fd")
     expect_equal(dim(stats::coef(A_fd)), c(5L, 2L))
 
     anames(fit) <- c("left", "right")
     expect_equal(anames(fit), c("left", "right"))
-    expect_equal(colnames(stats::coef(coordinates_fd(fit))), c("left", "right"))
-    expect_s3_class(coordinates_fd(fit, basis = basis), "fd")
+    expect_equal(colnames(stats::coef(coordinates(fit))), c("left", "right"))
 })
 
 test_that("fitters preserve the user-facing call", {
@@ -263,6 +268,10 @@ test_that("scale preprocessing supports TRUE, FALSE, vector, and matrix transfor
         scale = diag(1 / sd^2)
     )
 
+    matrix_scale_factor <- attr(pre_matrix[["X"]], "scale:factor")
+    expect_true(inherits(matrix_scale_factor, "packedMatrix"))
+    expect_true(inherits(matrix_scale_factor, "triangularMatrix"))
+    expect_equal(length(matrix_scale_factor@x), ncol(pre_matrix[["X"]]) * (ncol(pre_matrix[["X"]]) + 1L) / 2)
     expect_equal(unname(colMeans(pre_default[["X"]])), rep(0, ncol(X)), tolerance = 1e-12)
     expect_equal(unname(apply(pre_default[["X"]], 2L, stats::sd)), rep(1, ncol(X)))
     expect_equal(pre_raw[["X"]], X, ignore_attr = TRUE)
@@ -353,7 +362,7 @@ test_that("PGD and NNLS accept matrix scale and return original-unit coordinates
 
     for (fit in list(pgd, nnls)) {
         expect_archetypes_fit(fit, K = 3L, n = nrow(X), p = ncol(X))
-        expect_equal(colnames(fit[["coordinates"]]), colnames(X))
+        expect_equal(colnames(coordinates(fit)), colnames(X))
     }
 })
 
@@ -364,8 +373,8 @@ test_that("NNLS matrix scale keeps bigM outside returned coordinates", {
 
     fit <- suppressWarnings(archetypes_nnls(X, K = 3L, scale = scale, max_iter = 1L, bigM = 200))
 
-    expect_matrix_dim(fit[["coordinates"]], 3L, ncol(X))
-    expect_false("bigM" %in% colnames(fit[["coordinates"]]))
+    expect_matrix_dim(coordinates(fit), 3L, ncol(X))
+    expect_false("bigM" %in% colnames(coordinates(fit)))
     expect_true(is_all_finite(fit[["loss"]][["loss"]]))
 })
 
@@ -598,7 +607,7 @@ test_that("missing-data PGD handles K edge cases directly", {
         sd_threshold = 0,
         max_iter = 0L
     )
-    expect_equal(unname(fit_mean[["coordinates"]][1L, ]), unname(colMeans(X, na.rm = TRUE)))
+    expect_equal(unname(coordinates(fit_mean)[1L, ]), unname(colMeans(X, na.rm = TRUE)))
     expect_equal(nrow(fit_mean[["loss"]]), 1L)
     expect_true(is_number(AIC(fit_mean)))
 
@@ -777,8 +786,8 @@ test_that("archetypes fitters accept named coordinate matrix initialization", {
     expected_names <- rownames(init)
 
     for (fit in list(pgd, nnls)) {
-        fit_names <- rownames(fit[["coordinates"]])
-        expect_named(as.data.frame(fit[["coordinates"]]), colnames(X))
+        fit_names <- rownames(coordinates(fit))
+        expect_named(as.data.frame(coordinates(fit)), colnames(X))
         expect_setequal(fit_names, expected_names)
         expect_equal(rownames(fit[["init"]]), fit_names)
         expect_equal(rownames(fit[["coefficients"]]), fit_names)
@@ -851,7 +860,7 @@ test_that("run_aa with nrep = 1 returns same structure as default", {
     fit_nrep1 <- suppressWarnings(run_aa(X, K = 3L, max_iter = 10L, nrep = 1L))
 
     expect_s3_class(fit_nrep1, "archetypes")
-    expect_equal(fit_default[["coordinates"]], fit_nrep1[["coordinates"]])
+    expect_equal(coordinates(fit_default), coordinates(fit_nrep1))
 })
 
 test_that("run_aa with nrep > 1 returns the best sequential restart", {

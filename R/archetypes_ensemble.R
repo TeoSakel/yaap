@@ -377,7 +377,7 @@ summary.archetypes_ensemble <- function(object, ...)
 .aa_consistency_weights <- function(fit, what) {
     x <- switch(
         what,
-        compositions = fit[["compositions"]],
+        compositions = compositions(fit),
         coefficients = t(fit[["coefficients"]])
     )
     x <- as.matrix(x)
@@ -410,8 +410,8 @@ summary.archetypes_ensemble <- function(object, ...)
 }
 
 .aa_coordinate_consistency <- function(x, y, data) {
-    ax <- .aa_input_coordinates(x)
-    ay <- .aa_input_coordinates(y)
+    ax <- .aa_consistency_coordinates(x)
+    ay <- .aa_consistency_coordinates(y)
     kx <- nrow(ax)
     ky <- nrow(ay)
     if (kx > ky)
@@ -427,17 +427,19 @@ summary.archetypes_ensemble <- function(object, ...)
     1 - mean(d2) / denom
 }
 
-.aa_input_coordinates <- function(fit) {
+.aa_consistency_coordinates <- function(fit) {
     if (inherits(fit, "kernel_archetypes")) {
-        coords <- fit[["coordinates"]]
+        coords <- coordinates(fit)
         if (is.null(coords))
             stop("Kernel archetypes require `coordinates` for coordinate consistency.",
                  call. = FALSE)
         return(as.matrix(coords))
     }
-    coords <- fit[["coordinates"]]
+    coords <- coordinates(fit)
     if (is.null(coords))
         stop("Coordinate consistency requires fitted coordinates.", call. = FALSE)
+    if (inherits(coords, "fd"))
+        return(.aa_fd_to_matrix(coords))
     as.matrix(coords)
 }
 

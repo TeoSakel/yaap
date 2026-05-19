@@ -412,11 +412,12 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
         data         = X,
         weights      = attr(X, "weights"),
         init         = A,
-        coordinates  = A,
+        A            = A,
         coefficients = B,
         compositions = S,
         loss         = loss,
-        converged    = TRUE
+        converged    = TRUE,
+        feature_map  = .aa_identity_feature_map(A)
     )
 }
 
@@ -455,11 +456,12 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
         data         = X,
         weights      = attr(X, "weights"),
         init         = A,
-        coordinates  = A,
+        A            = A,
         coefficients = B,
         compositions = S,
         loss         = loss,
-        converged    = TRUE
+        converged    = TRUE,
+        feature_map  = .aa_identity_feature_map(A)
     )
 }
 
@@ -498,6 +500,8 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
             attr(X, "mask") <- mask
             attr(X, "scaled:scale") <- sd_vals[mask]
         } else {
+            x_attrs[["dim"]] <- dim(X)
+            x_attrs[["dimnames"]] <- dimnames(X)
             attributes(X) <- x_attrs
         }
     }
@@ -602,7 +606,8 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     scale_mode <- attr(X, "scale:mode")
     if (identical(scale_mode, "matrix")) {
         scale_factor <- attr(X, "scale:factor")
-        mat <- t(solve(t(scale_factor), t(mat)))
+        scale_factor <- as.matrix(scale_factor)
+        mat <- t(backsolve(t(scale_factor), t(mat)))
     } else if (identical(scale_mode, "vector")) {
         mat <- sweep(mat, 2L, attr(X, "scale:factor"), "*")
     }
@@ -717,7 +722,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
         init <- init[, mask, drop = FALSE]
 
     if (identical(attr(X, "scale:mode"), "matrix"))
-        init <- init %*% attr(X, "scale:factor")
+        init <- init %*% as.matrix(attr(X, "scale:factor"))
     if (identical(attr(X, "scale:mode"), "vector"))
         init <- sweep(init, 2L, attr(X, "scale:factor"), "/")
 

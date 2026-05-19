@@ -152,7 +152,7 @@ bake.step_archetypes <- function(object, new_data, ...) {
     recipes::check_new_data(object$col_names, object, new_data)
 
     X_new <- as.matrix(new_data[, object$col_names, drop = FALSE])
-    S <- predict(object$res, newdata = X_new) # N x K compositions
+    S <- predict(object$res, newdata = X_new, type = "compositions") # N x K compositions
     arch_names <- anames(object$res)
     S_df <- as.data.frame(S)
     colnames(S_df) <- arch_names
@@ -162,7 +162,7 @@ bake.step_archetypes <- function(object, new_data, ...) {
     new_data <- vctrs::vec_cbind(new_data, tibble::as_tibble(S_df), .name_repair = "minimal")
 
     if (isTRUE(object$reconstruct)) {
-        X_hat <- S %*% object$res[["coordinates"]]
+        X_hat <- predict(object$res, newdata = X_new, type = "reconstruction")
         rec_names <- paste0("rec_", object$col_names)
         rec_df <- as.data.frame(X_hat)
         colnames(rec_df) <- rec_names

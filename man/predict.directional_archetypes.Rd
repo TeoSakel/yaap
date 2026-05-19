@@ -7,7 +7,7 @@
 \method{predict}{directional_archetypes}(
   object,
   newdata,
-  type = c("compositions", "reconstruction"),
+  type = c("reconstruction", "compositions"),
   max_iter = 100L,
   eps = 1e-08,
   step_size = 1,
@@ -21,8 +21,8 @@
 
 \item{newdata}{New directional data matrix.}
 
-\item{type}{Prediction output type. \code{"compositions"} (default) or
-\code{"reconstruction"}.}
+\item{type}{Prediction output type. \code{"reconstruction"} (default) or
+\code{"compositions"}.}
 
 \item{max_iter, eps, step_size, max_iter_optimizer, step_shrinkage}{Optimization
 controls for composition fitting.}
@@ -36,7 +36,7 @@ a directional reconstruction matrix (N_new x M) when
 }
 \description{
 Solves for new sample compositions with fixed directional archetype
-coordinates. By default returns compositions (\code{S}).
-With \code{type = "reconstruction"}, returns directional reconstructions obtained
+coordinates. By default returns directional reconstructions obtained
 from \code{S \%*\% A}, then row-normalized and hemisphere-aligned to \code{newdata}.
+With \code{type = "compositions"}, returns composition weights (\code{S}).
 }

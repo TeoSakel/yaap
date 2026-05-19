@@ -669,6 +669,9 @@ archetypes_pgd <- function(x,
         }
     }
 
+    # Final projection to ensure predict(fit, type = "compositions") == S
+    S <- fit_simplex(A, X, eps = eps)
+
     list(
         A0 = A0,
         A = A,

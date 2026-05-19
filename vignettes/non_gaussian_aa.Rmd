@@ -167,7 +167,7 @@ rect(0, usr[3], 0.25, usr[4], col = adjustcolor(pal_aa[2], 0.12), border = NA)
 rect(0.75, usr[3], 1, usr[4], col = adjustcolor(pal_aa[2], 0.12), border = NA)
 matlines(
     t_grid,
-    t(fit_metric[["coordinates"]]),
+    t(coordinates(fit_metric)),
     lty = 1, lwd = 2, col = pal_aa[1:3]
 )
 legend(
@@ -246,8 +246,8 @@ rbind(
 ```{r kernel-plot, echo=FALSE, fig.cap = "Linear AA archetypes and nonlinear kernel-AA input-space proxy archetypes on a ring/core dataset."}
 plot_proxy_archetypes(
     X_ring,
-    fit_linear[["coordinates"]],
-    fit_kernel[["coordinates"]],
+    coordinates(fit_linear),
+    coordinates(fit_kernel),
     main = "Linear AA vs kernel-AA proxies"
 )
 legend(
@@ -323,18 +323,16 @@ plot(
 )
 ```
 
-Prediction solves only for new composition weights while keeping the learned
-archetypes fixed. With `type = "reconstruction"`, Bernoulli reconstructions are
-fitted probabilities.
+Prediction keeps the learned archetypes fixed and returns reconstructions by
+default. With `type = "compositions"`, it returns the new composition weights.
 
 ```{r paa-predict}
-S_new <- predict(fit_bernoulli, X_bin[1:5, ], max_iter = 20)
+S_new <- predict(fit_bernoulli, X_bin[1:5, ], type = "compositions", max_iter = 20)
 round(S_new, 3)
 
 P_new <- predict(
     fit_bernoulli,
     X_bin[1:5, ],
-    type = "reconstruction",
     max_iter = 20
 )
 round(P_new, 2)
@@ -449,7 +447,7 @@ plot(
     xlab = "x", ylab = "y", main = "Directional vs Euclidean AA"
 )
 points(
-    unit_rows(fit_euclidean_dir[["coordinates"]])[, 1:2],
+    unit_rows(coordinates(fit_euclidean_dir))[, 1:2],
     pch = 4, cex = 1.4, lwd = 1.5, col = "black"
 )
 points(

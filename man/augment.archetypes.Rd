@@ -28,7 +28,7 @@ Adds per-sample archetype composition columns to the original data.
 }
 \details{
 For \code{kernel_archetypes}, \code{data} is used only to convert the stored data to
-a tibble; compositions always come from the stored \code{x[["compositions"]]}
+a tibble; compositions always come from the stored \code{compositions(x)}
 since projecting new samples requires the original Gram matrix.
 }
 \seealso{

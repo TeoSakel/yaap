@@ -22,7 +22,7 @@ test_that("prep.step_archetypes trains the step", {
   trained_step <- rec$steps[[1L]]
   expect_true(trained_step$trained)
   expect_s3_class(trained_step$res, "archetypes")
-  expect_equal(nrow(trained_step$res[["coordinates"]]), 3L)
+  expect_equal(nrow(coordinates(trained_step$res)), 3L)
   expect_equal(unname(trained_step$col_names), colnames(toy_data()))
 })
 
@@ -99,8 +99,8 @@ test_that("seed makes fitting reproducible", {
     step_archetypes(all_numeric(), num_comp = 3L, seed = 123L) |>
     prep(training = toy_data())
 
-  coords1 <- prep1$steps[[1L]]$res[["coordinates"]]
-  coords2 <- prep2$steps[[1L]]$res[["coordinates"]]
+  coords1 <- coordinates(prep1$steps[[1L]]$res)
+  coords2 <- coordinates(prep2$steps[[1L]]$res)
   expect_equal(coords1, coords2)
 })
 

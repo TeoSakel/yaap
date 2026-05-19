@@ -4,14 +4,14 @@
 \alias{predict.kernel_archetypes}
 \title{Predict method for kernel archetypes}
 \usage{
-\method{predict}{kernel_archetypes}(object, newdata, type = c("compositions", "reconstruction"), ...)
+\method{predict}{kernel_archetypes}(object, newdata, type = c("reconstruction", "compositions"), ...)
 }
 \arguments{
 \item{object}{An object of class \code{kernel_archetypes}.}
 
 \item{newdata}{New data to project (currently unsupported).}
 
-\item{type}{Prediction output type. \code{"compositions"} or \code{"reconstruction"}.}
+\item{type}{Prediction output type. \code{"reconstruction"} or \code{"compositions"}.}
 
 \item{...}{Ignored.}
 }

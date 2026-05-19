@@ -8,7 +8,6 @@ kernel_archetypes(
   coefficients,
   compositions,
   gram,
-  coordinates = NULL,
   slack = 0,
   loss = NULL,
   converged = TRUE,
@@ -18,7 +17,8 @@ kernel_archetypes(
   kernel = NULL,
   kernel_args = list(),
   weights = NULL,
-  fit_info = list()
+  fit_info = list(),
+  feature_map = .aa_kernel_feature_map()
 )
 }
 \arguments{
@@ -29,12 +29,6 @@ archetype as a weighted combination of training samples.}
 combination of kernel archetypes.}
 
 \item{gram}{Training Gram matrix.}
-
-\item{coordinates}{Optional input-space proxy coordinates, typically
-\code{coefficients \%*\% data}. For linear kernels these equal the true
-Hilbert-space archetypes; for nonlinear kernels they are Euclidean
-approximations only — distances in coordinate plots carry no
-kernel-metric meaning. Pass \code{NULL} to suppress coordinate plots.}
 
 \item{slack}{Non-negative coefficient row-sum relaxation.}
 
@@ -54,6 +48,8 @@ kernel-metric meaning. Pass \code{NULL} to suppress coordinate plots.}
 
 \item{weights}{Optional numeric vector of sample weights used during
 fitting.}
+
+\item{feature_map}{Internal prediction feature-map metadata.}
 }
 \description{
 Kernel archetype analysis result object

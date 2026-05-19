@@ -14,7 +14,7 @@
 #'   `N x N` Gram matrix.
 #' @param kernel_args list of arguments passed to the kernel.
 #' @param data optional original data matrix attached to precomputed-kernel fits
-#'   so input-space `coordinates` can be returned.
+#'   so coordinates() can return an input-space proxy.
 #' @param init initialization method; see [run_aa()] for available options.
 #' @param init_args list of additional arguments for the initialization function.
 #' @param robust robust row reweighting selector. Use `FALSE` for ordinary
@@ -61,7 +61,7 @@
 #'
 #' To use a precomputed Gram matrix, compute it externally, pass it as `x`,
 #' and set `kernel = "precomputed"`. Supply the original data as the `data`
-#' argument if you want input-space `coordinates` in the output.
+#' argument if you want coordinates() to return an input-space proxy.
 #'
 #' Kernel initializers that can be expressed through row selections or
 #' coefficient matrices are supported: `"random"`, `"furthest_first"`,
@@ -71,18 +71,18 @@
 #'
 #' ## Archetype coordinates
 #'
-#' Because the space where the similarities are measured is implicitly defined
-#' by the kernel, the coordinates of the archetypes cannot be directly computed.
-#' In order to visualize the results and facilitate interpretation, the resulting
-#' `kernel_archetypes` object does have a `coordinates` slot which is constructed
-#' according to the standard AA convention of representing archetypes as convex
-#' combinations of the original data points $A = BX$ since $B$ is computed during
-#' the optimization. However, these coordinates should not be misinterpreted as the
-#' the actual positions of the archetypes in the original space but only as proxies.
-#' Other assumptions would produce different coordinate representations; for
-#' example, `plot.kernel_archetypes()` with `projection = "pca"` projects the
-#' archetype compositions onto the kernel PCA components of the data, giving an
-#' alternative view of their positions in the feature space.
+#' Because the space where similarities are measured is defined by the kernel,
+#' archetype coordinates are not directly available as ordinary input-space
+#' coordinates. The coordinates() accessor returns a proxy when the original
+#' input data are stored: A = B X, using the fitted generator weights B.
+#' For linear kernels this equals the usual Euclidean representation. For
+#' nonlinear kernels it is only a plotting and inspection proxy; distances in
+#' this coordinate matrix do not carry kernel-metric meaning.
+#'
+#' When the original data are unavailable, as with some precomputed Gram
+#' matrices, coordinates() returns NULL. For an alternative feature-space view,
+#' plot.kernel_archetypes() with projection = "pca" projects archetype
+#' compositions onto kernel PCA components of the data.
 #'
 #' @returns An object of class \code{\link{kernel_archetypes}}, extending
 #'   \code{archetypes}.
@@ -452,7 +452,7 @@ archetypes_kernel_pgd <- function(x,
 
     if (identical(kernel, "precomputed")) {
         G <- as.matrix(x)
-        attached_data <- if (is.null(data)) NULL else as.matrix(data)
+        attached_data <- if (is.data.frame(data)) data.matrix(data) else data
         return(list(
             gram = G,
             data = attached_data,
@@ -463,17 +463,22 @@ archetypes_kernel_pgd <- function(x,
 
     if (!is.null(data))
         stop("`data` is only used with `kernel = 'precomputed'`.", call. = FALSE)
-    X <- as.matrix(x)
+    stored_data <- if (is.data.frame(x)) data.matrix(x) else x
     if (is.function(kernel)) {
-        G <- do.call(kernel, c(list(X), kernel_args))
-        return(list(gram = as.matrix(G), data = X, kernel = kernel, kernel_args = kernel_args))
+        G <- do.call(kernel, c(list(stored_data), kernel_args))
+        return(list(gram = as.matrix(G), data = stored_data, kernel = kernel, kernel_args = kernel_args))
     }
 
     if (!is.character(kernel) || length(kernel) != 1L)
         stop("`kernel` must be a single string or a function.", call. = FALSE)
     kernel <- match.arg(kernel, c("linear", "rbf", "laplace", "polynomial", "precomputed"))
+    X <- if (inherits(stored_data, "sparseMatrix") && kernel %in% c("linear", "polynomial")) {
+        stored_data
+    } else {
+        as.matrix(stored_data)
+    }
     G <- do.call(.aa_builtin_kernel, c(list(X = X, kernel = kernel), kernel_args))
-    list(gram = G, data = X, kernel = kernel, kernel_args = kernel_args)
+    list(gram = G, data = stored_data, kernel = kernel, kernel_args = kernel_args)
 }
 
 .aa_builtin_kernel <- function(X,
@@ -767,14 +772,6 @@ archetypes_kernel_pgd <- function(x,
     if (!is.null(init))
         rownames(init) <- archetype_names
 
-    coordinates <- NULL
-    if (!is.null(data)) {
-        X <- as.matrix(data)
-        coordinates <- B %*% X
-        rownames(coordinates) <- archetype_names
-        colnames(coordinates) <- colnames(X)
-    }
-
     if (!converged)
         warning(sprintf("Algorithm did not converge after %d iterations", max_iter))
     if (verbose) {
@@ -787,7 +784,6 @@ archetypes_kernel_pgd <- function(x,
         coefficients = B,
         compositions = S,
         gram = gram,
-        coordinates = coordinates,
         slack = delta,
         loss = loss,
         converged = converged,

@@ -41,8 +41,15 @@ test_that("kernel PGD matches Euclidean PGD for the linear kernel", {
     expect_s3_class(kernel, "kernel_archetypes")
     expect_equal(kernel[["loss"]][["loss"]], pgd[["loss"]][["loss"]], tolerance = 1e-6)
     expect_equal(kernel[["loss"]][["r2"]], pgd[["loss"]][["r2"]], tolerance = 1e-7)
-    expect_equal(unname(kernel[["coefficients"]]), unname(pgd[["coefficients"]]), tolerance = 1e-7)
-    expect_equal(unname(kernel[["compositions"]]), unname(pgd[["compositions"]]), tolerance = 1e-7)
+    row_order <- function(A) do.call(order, as.data.frame(round(A, 7L)))
+    kernel_order <- row_order(coordinates(kernel))
+    pgd_order <- row_order(coordinates(pgd))
+    expect_equal(unname(coordinates(kernel)[kernel_order, , drop = FALSE]),
+                 unname(coordinates(pgd)[pgd_order, , drop = FALSE]),
+                 tolerance = 1e-7)
+    expect_equal(unname(kernel[["coefficients"]][kernel_order, , drop = FALSE]),
+                 unname(pgd[["coefficients"]][pgd_order, , drop = FALSE]),
+                 tolerance = 1e-7)
 })
 
 test_that("kernel PGD fits an RBF kernel and returns coordinates", {
@@ -67,7 +74,8 @@ test_that("kernel PGD fits an RBF kernel and returns coordinates", {
     expect_true(is_all_finite(fit[["loss"]][["loss"]]))
     expect_named(fit[["loss"]], c("loss", "r2"))
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
-    expect_equal(fit[["coordinates"]], fit[["coefficients"]] %*% X)
+    expect_equal(coordinates(fit), fit[["coefficients"]] %*% X)
+    expect_equal(coordinates(fit), coordinates(fit))
     expect_error(
         archetypes_kernel_pgd(
             x = X,
@@ -87,6 +95,51 @@ test_that("kernel PGD fits an RBF kernel and returns coordinates", {
         "Laplace kernels use `sigma`"
     )
 })
+test_that("coordinates.kernel_archetypes computes the input-space proxy on demand", {
+    X <- matrix(c(0, 0, 1, 0, 0, 1), nrow = 3L, byrow = TRUE)
+    rownames(X) <- c("s1", "s2", "s3")
+    colnames(X) <- c("x", "y")
+    B <- matrix(c(0.5, 0.5, 0, 0, 0.25, 0.75), nrow = 2L, byrow = TRUE)
+    rownames(B) <- c("A1", "A2")
+    colnames(B) <- rownames(X)
+    S <- matrix(c(1, 0, 0, 1, 0.5, 0.5), nrow = 3L, byrow = TRUE)
+    rownames(S) <- rownames(X)
+    colnames(S) <- rownames(B)
+    fit <- kernel_archetypes(
+        coefficients = B,
+        compositions = S,
+        gram = diag(3L),
+        data = X
+    )
+
+    expect_false("coordinates" %in% names(fit))
+    expect_equal(coordinates(fit), fit[["coefficients"]] %*% X)
+})
+
+test_that("coordinates.kernel_archetypes preserves Matrix dispatch for sparse data", {
+    X <- Matrix::Matrix(
+        matrix(c(0, 0, 1, 0, 0, 1), nrow = 3L, byrow = TRUE),
+        sparse = TRUE
+    )
+    rownames(X) <- c("s1", "s2", "s3")
+    colnames(X) <- c("x", "y")
+    B <- matrix(c(0.5, 0.5, 0, 0, 0.25, 0.75), nrow = 2L, byrow = TRUE)
+    rownames(B) <- c("A1", "A2")
+    colnames(B) <- rownames(X)
+    S <- matrix(c(1, 0, 0, 1, 0.5, 0.5), nrow = 3L, byrow = TRUE)
+    rownames(S) <- rownames(X)
+    colnames(S) <- rownames(B)
+
+    fit <- kernel_archetypes(
+        coefficients = B,
+        compositions = S,
+        gram = diag(3L),
+        data = X
+    )
+
+    expect_true(inherits(coordinates(fit), "Matrix"))
+})
+
 
 test_that("kernel PGD passes refinement_steps to furthest_sum initialization", {
     set.seed(1)
@@ -165,7 +218,7 @@ test_that("run_aa dispatches to kernel PGD", {
     expect_s3_class(fit, "kernel_archetypes")
     expect_identical(as.character(fit[["call"]][[1L]]), "run_aa")
     expect_matrix_dim(fit[["coefficients"]], 3L, nrow(X))
-    expect_equal(fit[["coordinates"]], fit[["coefficients"]] %*% X)
+    expect_equal(coordinates(fit), fit[["coefficients"]] %*% X)
 })
 
 test_that("kernel PGD warns and ignores explicit run_aa scaling", {

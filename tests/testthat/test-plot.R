@@ -47,7 +47,7 @@ test_that("plot.archetypes profiles uses fixed height but accepts other barplot 
         horiz = TRUE,
         border = NA
     )
-    expect_equal(out[["barplot_args"]][["height"]], fit[["coordinates"]])
+    expect_equal(out[["barplot_args"]][["height"]], coordinates(fit))
     expect_true(out[["barplot_args"]][["horiz"]])
 })
 
@@ -176,19 +176,19 @@ test_that("plot helpers support plot = FALSE", {
     expect_equal(loss[["loss"]], fit[["loss"]][["loss"]])
 
     profiles <- plot_archetypes_profiles(
-        fit[["coordinates"]],
+        coordinates(fit),
         archetype_names = anames(fit),
         plot = FALSE
     )
-    expect_equal(profiles[["coordinates"]], fit[["coordinates"]])
+    expect_equal(profiles[["coordinates"]], coordinates(fit))
 
     coords <- plot_archetypes_coordinates(
-        fit[["coordinates"]],
+        coordinates(fit),
         data = fit[["data"]],
         archetype_names = anames(fit),
         plot = FALSE
     )
-    expect_equal(coords[["coordinates"]], fit[["coordinates"]])
+    expect_equal(coords[["coordinates"]], coordinates(fit))
     expect_equal(coords[["data"]], fit[["data"]])
 
     expect_named(plot(fit, "coordinates", plot = FALSE), c(
@@ -202,17 +202,17 @@ test_that("plot_archetypes_coordinates handles coordinates-only and argument rou
     group <- c("g1", "g2", "g1", "g2")
     data_col <- c(g1 = "#1b9e77", g2 = "#d95f02")[group]
 
-    coords_only <- plot_archetypes_coordinates(fit[["coordinates"]], plot = FALSE)
+    coords_only <- plot_archetypes_coordinates(coordinates(fit), plot = FALSE)
     expect_null(coords_only[["data"]])
     expect_equal(coords_only[["projection"]], "none")
 
     expect_error(
-        plot_archetypes_coordinates(fit[["coordinates"]], projection = "pca", plot = FALSE),
+        plot_archetypes_coordinates(coordinates(fit), projection = "pca", plot = FALSE),
         "projection"
     )
 
     routed <- plot_archetypes_coordinates(
-        fit[["coordinates"]],
+        coordinates(fit),
         data = fit[["data"]],
         col = "black",
         pch = 17,
@@ -230,7 +230,8 @@ test_that("plot.archetypes handles higher-dimensional coordinate projections", {
     fit <- manual_fit()
     X <- cbind(fit[["data"]], z = c(0, 1, 1, 0.2), w = c(1, 0, 1, 0.4))
     fit[["data"]] <- X
-    fit[["coordinates"]] <- X[1:3, , drop = FALSE]
+    fit[["A"]] <- X[1:3, , drop = FALSE]
+    fit[["feature_map"]] <- .aa_identity_feature_map(fit[["A"]])
     pdf(NULL)
     on.exit(dev.off(), add = TRUE)
 

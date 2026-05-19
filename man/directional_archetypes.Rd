@@ -17,7 +17,8 @@ directional_archetypes(
   hemisphere_direction = NULL,
   row_norms = NULL,
   precision = NULL,
-  fit_info = list()
+  fit_info = list(),
+  feature_map = NULL
 )
 }
 \arguments{
@@ -45,6 +46,8 @@ used to generate archetypes.}
 \item{row_norms}{Original data row norms.}
 
 \item{precision}{Precision mode used for the Watson loss.}
+
+\item{feature_map}{Internal prediction feature-map metadata.}
 }
 \description{
 Directional archetype analysis result object

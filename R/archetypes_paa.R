@@ -380,7 +380,7 @@ archetypes_paa <- function(x,
     prep <- spec[["prepare"]](newdata)
     X <- prep[["X"]]
     P <- prep[["P"]]
-    A <- object[["coordinates"]]
+    A <- .aa_input_coordinates_matrix(object)
     if (ncol(P) != ncol(A)) {
         fmt <- "`newdata` has %d columns but `object$coordinates` has %d columns"
         stop(sprintf(fmt, ncol(P), ncol(A)), call. = FALSE)

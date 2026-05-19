@@ -5,7 +5,7 @@ test_that("archetypes_directional fits spherical data with expected invariants",
 
     expect_s3_class(fit, "directional_archetypes")
     expect_s3_class(fit, "archetypes")
-    expect_matrix_dim(fit[["coordinates"]], 3L, 3L)
+    expect_matrix_dim(coordinates(fit), 3L, 3L)
     expect_matrix_dim(fit[["directions"]], 3L, 3L)
     expect_matrix_dim(fit[["coefficients"]], 3L, nrow(X))
     expect_matrix_dim(fit[["compositions"]], nrow(X), 3L)
@@ -16,8 +16,8 @@ test_that("archetypes_directional fits spherical data with expected invariants",
     expect_named(fit[["loss"]], c("loss", "r2"))
     expect_true(is_all_finite(fitted(fit)))
     expect_true(is_all_finite(residuals(fit)))
-    S_pred <- predict(fit, X[1:5, ], max_iter = 3L)
-    Y_pred <- predict(fit, X[1:5, ], type = "reconstruction", max_iter = 3L)
+    Y_pred <- predict(fit, X[1:5, ], max_iter = 3L)
+    S_pred <- predict(fit, X[1:5, ], type = "compositions", max_iter = 3L)
     expect_matrix_dim(S_pred, 5L, 3L)
     expect_matrix_dim(Y_pred, 5L, ncol(X))
     expect_equal(as.vector(rowSums(Y_pred^2)), rep(1, nrow(Y_pred)), tolerance = 1e-6)
@@ -67,7 +67,7 @@ test_that("run_aa dispatches to directional fitter", {
 
     expect_s3_class(fit, "directional_archetypes")
     expect_identical(as.character(fit[["call"]][[1L]]), "run_aa")
-    expect_matrix_dim(fit[["coordinates"]], 3L, 3L)
+    expect_matrix_dim(coordinates(fit), 3L, 3L)
     expect_row_stochastic(fit[["coefficients"]])
     expect_row_stochastic(fit[["compositions"]])
 })

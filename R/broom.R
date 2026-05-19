@@ -31,7 +31,9 @@ tidy.archetypes <- function(x, matrix = c("coordinates", "coefficients", "compos
     matrix <- match.arg(matrix)
     switch(matrix,
         coordinates = {
-            A <- x[["coordinates"]]
+            A <- coordinates(x)
+            if (inherits(A, "fd"))
+                A <- .aa_fd_to_matrix(A)
             .aa_pivot_matrix(
                 mat      = A,
                 row_name = "archetype",
@@ -55,7 +57,7 @@ tidy.archetypes <- function(x, matrix = c("coordinates", "coefficients", "compos
             )
         },
         compositions = {
-            S <- x[["compositions"]]
+            S <- compositions(x)
             .aa_pivot_matrix(
                 mat      = S,
                 row_name = "sample",
@@ -80,11 +82,13 @@ tidy.archetypes <- function(x, matrix = c("coordinates", "coefficients", "compos
 tidy.kernel_archetypes <- function(x, matrix = c("coordinates", "coefficients", "compositions"), ...) {
     matrix <- match.arg(matrix)
     if (identical(matrix, "coordinates")) {
-        A <- x[["coordinates"]]
+        A <- coordinates(x)
+        if (inherits(A, "fd"))
+            A <- .aa_fd_to_matrix(A)
         if (is.null(A)) {
             warning(paste(
-                "`coordinates` is NULL for this kernel_archetypes object.",
-                "Supply `data` with `kernel = 'precomputed'` to get input-space coordinates.",
+                "`coordinates()` is NULL for this kernel_archetypes object.",
+                "Supply `data` with `kernel = 'precomputed'` to get an input-space coordinate proxy.",
                 "Returning an empty tibble."
             ), call. = FALSE)
             return(tibble::tibble(archetype = character(), term = character(), value = numeric()))
@@ -132,7 +136,7 @@ glance.archetypes <- function(x, ...) {
     loss_df <- x[["loss"]]
     n       <- nrow(loss_df)
     tibble::tibble(
-        K         = nrow(x[["coordinates"]]),
+        K         = ncol(compositions(x)),
         converged = isTRUE(x[["converged"]]),
         loss      = loss_df[["loss"]][n],
         r2        = loss_df[["r2"]][n],
@@ -187,10 +191,10 @@ augment.archetypes <- function(x, data = NULL, ...) {
                 "when constructing the archetypes object."
             ), call. = FALSE)
         out <- tibble::as_tibble(stored)
-        S   <- x[["compositions"]]
+        S   <- compositions(x)
     } else {
         out <- tibble::as_tibble(data)
-        S   <- predict(x, newdata = data, ...)
+        S   <- predict(x, newdata = data, type = "compositions", ...)
     }
     comp_names <- paste0(".", anames(x))
     comp_df    <- tibble::as_tibble(S, .name_repair = "minimal")
@@ -201,7 +205,7 @@ augment.archetypes <- function(x, data = NULL, ...) {
 #' @rdname augment.archetypes
 #' @details
 #' For `kernel_archetypes`, `data` is used only to convert the stored data to
-#' a tibble; compositions always come from the stored `x[["compositions"]]`
+#' a tibble; compositions always come from the stored `compositions(x)`
 #' since projecting new samples requires the original Gram matrix.
 #'
 #' @exportS3Method generics::augment
@@ -213,7 +217,7 @@ augment.kernel_archetypes <- function(x, data = NULL, ...) {
             "when constructing the kernel_archetypes object."
         ), call. = FALSE)
     out        <- tibble::as_tibble(raw)
-    S          <- x[["compositions"]]
+    S          <- compositions(x)
     comp_names <- paste0(".", anames(x))
     comp_df    <- tibble::as_tibble(S, .name_repair = "minimal")
     colnames(comp_df) <- comp_names

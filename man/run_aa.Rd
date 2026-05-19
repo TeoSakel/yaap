@@ -139,6 +139,7 @@ An object of class \code{archetypes} with components:
 \item{\code{family}}{observation family string (e.g. \code{"gaussian"}).}
 \item{\code{init}}{initial archetype coordinates (when available).}
 \item{\code{slack}, \code{weights}}{optional relaxation and sample-weight parameters.}
+\item{\code{feature_map}}{internal metadata mapping new data into the fitted optimization geometry for prediction.}
 }
 }
 \description{
@@ -150,9 +151,9 @@ background, and class-specific return slots, see the individual solver pages.
 \code{run_aa.fd()} fits archetypal analysis to the coefficient matrix of an
 \code{fda::fd} object. The feature scaling is set to the basis inner-product
 matrix from \code{fda::eval.penalty(data$basis, Lfdobj = 0)}, so
-\code{scale} cannot be supplied to this method. The fitted
-\code{coordinates} remain a coefficient matrix; use \code{\link[=coordinates_fd]{coordinates_fd()}} to convert
-them to an \code{fda::fd} object on demand.
+\code{scale} cannot be supplied to this method. The internal optimization-space
+archetype coordinates are basis coefficients; \code{coordinates()} returns them in
+the original fd representation.
 }
 \examples{
 toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
@@ -174,7 +175,7 @@ temp_fd <- Data2fd(
 )
 
 fit_fd <- run_aa(temp_fd, K = 3, max_iter = 20)
-arch_fd <- coordinates_fd(fit_fd)
+arch_fd <- coordinates(fit_fd)
 }
 
 }

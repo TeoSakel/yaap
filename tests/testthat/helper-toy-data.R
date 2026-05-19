@@ -36,7 +36,7 @@ expect_archetypes_fit <- function(fit,
                                   fitted_dim = NULL,
                                   residual_dim = NULL) {
     expect_s3_class(fit, class)
-    expect_matrix_dim(fit[["coordinates"]], K, p)
+    expect_matrix_dim(coordinates(fit), K, p)
     expect_matrix_like_dim(fit[["coefficients"]], K, n)
     expect_matrix_like_dim(fit[["compositions"]], n, K)
     expect_row_stochastic(fit[["coefficients"]])
@@ -83,11 +83,12 @@ manual_fit <- function() {
     loss <- data.frame(loss = c(2, 1, 0.5), r2 = c(0, 0.5, 0.75), k_S = 1, k_A = 1)
 
     archetypes(
-        coordinates = A,
+        A = A,
         coefficients = B,
         compositions = S,
         loss = loss,
-        data = X
+        data = X,
+        feature_map = .aa_identity_feature_map(A)
     )
 }
 

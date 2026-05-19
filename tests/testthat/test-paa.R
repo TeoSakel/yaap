@@ -47,7 +47,7 @@ test_that("archetypes_paa fits supported families with shared invariants", {
 
         expect_s3_class(fit, "archetypes")
         expect_identical(fit[["family"]], family)
-        expect_matrix_dim(fit[["coordinates"]], 3L, ncol(cases[[family]]))
+        expect_matrix_dim(coordinates(fit), 3L, ncol(cases[[family]]))
         expect_matrix_dim(fit[["coefficients"]], 3L, nrow(cases[[family]]))
         expect_matrix_dim(fit[["compositions"]], nrow(cases[[family]]), 3L)
         expect_row_stochastic(fit[["coefficients"]])
@@ -120,12 +120,12 @@ test_that("PAA fitted and predict are family-aware", {
     expect_matrix_dim(X_hat, nrow(X), ncol(X))
     expect_equal(unname(rowSums(X_hat)), unname(rowSums(X)), tolerance = 1e-6)
 
-    pred <- predict(fit, X[1:3, , drop = FALSE], max_iter = 3L)
-    pred_default <- predict(fit, X[1:3, , drop = FALSE], type = "compositions", max_iter = 3L)
-    rec <- predict(fit, X[1:3, , drop = FALSE], type = "reconstruction", max_iter = 3L)
+    rec <- predict(fit, X[1:3, , drop = FALSE], max_iter = 3L)
+    rec_explicit <- predict(fit, X[1:3, , drop = FALSE], type = "reconstruction", max_iter = 3L)
+    pred <- predict(fit, X[1:3, , drop = FALSE], type = "compositions", max_iter = 3L)
     expect_matrix_dim(pred, 3L, 3L)
     expect_row_stochastic(pred)
-    expect_equal(pred, pred_default)
+    expect_equal(rec, rec_explicit)
     expect_matrix_dim(rec, 3L, ncol(X))
     expect_equal(unname(rowSums(rec)), unname(rowSums(X[1:3, , drop = FALSE])), tolerance = 1e-6)
 })
@@ -166,7 +166,7 @@ test_that("PAA profile plots use parameter-space coordinates", {
     expect_named(prof, c("archetype", "feature", "value"))
     expect_equal(
         prof[["value"]],
-        as.vector(fit[["coordinates"]]),
+        as.vector(coordinates(fit)),
         tolerance = 1e-8
     )
 })

@@ -40,7 +40,7 @@ archetypes_kernel_pgd(
 \item{kernel_args}{list of arguments passed to the kernel.}
 
 \item{data}{optional original data matrix attached to precomputed-kernel fits
-so input-space \code{coordinates} can be returned.}
+so coordinates() can return an input-space proxy.}
 
 \item{init}{initialization method; see \code{\link[=run_aa]{run_aa()}} for available options.}
 
@@ -114,7 +114,7 @@ data but less efficient.
 
 To use a precomputed Gram matrix, compute it externally, pass it as \code{x},
 and set \code{kernel = "precomputed"}. Supply the original data as the \code{data}
-argument if you want input-space \code{coordinates} in the output.
+argument if you want coordinates() to return an input-space proxy.
 
 Kernel initializers that can be expressed through row selections or
 coefficient matrices are supported: \code{"random"}, \code{"furthest_first"},
@@ -125,18 +125,18 @@ distal batching uses distances implied by the Gram matrix.
 
 \subsection{Archetype coordinates}{
 
-Because the space where the similarities are measured is implicitly defined
-by the kernel, the coordinates of the archetypes cannot be directly computed.
-In order to visualize the results and facilitate interpretation, the resulting
-\code{kernel_archetypes} object does have a \code{coordinates} slot which is constructed
-according to the standard AA convention of representing archetypes as convex
-combinations of the original data points $A = BX$ since $B$ is computed during
-the optimization. However, these coordinates should not be misinterpreted as the
-the actual positions of the archetypes in the original space but only as proxies.
-Other assumptions would produce different coordinate representations; for
-example, \code{plot.kernel_archetypes()} with \code{projection = "pca"} projects the
-archetype compositions onto the kernel PCA components of the data, giving an
-alternative view of their positions in the feature space.
+Because the space where similarities are measured is defined by the kernel,
+archetype coordinates are not directly available as ordinary input-space
+coordinates. The coordinates() accessor returns a proxy when the original
+input data are stored: A = B X, using the fitted generator weights B.
+For linear kernels this equals the usual Euclidean representation. For
+nonlinear kernels it is only a plotting and inspection proxy; distances in
+this coordinate matrix do not carry kernel-metric meaning.
+
+When the original data are unavailable, as with some precomputed Gram
+matrices, coordinates() returns NULL. For an alternative feature-space view,
+plot.kernel_archetypes() with projection = "pca" projects archetype
+compositions onto kernel PCA components of the data.
 }
 }
 \examples{

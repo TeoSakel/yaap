@@ -48,7 +48,7 @@ test_that("summary and best use existing ensemble metrics", {
     calls <- 0L
     score <- function(fit) {
         calls <<- calls + 1L
-        nrow(fit[["coordinates"]])
+        nrow(coordinates(fit))
     }
 
     ens <- tune_archetypes(
@@ -108,16 +108,17 @@ test_that("composition consistency is symmetric with unit diagonal", {
 test_that("coordinate consistency returns NA for decreasing K and uses column variance denominator", {
     fit3 <- manual_fit()
     X <- fit3[["data"]]
-    A4 <- rbind(fit3[["coordinates"]], c(0.5, 0.5))
+    A4 <- rbind(coordinates(fit3), c(0.5, 0.5))
     B4 <- diag(4)
     S4 <- diag(4)
     loss <- data.frame(loss = 0, r2 = 1, k_S = 1, k_A = 1)
     fit4 <- archetypes(
-        coordinates = A4,
+        A = A4,
         coefficients = B4,
         compositions = S4,
         loss = loss,
-        data = X
+        data = X,
+        feature_map = .aa_identity_feature_map(A4)
     )
     ens <- .aa_new_archetypes_ensemble(
         data = X,
@@ -131,7 +132,7 @@ test_that("coordinate consistency returns NA for decreasing K and uses column va
     )
 
     score <- consistency(ens, "coordinates")
-    expected_d2 <- mean(.aa_greedy_coordinate_d2(fit3[["coordinates"]], fit4[["coordinates"]]))
+    expected_d2 <- mean(.aa_greedy_coordinate_d2(coordinates(fit3), coordinates(fit4)))
     expected <- 1 - expected_d2 / mean(matrixStats::colVars(X))
 
     expect_equal(consistency(fit3, fit4, what = "coordinates"), expected)
