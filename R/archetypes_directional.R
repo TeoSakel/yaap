@@ -283,7 +283,7 @@ archetypes_directional <- function(x,
 }
 
 .aa_directional_init_vars <- function(X_flip, X_gen, K, init, init_args, eps) {
-    if (is.matrix(init) || inherits(init, "data.frame")) {
+    if (is_tabular(init)) {
         init <- as.matrix(init)
         if (!identical(dim(init), c(K, ncol(X_flip)))) {
             stop("`init` matrix must have dimension `K x ncol(data)`.", call. = FALSE)

@@ -17,6 +17,12 @@
 
 # Scalar / Vector Predicates -------------------------------------------------------------------
 
+# A matrix object from base R or the Matrix package.
+is_matrix <- function(x) is.matrix(x) || inherits(x, "Matrix")
+
+# A tabular data object accepted at package API boundaries.
+is_tabular <- function(x) is_matrix(x) || inherits(x, "data.frame")
+
 # A single TRUE or FALSE value.
 is_logical <- function(x) isTRUE(x) || isFALSE(x)
 
@@ -34,6 +40,11 @@ is_count <- function(x, start_from = 1L) is_number(x) && x == as.integer(x) && x
 
 # A numeric vector or matrix with no non-finite values (NA, NaN, Inf, -Inf).
 is_all_finite <- function(x) is.numeric(x) && all(is.finite(x))
+
+# Numeric vector or matrix values that are finite, integer-valued, and >= start_from.
+is_all_count <- function(x, start_from = 1L) {
+    is_all_finite(x) && all(x == as.integer(x)) && all(x >= start_from)
+}
 
 is_all_positive <- function(x) is_all_finite(x) && all(x > 0)
 
@@ -348,7 +359,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
         return(invisible(TRUE))
     }
 
-    is_scale_matrix <- is.matrix(scale) || inherits(scale, "Matrix")
+    is_scale_matrix <- is_matrix(scale)
     stopifnot("scale must be TRUE, FALSE, a numeric vector, or a dense or sparse matrix" =
                   is_scale_matrix)
     stopifnot("matrix scale must have one row and column per feature" =
@@ -452,9 +463,22 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     )
 }
 
+.aa_col_sds <- function(X) {
+    if (!inherits(X, "sparseMatrix"))
+        return(matrixStats::colSds(X))
+
+    n <- nrow(X)
+    x_mean <- colMeans(X)
+    x2 <- colSums(X * X)
+    x_var <- pmax((x2 - n * x_mean * x_mean) / max(n - 1L, 1L), 0)
+    out <- sqrt(x_var)
+    names(out) <- colnames(X)
+    out
+}
+
 # Remove features (columns of X) with low variance
 .aa_filter_low_variance <- function(X, sd_threshold) {
-    sd_vals <- attr(X, "scaled:scale") %||% matrixStats::colSds(X)
+    sd_vals <- attr(X, "scaled:scale") %||% .aa_col_sds(X)
     mask <- sd_vals >= sd_threshold
     M <- sum(mask)
     attr(X, "scaled:scale") <- sd_vals
@@ -481,7 +505,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 }
 
 .aa_preprocess_missing <- function(data, sd_threshold, verbose, scale = TRUE) {
-    if (is.matrix(scale) || inherits(scale, "Matrix"))
+    if (is_matrix(scale))
         stop("matrix `scale` is not supported with `missing = TRUE`.", call. = FALSE)
 
     requested_scale_true <- isTRUE(scale)
@@ -652,7 +676,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
             return(data_scale / scale_factor)
     }
 
-    matrixStats::colSds(X)
+    .aa_col_sds(X)
 }
 
 .aa_auto_bigM <- function(X, multiplier = 200) {
@@ -667,7 +691,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # maps `init` from original data space to preprocessed space of X.
 .aa_preprocess_init <- function(init, X) {
     # If `init` is not a matrix, return it as is (it will be processed by the init function)
-    if (!(is.matrix(init) || inherits(init, "data.frame")))
+    if (!is_tabular(init))
         return(init)
 
     iM <- attr(X, "bigM")

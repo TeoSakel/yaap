@@ -355,9 +355,7 @@ run_aa.fd <- function(x, K, ...) {
 }
 
 .aa_check_x <- function(x, missing = FALSE, validate_values = TRUE) {
-    stopifnot("data must be a matrix-like object" =
-                  is.matrix(x) || inherits(x, "data.frame") ||
-                      inherits(x, "sparseMatrix"))
+    stopifnot("data must be a matrix-like object" = is_tabular(x))
     if (inherits(x, "sparseMatrix")) {
         if (!methods::is(x, "dMatrix"))
             stop("data must be numeric", call. = FALSE)
@@ -385,7 +383,7 @@ run_aa.fd <- function(x, K, ...) {
         stop("`robust` is not supported with `missing = TRUE`.", call. = FALSE)
     if (ctx[["missing"]] && !is.null(ctx[["weights"]]))
         stop("`weights` are not supported with `missing = TRUE`.", call. = FALSE)
-    if (ctx[["missing"]] && (is.matrix(ctx[["scale"]]) || inherits(ctx[["scale"]], "Matrix")))
+    if (ctx[["missing"]] && is_matrix(ctx[["scale"]]))
         stop("matrix `scale` is not supported with `missing = TRUE`.", call. = FALSE)
     invisible(TRUE)
 }
@@ -558,7 +556,7 @@ run_aa.fd <- function(x, K, ...) {
     if (ctx[["verbose"]]) message("Initializing archetypes...")
     L <- ctx[["max_iter"]] + 1L
 
-    if (is.matrix(init) || inherits(init, "data.frame")) {
+    if (is_tabular(init)) {
         init <- .aa_preprocess_init(init, X)
         if (length(init_args) > 0L) {
             warning("`init_args` are ignored when `init` is a matrix", call. = FALSE)
@@ -657,7 +655,7 @@ run_aa.fd <- function(x, K, ...) {
         return("z-score")
     if (is.numeric(scale) && is.null(dim(scale)))
         return("custom")
-    if (is.matrix(scale) || inherits(scale, "Matrix"))
+    if (is_matrix(scale))
         return("metric")
     "custom"
 }

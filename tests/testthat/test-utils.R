@@ -13,6 +13,37 @@ test_that("dependency metadata keeps optional solvers optional", {
     expect_true(grepl("\\bMASS\\b", suggests))
 })
 
+test_that("is_all_count validates finite integer-like numeric values", {
+    expect_true(is_all_count(1:3))
+    expect_true(is_all_count(c(0, 1, 2), start_from = 0L))
+    expect_true(is_all_count(numeric(0)))
+
+    expect_false(is_all_count(c(1, 2.5)))
+    expect_false(is_all_count(c(1, NA_real_)))
+    expect_false(is_all_count(c(1, Inf)))
+    expect_false(is_all_count(c(0, 1)))
+    expect_false(is_all_count("1"))
+})
+
+test_that("tabular and matrix predicates recognize package input shapes", {
+    dense <- matrix(1:4, nrow = 2L)
+    sparse <- Matrix::Matrix(dense, sparse = TRUE)
+    df <- as.data.frame(dense)
+    dt <- df
+    class(dt) <- c("data.table", "data.frame")
+
+    expect_true(is_matrix(dense))
+    expect_true(is_matrix(sparse))
+    expect_false(is_matrix(df))
+    expect_false(is_matrix(dt))
+
+    expect_true(is_tabular(dense))
+    expect_true(is_tabular(sparse))
+    expect_true(is_tabular(df))
+    expect_true(is_tabular(dt))
+    expect_false(is_tabular(list(a = 1:2)))
+})
+
 test_that("robust weight function resolves MASS psi functions", {
     testthat::skip_if_not_installed("MASS")
     weight_fun <- get(".aa_weight_fun", asNamespace("yaap"))

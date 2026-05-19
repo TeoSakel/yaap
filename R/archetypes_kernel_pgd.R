@@ -571,7 +571,7 @@ archetypes_kernel_pgd <- function(x,
     if (verbose) message("Initializing kernel archetypes...")
     L <- max_iter + 1L
 
-    if (is.matrix(init) || inherits(init, "data.frame")) {
+    if (is_tabular(init)) {
         B <- as.matrix(init)
         if (nrow(B) != K) {
             fmt <- "nrow(init) = %d does not match K (%d)"
