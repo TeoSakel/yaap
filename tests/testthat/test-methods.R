@@ -96,13 +96,13 @@ test_that("summary.archetypes reports fit details, loss, and coordinates", {
     expect_equal(smry[["fit_info"]][["method"]], "pgd")
     expect_true(smry[["fit_info"]][["robust"]])
     expect_equal(smry[["fit_info"]][["delta"]], 0.2)
-    expect_equal(smry[["fit_info"]][["scaling"]], "z-score")
+    expect_equal(smry[["fit_info"]][["scaling"]], "none")
     expect_equal(smry[["final_loss"]], fit[["loss"]][nrow(fit[["loss"]]), , drop = FALSE])
     expect_equal(smry[["coordinates"]], fit[["coordinates"]])
 
     smry_output <- paste(capture.output(print(smry)), collapse = "\n")
     expect_match(smry_output, "Fit Details:")
-    expect_match(smry_output, "z-score")
+    expect_match(smry_output, "none")
     expect_match(smry_output, "Final Loss Metrics:")
     expect_match(smry_output, "Coordinates:")
 })
@@ -111,8 +111,16 @@ test_that("summary.archetypes reports scaling mode", {
     X <- toy_matrix()[1:20, , drop = FALSE]
 
     set.seed(1)
-    unscaled <- suppressWarnings(archetypes_pgd(X, K = 3L, scale = FALSE, max_iter = 1L))
+    unscaled <- suppressWarnings(archetypes_pgd(X, K = 3L, max_iter = 1L))
     expect_equal(summary(unscaled)[["fit_info"]][["scaling"]], "none")
+
+    set.seed(1)
+    zscored <- suppressWarnings(archetypes_pgd(X, K = 3L, scale = TRUE, max_iter = 1L))
+    expect_equal(summary(zscored)[["fit_info"]][["scaling"]], "z-score")
+
+    set.seed(1)
+    zscored_nnls <- suppressWarnings(archetypes_nnls(X, K = 3L, scale = TRUE, max_iter = 1L))
+    expect_equal(summary(zscored_nnls)[["fit_info"]][["scaling"]], "z-score")
 
     set.seed(1)
     custom <- suppressWarnings(archetypes_pgd(

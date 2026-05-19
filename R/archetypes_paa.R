@@ -81,7 +81,7 @@ archetypes_paa <- function(x,
         init = init,
         init_args = init_args,
         weights = NULL,
-        scale = TRUE,
+        scale = FALSE,
         robust = FALSE,
         max_iter = max_iter,
         tol = tol,
@@ -113,6 +113,8 @@ archetypes_paa <- function(x,
                 stop("`robust` is not supported for `method = 'paa'`.", call. = FALSE)
             if (!is.null(ctx[["weights"]]))
                 stop("`weights` are not supported for `method = 'paa'`.", call. = FALSE)
+            if (!identical(ctx[["scale"]], FALSE))
+                warning("`scale` is ignored for `method = 'paa'`.", call. = FALSE)
             .aa_check_fit_controls(ctx)
             stopifnot("eps must be positive" = ctx[["eps"]] > 0)
             .aa_check_projected_gradient_controls(

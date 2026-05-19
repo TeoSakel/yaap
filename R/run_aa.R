@@ -139,10 +139,14 @@ run_aa.formula <- function(formula,
 #' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional numeric vector of sample weights (default: `NULL`).
 #'   Internally scaled to mean 1 and square-rooted before use.
-#' @param scale pre-fitting scaling or metric embedding. `TRUE` applies z-score
-#'   standardization; `FALSE` leaves columns on their original scale; a
-#'   positive numeric vector divides by user-supplied scale factors; a symmetric
-#'   positive-definite matrix applies the corresponding feature metric.
+#' @param scale common `run_aa()` scaling argument, present for consistency
+#'   across method dispatch. Only Euclidean Gaussian methods (`"pgd"` and
+#'   `"nnls"`) use it: `FALSE` (default) leaves columns on their original
+#'   scale, `TRUE` applies z-score standardization, a positive numeric vector
+#'   divides by user-supplied scale factors, and a symmetric positive-definite
+#'   matrix applies the corresponding feature metric. Specialized methods
+#'   (`"kernel"`, `"directional"`, and `"paa"`) define their own geometry or
+#'   likelihood; non-`FALSE` values are ignored with a warning.
 #' @param robust robust row reweighting selector. Use `FALSE` for ordinary
 #'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
 #'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
@@ -172,7 +176,7 @@ run_aa.default <- function(x,
                            init = NULL,
                            init_args = list(),
                            weights = NULL,
-                           scale = TRUE,
+                           scale = FALSE,
                            robust = FALSE,
                            robust_args = list(),
                            sd_threshold = 1e-6,
@@ -270,7 +274,7 @@ run_aa.fd <- function(x, K, ...) {
                            init = NULL,
                            init_args = list(),
                            weights = NULL,
-                           scale = TRUE,
+                           scale = FALSE,
                            robust = FALSE,
                            robust_args = list(),
                            sd_threshold = 1e-6,

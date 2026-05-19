@@ -9,11 +9,12 @@
 #' @param init initialization method; see [run_aa()] for available options.
 #' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional vector of sample weights (default: NULL)
-#' @param scale scaling or metric embedding used before fitting. `TRUE` applies
-#'   the default z-score preprocessing, `FALSE` leaves columns on their original
-#'   scale, a positive numeric vector divides columns by user-supplied scale
-#'   factors, and a symmetric positive-definite matrix applies the corresponding
-#'   feature metric embedding in the original data column space.
+#' @param scale scaling or metric embedding used before fitting. `FALSE`
+#'   (default) leaves columns on their original scale, `TRUE` applies
+#'   z-score preprocessing, a positive numeric vector divides columns by
+#'   user-supplied scale factors, and a symmetric positive-definite matrix
+#'   applies the corresponding feature metric embedding in the original data
+#'   column space.
 #' @param robust robust row reweighting selector. Use `FALSE` for ordinary
 #'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
 #'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
@@ -105,8 +106,8 @@
 #' Before fitting, features with standard deviation below `sd_threshold`
 #' (default 1e-6) are dropped to avoid ill-conditioning; their values are
 #' restored as column means in the output.  The `scale` argument controls the
-#' feature metric: `TRUE` (default) applies column-wise z-scoring, `FALSE`
-#' leaves columns on their original scale, a positive numeric vector divides
+#' feature metric: `FALSE` (default) leaves columns on their original scale, `TRUE`
+#' applies column-wise z-scoring, a positive numeric vector divides
 #' each column by the supplied factor, and a symmetric positive-definite matrix
 #' defines a full quadratic feature metric — see
 #' \code{vignette("non-gaussian-aa", package = "yaap")} for the metric-AA use
@@ -130,7 +131,7 @@ archetypes_pgd <- function(x,
                            init = "furthest_sum",
                            init_args = list(),
                            weights = NULL,
-                           scale = TRUE,
+                           scale = FALSE,
                            robust = FALSE,
                            robust_args = list(),
                            sd_threshold = 1e-6,

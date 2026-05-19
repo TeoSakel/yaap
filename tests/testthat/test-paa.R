@@ -73,6 +73,29 @@ test_that("run_aa dispatches to PAA", {
     expect_true(is_all_finite(fit[["loss"]][["loss"]]))
 })
 
+test_that("PAA warns and ignores explicit run_aa scaling", {
+    X <- paa_count_data()
+
+    expect_warning(
+        fit <- run_aa(X, K = 2L, method = "paa", family = "poisson", scale = TRUE),
+        "ignored"
+    )
+    expect_s3_class(fit, "archetypes")
+
+    expect_warning(
+        fit <- run_aa(X, K = 2L, method = "paa", family = "poisson", scale = c(1, 1, 1, 1)),
+        "ignored"
+    )
+    expect_s3_class(fit, "archetypes")
+
+    df <- as.data.frame(X)
+    expect_warning(
+        fit <- run_aa(V1 ~ ., data = df, K = 2L, method = "paa", family = "poisson", scale = TRUE),
+        "ignored"
+    )
+    expect_s3_class(fit, "archetypes")
+})
+
 test_that("PAA validates family-specific inputs", {
     expect_error(archetypes_paa(matrix(c(0, 2, 1, 0), ncol = 2), 2L, family = "bernoulli"),
                  "Bernoulli")
@@ -138,5 +161,12 @@ test_that("PAA profile plots use parameter-space coordinates", {
 
     pdf(NULL)
     on.exit(dev.off(), add = TRUE)
-    expect_named(plot(fit, "profiles"), c("coordinates", "family", "archetype_names", "barplot_args"))
+    prof <- plot(fit, "profiles")
+
+    expect_named(prof, c("archetype", "feature", "value"))
+    expect_equal(
+        prof[["value"]],
+        as.vector(fit[["coordinates"]]),
+        tolerance = 1e-8
+    )
 })

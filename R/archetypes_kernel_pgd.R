@@ -130,7 +130,7 @@ archetypes_kernel_pgd <- function(x,
         init = init,
         init_args = init_args,
         weights = NULL,
-        scale = TRUE,
+        scale = FALSE,
         robust = robust,
         robust_args = robust_args,
         max_iter = max_iter,
@@ -169,8 +169,8 @@ archetypes_kernel_pgd <- function(x,
                 stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
             if (!is.null(ctx[["weights"]]))
                 stop("`weights` are not supported for `method = 'kernel'`.", call. = FALSE)
-            if (!isTRUE(ctx[["scale"]]))
-                stop("`scale` is not supported for `method = 'kernel'`.", call. = FALSE)
+            if (!identical(ctx[["scale"]], FALSE))
+                warning("`scale` is ignored for `method = 'kernel'`.", call. = FALSE)
             if (!is.list(kernel_args))
                 stop("`kernel_args` must be a list.", call. = FALSE)
             .aa_check_projected_gradient_controls(

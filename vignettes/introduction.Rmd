@@ -405,13 +405,14 @@ predict(fit_iris, newdata = new_obs, type = "reconstruction")
 
 | Situation                                 | `scale` value  | Effect          |
 |-------------------------------------------|----------------|-----------------|
-| Mixed-unit features (default)             | `TRUE`         | z-score columns |
-| Features already on their "natural" scale | `FALSE`        | Data used as-is |
+| Default/natural feature metric          | `FALSE`        | Data used as-is |
+| Mixed-unit Gaussian features             | `TRUE`         | z-score columns |
 | Custom feature importance                 | Numeric vector | Divides columns |
 
-The decision of whether to scale the data is similar to that in PCA: if the features
-are on different scales, it is usually advisable to scale them to give them
-equal weight in the analysis. Otherwise, the optimization process may effectively
+The default preserves the feature metric supplied by the data. For Gaussian Euclidean AA,
+the decision of whether to scale is similar to that in PCA: if the features
+are on different scales, it is often advisable to set `scale = TRUE` to give
+them equal weight in the analysis. Otherwise, the optimization process may effectively
 ignore them. Custom scaling by passing a vector of scale factors is also
 supported similar to how `scale()` works in base R (by dividing the columns).
 

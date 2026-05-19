@@ -684,9 +684,10 @@ especially for `method = "aa_pp"`.
 
 ### Initialization Caveats {#initialization-caveats}
 
-The default `scale = TRUE` in `run_aa()` applies column-wise standardization
-(z-scoring) before fitting. While scaling often improves the conditioning of the
-optimization, it interacts differently with each initialization strategy.
+The default `scale = FALSE` in `run_aa()` preserves the data on its supplied
+feature scale. Setting `scale = TRUE` applies column-wise standardization
+(z-scoring) before fitting; this often improves the conditioning of Gaussian
+Euclidean fits, but it interacts differently with each initialization strategy.
 
 @Mair2023 show that FurthestSum is sensitive to preprocessing: standardization
 can distort the Euclidean distances it uses to choose boundary points. AA++ is
@@ -700,10 +701,11 @@ greedy AA analysis. In return, each added point is guaranteed not to increase
 the reconstruction cost, and reduces it whenever it expands the current hull.
 
 Initializer names are not supported identically by every model family. The
-Euclidean solvers (`method = "pgd"`, `"nnls"`, and `"paa"`) call
-`aa_init()` on the preprocessed data, so they accept the full catalogue of
-initializer strings described above, as well as custom initializer functions and
-coordinate matrices.
+Euclidean solvers (`method = "pgd"` and `"nnls"`) call `aa_init()` on the
+preprocessed data, so they accept the full catalogue of initializer strings
+described above, as well as custom initializer functions and coordinate
+matrices. PAA uses family-specific parameter profiles and does not support the
+Euclidean `scale` argument.
 
 Kernel AA is the main exception. With `method = "kernel"`, initializer strings
 are limited to `"random"`, `"dirichlet"`, `"furthest_first"`, `"kmeans_pp"`,

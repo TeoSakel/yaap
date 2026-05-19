@@ -104,7 +104,7 @@ archetypes_directional <- function(x,
         init = init,
         init_args = init_args,
         weights = weights,
-        scale = TRUE,
+        scale = FALSE,
         robust = FALSE,
         max_iter = max_iter,
         tol = tol,
@@ -143,8 +143,8 @@ archetypes_directional <- function(x,
                     call. = FALSE
                 )
             }
-            if (!isTRUE(ctx[["scale"]])) {
-                stop("`scale` is not supported for `method = 'directional'`.", call. = FALSE)
+            if (!identical(ctx[["scale"]], FALSE)) {
+                warning("`scale` is ignored for `method = 'directional'`.", call. = FALSE)
             }
             if (inherits(ctx[["x"]], "sparseMatrix")) {
                 stop("Directional AA currently requires a dense numeric matrix.", call. = FALSE)

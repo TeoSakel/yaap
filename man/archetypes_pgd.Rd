@@ -10,7 +10,7 @@ archetypes_pgd(
   init = "furthest_sum",
   init_args = list(),
   weights = NULL,
-  scale = TRUE,
+  scale = FALSE,
   robust = FALSE,
   robust_args = list(),
   sd_threshold = 1e-06,
@@ -39,11 +39,12 @@ archetypes_pgd(
 
 \item{weights}{optional vector of sample weights (default: NULL)}
 
-\item{scale}{scaling or metric embedding used before fitting. \code{TRUE} applies
-the default z-score preprocessing, \code{FALSE} leaves columns on their original
-scale, a positive numeric vector divides columns by user-supplied scale
-factors, and a symmetric positive-definite matrix applies the corresponding
-feature metric embedding in the original data column space.}
+\item{scale}{scaling or metric embedding used before fitting. \code{FALSE}
+(default) leaves columns on their original scale, \code{TRUE} applies
+z-score preprocessing, a positive numeric vector divides columns by
+user-supplied scale factors, and a symmetric positive-definite matrix
+applies the corresponding feature metric embedding in the original data
+column space.}
 
 \item{robust}{robust row reweighting selector. Use \code{FALSE} for ordinary
 squared error, \code{TRUE} for \code{"psi.bisquare"}, a MASS psi function name,
@@ -158,8 +159,8 @@ accepted updates falls below \code{tol} (default 1e-6) \emph{or} \eqn{R^2} excee
 Before fitting, features with standard deviation below \code{sd_threshold}
 (default 1e-6) are dropped to avoid ill-conditioning; their values are
 restored as column means in the output.  The \code{scale} argument controls the
-feature metric: \code{TRUE} (default) applies column-wise z-scoring, \code{FALSE}
-leaves columns on their original scale, a positive numeric vector divides
+feature metric: \code{FALSE} (default) leaves columns on their original scale, \code{TRUE}
+applies column-wise z-scoring, a positive numeric vector divides
 each column by the supplied factor, and a symmetric positive-definite matrix
 defines a full quadratic feature metric — see
 \code{vignette("non-gaussian-aa", package = "yaap")} for the metric-AA use

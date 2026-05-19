@@ -10,7 +10,7 @@ archetypes_nnls(
   init = "furthest_sum",
   init_args = list(),
   weights = NULL,
-  scale = TRUE,
+  scale = FALSE,
   robust = FALSE,
   robust_args = list(),
   sd_threshold = 1e-06,
@@ -36,7 +36,7 @@ archetypes_nnls(
 \item{weights}{optional vector of sample weights (default: NULL)}
 
 \item{scale}{scaling or metric embedding used before fitting; see
-\code{\link[=archetypes_pgd]{archetypes_pgd()}} for details (default: TRUE).}
+\code{\link[=archetypes_pgd]{archetypes_pgd()}} for details (default: FALSE).}
 
 \item{robust}{robust row reweighting selector. Use \code{FALSE} for ordinary
 squared error, \code{TRUE} for \code{"psi.bisquare"}, a MASS psi function name,

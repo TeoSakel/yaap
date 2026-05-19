@@ -97,8 +97,9 @@ test_that("directional AA validates unsupported and invalid inputs", {
         run_aa(X, K = 3L, method = "directional", robust = "psi.huber"),
         "robust"
     )
-    expect_error(
-        run_aa(X, K = 3L, method = "directional", scale = FALSE),
-        "scale"
+    expect_warning(
+        fit <- run_aa(X, K = 3L, method = "directional", scale = TRUE),
+        "ignored"
     )
+    expect_s3_class(fit, "directional_archetypes")
 })

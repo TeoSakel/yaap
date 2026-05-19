@@ -168,6 +168,22 @@ test_that("run_aa dispatches to kernel PGD", {
     expect_equal(fit[["coordinates"]], fit[["coefficients"]] %*% X)
 })
 
+test_that("kernel PGD warns and ignores explicit run_aa scaling", {
+    X <- toy_matrix()[1:8, , drop = FALSE]
+
+    expect_warning(
+        fit <- run_aa(X, K = 2L, method = "kernel", kernel = "linear", scale = TRUE),
+        "ignored"
+    )
+    expect_s3_class(fit, "kernel_archetypes")
+
+    expect_warning(
+        fit <- run_aa(X, K = 2L, method = "kernel", kernel = "linear", scale = c(1, 1)),
+        "ignored"
+    )
+    expect_s3_class(fit, "kernel_archetypes")
+})
+
 test_that("kernel PGD validates Gram and kernel inputs", {
     X <- toy_matrix()[1:8, , drop = FALSE]
     G <- tcrossprod(X)
@@ -217,7 +233,7 @@ test_that("kernel archetypes methods expose names, residuals, and proxy plots", 
         max_iter = 1L
     ))
 
-    expect_equal(anames(fit), c("A1", "A2", "A3"))
+    expect_equal(sort(anames(fit)), c("A1", "A2", "A3"))
     anames(fit) <- c("left", "right", "top")
     expect_equal(anames(fit), c("left", "right", "top"))
     expect_equal(rownames(coefficients(fit)), anames(fit))

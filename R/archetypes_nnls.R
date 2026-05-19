@@ -10,7 +10,7 @@
 #' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional vector of sample weights (default: NULL)
 #' @param scale scaling or metric embedding used before fitting; see
-#'   [archetypes_pgd()] for details (default: TRUE).
+#'   [archetypes_pgd()] for details (default: FALSE).
 #' @param robust robust row reweighting selector. Use `FALSE` for ordinary
 #'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
 #'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
@@ -73,7 +73,7 @@ archetypes_nnls <- function(x,
                             init = "furthest_sum",
                             init_args = list(),
                             weights = NULL,
-                            scale = TRUE,
+                            scale = FALSE,
                             robust = FALSE,
                             robust_args = list(),
                             sd_threshold = 1e-6,

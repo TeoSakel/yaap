@@ -19,7 +19,7 @@ run_aa(x, ...)
   init = NULL,
   init_args = list(),
   weights = NULL,
-  scale = TRUE,
+  scale = FALSE,
   robust = FALSE,
   robust_args = list(),
   sd_threshold = 1e-06,
@@ -92,10 +92,14 @@ See \code{vignette("initialization", package = "yaap")} for a comparison.}
 \item{weights}{optional numeric vector of sample weights (default: \code{NULL}).
 Internally scaled to mean 1 and square-rooted before use.}
 
-\item{scale}{pre-fitting scaling or metric embedding. \code{TRUE} applies z-score
-standardization; \code{FALSE} leaves columns on their original scale; a
-positive numeric vector divides by user-supplied scale factors; a symmetric
-positive-definite matrix applies the corresponding feature metric.}
+\item{scale}{common \code{run_aa()} scaling argument, present for consistency
+across method dispatch. Only Euclidean Gaussian methods (\code{"pgd"} and
+\code{"nnls"}) use it: \code{FALSE} (default) leaves columns on their original
+scale, \code{TRUE} applies z-score standardization, a positive numeric vector
+divides by user-supplied scale factors, and a symmetric positive-definite
+matrix applies the corresponding feature metric. Specialized methods
+(\code{"kernel"}, \code{"directional"}, and \code{"paa"}) define their own geometry or
+likelihood; non-\code{FALSE} values are ignored with a warning.}
 
 \item{robust}{robust row reweighting selector. Use \code{FALSE} for ordinary
 squared error, \code{TRUE} for \code{"psi.bisquare"}, a MASS psi function name,
