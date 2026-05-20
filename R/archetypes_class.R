@@ -386,12 +386,9 @@ predict.archetypes <- function(object,
     family <- object[["family"]] %||% "gaussian"
     if (identical(family, "gaussian")) {
         info <- object[["fit_info"]]
-        # TODO: consider supporting prediction for missing, robust, or weighted
+        # TODO: consider supporting prediction for missing-data fits
         if (isTRUE(info[["missing"]])) {
             stop("predict() is not supported for missing-data Gaussian fits.", call. = FALSE)
-        }
-        if (isTRUE(info[["robust"]]) || isTRUE(info[["sample_weights"]])) {
-            stop("predict() is not supported for robust or weighted Gaussian fits.", call. = FALSE)
         }
 
         map <- object[["feature_map"]]

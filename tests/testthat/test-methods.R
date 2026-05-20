@@ -269,10 +269,53 @@ test_that("Gaussian predict applies training low-variance mask", {
     expect_equal(unname(rec[, "constant"]), rep(7, nrow(X)))
 })
 
+test_that("Gaussian predict accepts sample-weighted fits", {
+    X <- toy_matrix()
+    weights <- seq_len(nrow(X))
+
+    set.seed(4)
+    fit <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 3L,
+        weights = weights,
+        max_iter = 3L
+    ))
+
+    pred <- predict(fit, X, type = "compositions")
+    rec <- predict(fit, X)
+
+    expect_true(fit[["fit_info"]][["sample_weights"]])
+    expect_matrix_dim(pred, nrow(X), 3L)
+    expect_row_stochastic(pred)
+    expect_matrix_dim(rec, nrow(X), ncol(X))
+    expect_true(all(is.finite(rec)))
+})
+
+test_that("Gaussian predict accepts robust fits", {
+    X <- toy_matrix()
+
+    set.seed(5)
+    fit <- suppressWarnings(archetypes_pgd(
+        X,
+        K = 3L,
+        robust = TRUE,
+        max_iter = 3L
+    ))
+
+    pred <- predict(fit, X, type = "compositions")
+    rec <- predict(fit, X)
+
+    expect_true(fit[["fit_info"]][["robust"]])
+    expect_matrix_dim(pred, nrow(X), 3L)
+    expect_row_stochastic(pred)
+    expect_matrix_dim(rec, nrow(X), ncol(X))
+    expect_true(all(is.finite(rec)))
+})
+
 test_that("Gaussian predict rejects missing-data PGD fits", {
     X <- missing_test_matrix()
 
-    set.seed(4)
+    set.seed(5)
     fit <- suppressWarnings(archetypes_pgd(
         X,
         K = 2L,
