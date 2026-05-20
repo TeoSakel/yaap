@@ -28,7 +28,6 @@ archetypes_path(x, ...)
   max_iter = 100L,
   tol = 1e-06,
   tol_r2 = 0.9999,
-  max_kappa = 1000,
   eps = NULL,
   verbose = FALSE,
   missing = NULL,
@@ -61,11 +60,11 @@ input. Defaults to \code{\link[stats:na.omit]{stats::na.omit()}}.}
 \code{"gaussian"}.}
 
 \item{init}{initialization method for archetype starting coordinates.
-Accepts a function, a method name string, or a numeric (K x M) coordinate
-matrix. \code{NULL} selects \code{"furthest_sum"} for all methods except
-\code{"directional"}, which defaults to \code{"dirichlet"}. When a matrix is
-supplied it must have dimension \verb{K x ncol(x)}; row names are used as
-archetype names. Available method strings:
+Accepts a function, a method name string, or a numeric initialization
+matrix. For \code{method = "kernel"}, see Details and
+\code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}}. \code{NULL} selects \code{"furthest_sum"} for all
+methods except \code{"directional"}, which defaults to \code{"dirichlet"}. Matrix
+row names are used as archetype names. Available method strings:
 \describe{
 \item{\code{"furthest_sum"}}{greedily maximises the sum of distances from the
 current archetype set (Mørup & Hansen 2012). Default for most methods.}
@@ -99,8 +98,8 @@ matrix applies the corresponding feature metric. Specialized methods
 likelihood; non-\code{FALSE} values are ignored with a warning.}
 
 \item{robust}{robust row reweighting selector. Use \code{FALSE} for ordinary
-squared error, \code{TRUE} for \code{"psi.bisquare"}, a MASS psi function name,
-or a custom psi function. See \code{\link[MASS:rlm]{MASS::rlm()}} for psi details; \code{method = "MM"} is not supported because it is not applicable to AA.}
+squared error, a MASS psi function name (see \code{\link[MASS:rlm]{MASS::rlm()}} for details),
+or a custom psi function. \code{TRUE} selects to \code{"psi.bisquare"}.}
 
 \item{robust_args}{list of tuning arguments passed to the robust psi function.}
 
@@ -112,8 +111,6 @@ columns are dropped before fitting (default: 1e-6).}
 \item{tol}{convergence tolerance on the residual sum of squares (default: 1e-6).}
 
 \item{tol_r2}{convergence tolerance on R\eqn{^2} (default: 0.9999).}
-
-\item{max_kappa}{maximum condition number warning threshold for \code{method = "nnls"} (default: 1000).}
 
 \item{eps}{small positive number for numerical stability
 (default: 0 for sparse input, 1e-8 for dense).}

@@ -164,11 +164,12 @@ test_that("summary.archetypes reports scaling mode", {
 
 test_that("summary.kernel_archetypes omits coordinates", {
     X <- toy_matrix()[1:12, , drop = FALSE]
+    B0 <- onehot(c(1L, 2L, 3L), sparse = FALSE, nc = nrow(X))
     fit <- suppressWarnings(archetypes_kernel_pgd(
         X,
         K = 3L,
         kernel = "linear",
-        init = c(1L, 2L, 3L),
+        init = B0,
         max_iter = 1L
     ))
 

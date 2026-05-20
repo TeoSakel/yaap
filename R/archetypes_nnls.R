@@ -21,7 +21,9 @@
 #' @param max_iter maximum number of iterations (default: 100)
 #' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
 #' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
-#' @param max_kappa maximum condition number for archetypes (default: 1000)
+#' @param max_kappa maximum condition-number warning threshold for NNLS
+#'   diagnostics (default: 1000). Use `Inf` to disable condition-number
+#'   warnings.
 #' @param eps small positive number to ensure numerical stability
 #'   (default: 0 for sparse input 1e-8 for dense)
 #' @param verbose whether to print progress messages (default: FALSE)
@@ -111,7 +113,8 @@ archetypes_nnls <- function(x,
 
 .aa_nnls_block <- function(ctx,
                            bigM = NULL,
-                           max_no_update = 5L) {
+                           max_no_update = 5L,
+                           max_kappa = 1000) {
     list(
         check = function(ctx) {
             .aa_euclidean_check(ctx)
@@ -119,6 +122,9 @@ archetypes_nnls <- function(x,
                 if (!is_positive(bigM)) {
                     stop("`bigM` must be NULL or a positive number.", call. = FALSE)
                 }
+            }
+            if (!(identical(max_kappa, Inf) || (is_number(max_kappa) && max_kappa >= 1))) {
+                stop("`max_kappa` must be at least 1 or `Inf`.", call. = FALSE)
             }
             .aa_check_max_no_update(max_no_update)
             invisible(TRUE)
@@ -136,7 +142,7 @@ archetypes_nnls <- function(x,
                         max_iter = ctx[["max_iter"]],
                         tol = ctx[["tol"]],
                         tol_r2 = ctx[["tol_r2"]],
-                        max_kappa = ctx[["max_kappa"]],
+                        max_kappa = max_kappa,
                         eps = ctx[["eps"]],
                         verbose = ctx[["verbose"]],
                         loss_fun = if (!identical(ctx[["robust"]], FALSE)) {

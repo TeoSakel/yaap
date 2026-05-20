@@ -124,11 +124,11 @@ run_aa.formula <- function(formula,
 #' @param family observation family passed to `method = "paa"`. Defaults to
 #'   `"gaussian"`.
 #' @param init initialization method for archetype starting coordinates.
-#'   Accepts a function, a method name string, or a numeric (K x M) coordinate
-#'   matrix. `NULL` selects `"furthest_sum"` for all methods except
-#'   `"directional"`, which defaults to `"dirichlet"`. When a matrix is
-#'   supplied it must have dimension `K x ncol(x)`; row names are used as
-#'   archetype names. Available method strings:
+#'   Accepts a function, a method name string, or a numeric initialization
+#'   matrix. For `method = "kernel"`, see Details and
+#'   [archetypes_kernel_pgd()]. `NULL` selects `"furthest_sum"` for all
+#'   methods except `"directional"`, which defaults to `"dirichlet"`. Matrix
+#'   row names are used as archetype names. Available method strings:
 #' \describe{
 #'   \item{`"furthest_sum"`}{greedily maximises the sum of distances from the
 #'     current archetype set (Mørup & Hansen 2012). Default for most methods.}
@@ -142,11 +142,11 @@ run_aa.formula <- function(formula,
 #'     `batch_size` in `init_args` to use a Monte Carlo-inspired variant.}
 #'   \item{`"hull_outmost"`}{hull-candidate outmost-vote ranking.}
 #' }
+#' @param init_args list of additional arguments for the initialization function.
 #'   Any initializer can receive `batch_size`, `batch_type`, and
 #'   `batch_replace` through `init_args`; `batch_type = "distal"` implements
 #'   coreset-style candidate sampling (Mair & Brefeld 2019).
 #'   See `vignette("initialization", package = "yaap")` for a comparison.
-#' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional numeric vector of sample weights (default: `NULL`).
 #'   Internally scaled to mean 1 and square-rooted before use.
 #' @param scale common `run_aa()` scaling argument, present for consistency
@@ -158,16 +158,14 @@ run_aa.formula <- function(formula,
 #'   (`"kernel"`, `"directional"`, and `"paa"`) define their own geometry or
 #'   likelihood; non-`FALSE` values are ignored with a warning.
 #' @param robust robust row reweighting selector. Use `FALSE` for ordinary
-#'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
-#'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
-#'   "MM"` is not supported because it is not applicable to AA.
+#'   squared error, a MASS psi function name (see [MASS::rlm()] for details),
+#'   or a custom psi function. `TRUE` selects to `"psi.bisquare"`.
 #' @param robust_args list of tuning arguments passed to the robust psi function.
 #' @param sd_threshold threshold for feature standard deviation below which
 #'   columns are dropped before fitting (default: 1e-6).
 #' @param max_iter maximum number of outer iterations (default: 100).
 #' @param tol convergence tolerance on the residual sum of squares (default: 1e-6).
 #' @param tol_r2 convergence tolerance on R\eqn{^2} (default: 0.9999).
-#' @param max_kappa maximum condition number warning threshold for `method = "nnls"` (default: 1000).
 #' @param eps small positive number for numerical stability
 #'   (default: 0 for sparse input, 1e-8 for dense).
 #' @param verbose whether to print progress messages (default: `FALSE`).
@@ -180,6 +178,14 @@ run_aa.formula <- function(formula,
 #'   [archetypes_pgd()], [archetypes_nnls()], [archetypes_kernel_pgd()],
 #'   [archetypes_directional()], and [archetypes_paa()] for method-specific
 #'   parameters.
+#'
+#' @details
+#' For `method = "kernel"`, matrix-valued `init` is a `K x N` coefficient
+#' matrix over training samples, not a coordinate matrix. See
+#' [archetypes_kernel_pgd()] for the full kernel initialization contract.
+#'
+#' Robust fitting is not supported for methods "directional" and "paa".
+#' Also compared to [MASS::rlm()] the "MM" mode is not supported in AA.
 #'
 #' @exportS3Method
 run_aa.default <- function(x,
@@ -196,7 +202,6 @@ run_aa.default <- function(x,
                            max_iter = 100L,
                            tol = 1e-6,
                            tol_r2 = 0.9999,
-                           max_kappa = 1000,
                            eps = NULL,
                            verbose = FALSE,
                            missing = NULL,
@@ -235,7 +240,6 @@ run_aa.default <- function(x,
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
-        max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
         missing = missing,
@@ -314,7 +318,6 @@ run_aa.fd <- function(x, K, ...) {
                                  max_iter = 100L,
                                  tol = 1e-6,
                                  tol_r2 = 0.9999,
-                                 max_kappa = 1000,
                                  eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                                  verbose = FALSE,
                                  missing = any(is.na(x)),
@@ -351,7 +354,6 @@ run_aa.fd <- function(x, K, ...) {
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
-        max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
         missing = missing,
@@ -407,7 +409,6 @@ run_aa.fd <- function(x, K, ...) {
                            max_iter = 100L,
                            tol = 1e-6,
                            tol_r2 = 0.9999,
-                           max_kappa = 1000,
                            eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                            verbose = FALSE,
                            missing = any(is.na(x)),
@@ -430,7 +431,6 @@ run_aa.fd <- function(x, K, ...) {
         max_iter = max_iter,
         tol = tol,
         tol_r2 = tol_r2,
-        max_kappa = max_kappa,
         eps = eps,
         verbose = verbose,
         missing = missing,

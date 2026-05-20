@@ -15,8 +15,13 @@
 #' @param kernel_args list of arguments passed to the kernel.
 #' @param data optional original data matrix attached to precomputed-kernel fits
 #'   so coordinates() can return an input-space proxy.
-#' @param init initialization method; see [run_aa()] for available options.
-#' @param init_args list of additional arguments for the initialization function.
+#' @param init kernel initialization. Accepts a method name string, a
+#'   function, or a numeric `K x N` coefficient matrix whose rows are
+#'   non-negative and sum to the allowed archetype mass. Matrix-valued `init`
+#'   is interpreted as generator weights over samples, not as `K x M`
+#'   input-space coordinates.
+#' @param init_args list of additional arguments for method-string or function
+#'   initialization.
 #' @param robust robust row reweighting selector. Use `FALSE` for ordinary
 #'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
 #'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
@@ -63,11 +68,25 @@
 #' and set `kernel = "precomputed"`. Supply the original data as the `data`
 #' argument if you want coordinates() to return an input-space proxy.
 #'
-#' Kernel initializers that can be expressed through row selections or
-#' coefficient matrices are supported: `"random"`, `"furthest_first"`,
+#' ## Initialization
+#'
+#' Kernel archetypes are optimized as generator weights over the `N` training
+#' samples. Consequently, a matrix supplied to `init` must be a `K x N`
+#' coefficient matrix `B`, where row `k` defines the initial archetype
+#' \eqn{\sum_i B_{ki}\phi(x_i)} in feature space. To initialize from
+#' specific training samples, construct this coefficient matrix explicitly with
+#' [onehot()], for example `onehot(c(1, 5, 9), sparse = FALSE, nc = N)`.
+#' Numeric, character, and logical row selectors are not accepted directly as
+#' kernel `init` values.
+#'
+#' The supported method strings are `"random"`, `"furthest_first"`,
 #' `"kmeans_pp"`, `"furthest_sum"`, and `"dirichlet"`. Candidate batching can
 #' be requested through `init_args = list(batch_size = ..., batch_type = ...)`;
-#' distal batching uses distances implied by the Gram matrix.
+#' distal batching uses distances implied by the Gram matrix. A custom
+#' initializer function is called with `G`, `K`, and `init_args`, and must
+#' return either a `K x N` coefficient matrix or a list with component `B`.
+#' Unlike Euclidean fitters, kernel fits do not accept a `K x M` matrix of
+#' input-space archetype coordinates as `init`.
 #'
 #' ## Archetype coordinates
 #'
@@ -616,8 +635,11 @@ archetypes_kernel_pgd <- function(x,
     if (verbose) message("Initializing kernel archetypes...")
     L <- max_iter + 1L
 
-    if (is_tabular(init)) {
-        B <- as.matrix(init)
+    finalize_B <- function(B) {
+        B <- as.matrix(B)
+        if (!is.numeric(B) || any(is.na(B)) || !all(is.finite(B))) {
+            stop("Initial coefficient matrix must contain only finite numeric values.", call. = FALSE)
+        }
         if (nrow(B) != K) {
             fmt <- "nrow(init) = %d does not match K (%d)"
             stop(sprintf(fmt, nrow(B), K))
@@ -639,60 +661,61 @@ archetypes_kernel_pgd <- function(x,
         rownames(B) <- nm
         colnames(B) <- rownames(G)
         S <- .aa_kernel_init_S(G, B, eps)
-        return(list(
+        list(
             init = B,
             B = B,
             S = S,
             loss = list(loss = rep(NA_real_, L), r2 = rep(NA_real_, L))
-        ))
+        )
     }
 
-    if (is_single_string(init) && init == "dirichlet") {
-        B <- do.call(
-            .aa_kernel_dirichlet,
-            args = c(list(G = G, K = K), init_args)
-        )
-        nm <- .aa_init_names(B)
-        rownames(B) <- nm
-        colnames(B) <- rownames(G)
-        S <- .aa_kernel_init_S(G, B, eps)
-        return(list(
-            init = B,
-            B = B,
-            S = S,
-            loss = list(loss = rep(NA_real_, L), r2 = rep(NA_real_, L))
-        ))
+    if (is_tabular(init)) {
+        return(finalize_B(init))
     }
 
-    # TODO: disallow "row selection" init
-    if (is_single_string(init) && init %in% c("random", "furthest_first", "kmeans_pp", "furthest_sum")) {
-        method <- match.arg(init, c("random", "furthest_first", "kmeans_pp", "furthest_sum"))
-        ind <- do.call(
-            .aa_kernel_init_indices,
-            args = c(list(G = G, K = K, method = method), init_args)
-        )
-    } else if (is.numeric(init) || is.character(init) || is.logical(init)) {
-        ind <- .aa_normalize_row_indices(init, nrow(G), rownames(G))
-    } else {
-        stop("`init` must be a method string, row indices/names, or a coefficient matrix",
+    if (is.function(init)) {
+        init_vars <- do.call(init, args = c(list(G = G, K = K), init_args))
+        B <- if (is.list(init_vars) && !is.null(init_vars[["B"]])) {
+            init_vars[["B"]]
+        } else {
+            init_vars
+        }
+        return(finalize_B(B))
+    }
+
+    if (is_single_string(init)) {
+        if (init == "dirichlet") {
+            B <- do.call(
+                .aa_kernel_dirichlet,
+                args = c(list(G = G, K = K), init_args)
+            )
+            return(finalize_B(B))
+        }
+
+        if (init %in% c("random", "furthest_first", "kmeans_pp", "furthest_sum")) {
+            method <- match.arg(init, c("random", "furthest_first", "kmeans_pp", "furthest_sum"))
+            ind <- do.call(
+                .aa_kernel_init_indices,
+                args = c(list(G = G, K = K, method = method), init_args)
+            )
+            B <- onehot(ind, sparse = FALSE, nc = nrow(G))
+            rownames(B) <- paste0("A", seq_len(K))
+            return(finalize_B(B))
+        }
+
+        stop(
+            paste(
+                "`init` method must be one of",
+                "\"random\", \"furthest_first\", \"kmeans_pp\",",
+                "\"furthest_sum\", or \"dirichlet\"."
+            ),
             call. = FALSE
         )
     }
-    if (length(ind) != K) {
-        fmt <- "length(init) = %d does not match K (%d)"
-        stop(sprintf(fmt, length(ind), K))
-    }
 
-    B <- onehot(ind, sparse = FALSE, nc = nrow(G))
-    nm <- names(ind) %||% paste0("A", seq_along(ind))
-    rownames(B) <- nm
-    colnames(B) <- rownames(G)
-    S <- .aa_kernel_init_S(G, B, eps)
-    list(
-        init = B,
-        B = B,
-        S = S,
-        loss = list(loss = rep(NA_real_, L), r2 = rep(NA_real_, L))
+    stop(
+        "`init` must be a method string, function, or a `K x N` coefficient matrix.",
+        call. = FALSE
     )
 }
 

@@ -101,6 +101,17 @@ test_that("archetypes_path validates K and ambiguous matrix initialization", {
         archetypes_path(X, K = 1:2, init = X[1:2, , drop = FALSE]),
         "`init`"
     )
+    expect_no_error(suppressWarnings(archetypes_path(
+        X,
+        K = 2:3,
+        method = "nnls",
+        max_kappa = Inf,
+        max_iter = 1L
+    )))
+    expect_error(
+        archetypes_path(X, K = 2:3, method = "pgd", max_kappa = Inf, max_iter = 1L),
+        "unused"
+    )
 })
 
 test_that("screeplot.archetypes_path scores final metrics", {

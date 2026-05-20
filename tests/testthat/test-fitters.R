@@ -209,6 +209,9 @@ test_that("run_aa validates method and method-specific arguments", {
     expect_error(run_aa(X, K = 3L, method = "pgd", max_no_update = 0), "max_no_update")
     expect_error(run_aa(X, K = 3L, method = "nnls", bigM = 0), "bigM")
     expect_error(run_aa(X, K = 3L, method = "nnls", max_no_update = 0), "max_no_update")
+    expect_error(run_aa(X, K = 3L, method = "nnls", max_kappa = 0), "max_kappa")
+    expect_no_error(suppressWarnings(run_aa(X, K = 3L, method = "nnls", max_kappa = Inf, max_iter = 1L)))
+    expect_error(run_aa(X, K = 3L, method = "pgd", max_kappa = Inf), "unused")
 })
 
 test_that("PGD stalls instead of converging when no updates are accepted", {

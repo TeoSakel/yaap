@@ -42,9 +42,14 @@ archetypes_kernel_pgd(
 \item{data}{optional original data matrix attached to precomputed-kernel fits
 so coordinates() can return an input-space proxy.}
 
-\item{init}{initialization method; see \code{\link[=run_aa]{run_aa()}} for available options.}
+\item{init}{kernel initialization. Accepts a method name string, a
+function, or a numeric \verb{K x N} coefficient matrix whose rows are
+non-negative and sum to the allowed archetype mass. Matrix-valued \code{init}
+is interpreted as generator weights over samples, not as \verb{K x M}
+input-space coordinates.}
 
-\item{init_args}{list of additional arguments for the initialization function.}
+\item{init_args}{list of additional arguments for method-string or function
+initialization.}
 
 \item{robust}{robust row reweighting selector. Use \code{FALSE} for ordinary
 squared error, \code{TRUE} for \code{"psi.bisquare"}, a MASS psi function name,
@@ -117,12 +122,27 @@ data but less efficient.
 To use a precomputed Gram matrix, compute it externally, pass it as \code{x},
 and set \code{kernel = "precomputed"}. Supply the original data as the \code{data}
 argument if you want coordinates() to return an input-space proxy.
+}
 
-Kernel initializers that can be expressed through row selections or
-coefficient matrices are supported: \code{"random"}, \code{"furthest_first"},
+\subsection{Initialization}{
+
+Kernel archetypes are optimized as generator weights over the \code{N} training
+samples. Consequently, a matrix supplied to \code{init} must be a \verb{K x N}
+coefficient matrix \code{B}, where row \code{k} defines the initial archetype
+\eqn{\sum_i B_{ki}\phi(x_i)} in feature space. To initialize from
+specific training samples, construct this coefficient matrix explicitly with
+\code{\link[=onehot]{onehot()}}, for example \code{onehot(c(1, 5, 9), sparse = FALSE, nc = N)}.
+Numeric, character, and logical row selectors are not accepted directly as
+kernel \code{init} values.
+
+The supported method strings are \code{"random"}, \code{"furthest_first"},
 \code{"kmeans_pp"}, \code{"furthest_sum"}, and \code{"dirichlet"}. Candidate batching can
 be requested through \code{init_args = list(batch_size = ..., batch_type = ...)};
-distal batching uses distances implied by the Gram matrix.
+distal batching uses distances implied by the Gram matrix. A custom
+initializer function is called with \code{G}, \code{K}, and \code{init_args}, and must
+return either a \verb{K x N} coefficient matrix or a list with component \code{B}.
+Unlike Euclidean fitters, kernel fits do not accept a \verb{K x M} matrix of
+input-space archetype coordinates as \code{init}.
 }
 
 \subsection{Archetype coordinates}{

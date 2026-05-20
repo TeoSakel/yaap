@@ -53,7 +53,9 @@ low-variance features (default: 1e-6).}
 
 \item{tol_r2}{convergence tolerance based on R\eqn{^2} (default: 0.9999)}
 
-\item{max_kappa}{maximum condition number for archetypes (default: 1000)}
+\item{max_kappa}{maximum condition-number warning threshold for NNLS
+diagnostics (default: 1000). Use \code{Inf} to disable condition-number
+warnings.}
 
 \item{eps}{small positive number to ensure numerical stability
 (default: 0 for sparse input 1e-8 for dense)}

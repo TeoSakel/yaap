@@ -183,7 +183,7 @@ test_that("kernel PGD supports dirichlet initialization", {
     expect_length(which(colSums(fit[["init"]]) > 0), 6L)
 })
 
-test_that("kernel PGD accepts batching for row-index initializers", {
+test_that("kernel PGD accepts batching for sample-selection method initializers", {
     X <- rbind(
         matrix(0, nrow = 8L, ncol = 2L),
         c(10, 0),
@@ -272,23 +272,47 @@ test_that("kernel PGD validates Gram and kernel inputs", {
     )
 
     custom <- function(X) tcrossprod(X)
-    fit <- suppressWarnings(archetypes_kernel_pgd(
-        x = X,
-        K = 2L,
-        kernel = custom,
-        init = c(1L, 2L),
-        max_iter = 1L
-    ))
-    expect_s3_class(fit, "kernel_archetypes")
+    expect_error(
+        archetypes_kernel_pgd(
+            x = X,
+            K = 2L,
+            kernel = custom,
+            init = c(1L, 2L),
+            max_iter = 1L
+        ),
+        "`init` must be a method string, function, or a `K x N` coefficient matrix"
+    )
+    rownames(X) <- paste0("sample", seq_len(nrow(X)))
+    expect_error(
+        archetypes_kernel_pgd(
+            x = X,
+            K = 2L,
+            kernel = custom,
+            init = c("sample1", "sample2"),
+            max_iter = 1L
+        ),
+        "`init` must be a method string, function, or a `K x N` coefficient matrix"
+    )
+    expect_error(
+        archetypes_kernel_pgd(
+            x = X,
+            K = 2L,
+            kernel = custom,
+            init = c(TRUE, TRUE, rep(FALSE, nrow(X) - 2L)),
+            max_iter = 1L
+        ),
+        "`init` must be a method string, function, or a `K x N` coefficient matrix"
+    )
 })
 
 test_that("kernel archetypes methods expose names, residuals, and proxy plots", {
     X <- toy_matrix()[1:12, , drop = FALSE]
+    B0 <- onehot(c(1L, 2L, 3L), sparse = FALSE, nc = nrow(X))
     fit <- suppressWarnings(archetypes_kernel_pgd(
         x = X,
         K = 3L,
         kernel = "linear",
-        init = c(1L, 2L, 3L),
+        init = B0,
         max_iter = 1L
     ))
 

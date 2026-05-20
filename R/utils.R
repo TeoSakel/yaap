@@ -333,12 +333,6 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
             call. = FALSE
         )
     }
-    if (!(
-        identical(ctx[["max_kappa"]], Inf) ||
-            (is_number(ctx[["max_kappa"]]) && ctx[["max_kappa"]] >= 1)
-    )) {
-        stop("`max_kappa` must be at least 1 or `Inf`.", call. = FALSE)
-    }
     if (!is_non_negative(ctx[["eps"]])) {
         stop("`eps` must be non-negative.", call. = FALSE)
     }
