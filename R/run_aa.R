@@ -9,7 +9,8 @@
 #' @param formula formula selecting variables from `data`. The response, when
 #'   present, is ignored.
 #' @param data optional data frame supplying variables for formula input.
-#' @param K number of archetypes.
+#' @param K number of archetypes. When `K` has length greater than one,
+#'   `run_aa()` returns an `archetypes_path()` object with one fit per value.
 #' @param ... additional arguments passed to the selected solver.
 #'
 #' @returns An object of class `archetypes` with components:
@@ -75,11 +76,18 @@ run_aa.formula <- function(formula,
                            ...,
                            subset,
                            na.action) {
-    if (missing(K))
-        stop("`K` must be supplied.", call. = FALSE)
 
     call <- match.call()
     call[[1L]] <- quote(run_aa)
+
+    if (length(K) > 1L) {
+        # Repoint the call so archetypes_path S3 dispatch sees the original
+        # input class; .aa_call preserves run_aa as the recorded public call.
+        path_call <- call
+        path_call[[1L]] <- quote(archetypes_path)
+        path_call[[".aa_call"]] <- base::call("quote", call)
+        return(eval(path_call, parent.frame()))
+    }
 
     terms <- stats::delete.response(stats::terms(formula, data = data))
     mf_call <- match.call(expand.dots = FALSE)
@@ -191,13 +199,21 @@ run_aa.default <- function(x,
                            nrep = 1L,
                            ...) {
     data <- if (inherits(x, "data.frame")) as.matrix(x) else x
-    if (is.null(eps))
-        eps <- ifelse(inherits(data, "sparseMatrix"), 0, 1e-8)
-    if (is.null(missing))
-        missing <- any(is.na(data))
 
     call <- match.call()
     call[[1L]] <- quote(run_aa)
+
+    if (length(K) > 1L) {
+        # Repoint the call so archetypes_path S3 dispatch sees the original
+        # input class; .aa_call preserves run_aa as the recorded public call.
+        path_call <- call
+        path_call[[1L]] <- quote(archetypes_path)
+        path_call[[".aa_call"]] <- base::call("quote", call)
+        return(eval(path_call, parent.frame()))
+    }
+
+    eps <- eps %||% ifelse(inherits(data, "sparseMatrix"), 0, 1e-8)
+    missing <- missing %||% any(is.na(data))
 
     .aa_fit_engine(
         call = call,
@@ -236,13 +252,24 @@ run_aa.default <- function(x,
 #' @exportS3Method
 run_aa.fd <- function(x, K, ...) {
     data <- x
-    if (!requireNamespace("fda", quietly = TRUE))
-        stop("Package `fda` is required for `run_aa.fd()`.", call. = FALSE)
+    .aa_require_namespace_for("fda", "functional-data archetypal analysis")
 
     method_args <- list(...)
     if ("scale" %in% names(method_args))
         stop("`scale` is computed from the fd basis and cannot be supplied to `run_aa.fd()`.",
              call. = FALSE)
+
+    call <- match.call()
+    call[[1L]] <- quote(run_aa)
+
+    if (length(K) > 1L) {
+        # Repoint the call so archetypes_path S3 dispatch sees the original
+        # input class; .aa_call preserves run_aa as the recorded public call.
+        path_call <- call
+        path_call[[1L]] <- quote(archetypes_path)
+        path_call[[".aa_call"]] <- base::call("quote", call)
+        return(eval(path_call, parent.frame()))
+    }
 
     coefs <- stats::coef(data)
     if (length(dim(coefs)) != 2L)
@@ -251,9 +278,6 @@ run_aa.fd <- function(x, K, ...) {
 
     B <- t(coefs)
     G <- fda::eval.penalty(data[["basis"]], Lfdobj = 0)
-
-    call <- match.call()
-    call[[1L]] <- quote(run_aa)
 
     fit <- .aa_fit_engine(
         call = call,
@@ -267,28 +291,28 @@ run_aa.fd <- function(x, K, ...) {
     fit
 }
 
-.aa_fit_engine <- function(call,
-                           x,
-                           K,
-                           method = c("pgd", "nnls", "kernel", "directional", "paa"),
-                           family = "gaussian",
-                           init = NULL,
-                           init_args = list(),
-                           weights = NULL,
-                           scale = FALSE,
-                           robust = FALSE,
-                           robust_args = list(),
-                           sd_threshold = 1e-6,
-                           max_iter = 100L,
-                           tol = 1e-6,
-                           tol_r2 = 0.9999,
-                           max_kappa = 1000,
-                           eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
-                           verbose = FALSE,
-                           missing = any(is.na(x)),
-                           nrep = 1L,
-                           data = NULL,
-                           ...) {
+.aa_fit_engine_setup <- function(call,
+                                 x,
+                                 K,
+                                 method = c("pgd", "nnls", "kernel", "directional", "paa"),
+                                 family = "gaussian",
+                                 init = NULL,
+                                 init_args = list(),
+                                 weights = NULL,
+                                 scale = FALSE,
+                                 robust = FALSE,
+                                 robust_args = list(),
+                                 sd_threshold = 1e-6,
+                                 max_iter = 100L,
+                                 tol = 1e-6,
+                                 tol_r2 = 0.9999,
+                                 max_kappa = 1000,
+                                 eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
+                                 verbose = FALSE,
+                                 missing = any(is.na(x)),
+                                 nrep = 1L,
+                                 data = NULL,
+                                 ...) {
     method <- match.arg(method, c("pgd", "nnls", "kernel", "directional", "paa"))
     init <- init %||% ifelse(identical(method, "directional"), "dirichlet", "furthest_sum")
     stopifnot("`missing` must be TRUE or FALSE" = is_logical(missing))
@@ -332,6 +356,10 @@ run_aa.fd <- function(x, K, ...) {
     )
     block[["check"]](ctx)
     prep <- block[["preprocess"]](ctx)
+    list(ctx = ctx, block = block, prep = prep)
+}
+
+.aa_fit_prepared <- function(ctx, block, prep) {
     out <- block[["edge_case"]](ctx, prep)  # check for K = 1 or K == N
     if (!is.null(out)) return(out)
 
@@ -349,6 +377,55 @@ run_aa.fd <- function(x, K, ...) {
         }
     }
     block[["prepare_output"]](ctx, prep, best_fit)
+}
+
+.aa_fit_engine <- function(call,
+                           x,
+                           K,
+                           method = c("pgd", "nnls", "kernel", "directional", "paa"),
+                           family = "gaussian",
+                           init = NULL,
+                           init_args = list(),
+                           weights = NULL,
+                           scale = FALSE,
+                           robust = FALSE,
+                           robust_args = list(),
+                           sd_threshold = 1e-6,
+                           max_iter = 100L,
+                           tol = 1e-6,
+                           tol_r2 = 0.9999,
+                           max_kappa = 1000,
+                           eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
+                           verbose = FALSE,
+                           missing = any(is.na(x)),
+                           nrep = 1L,
+                           data = NULL,
+                           ...) {
+    setup <- .aa_fit_engine_setup(
+        call = call,
+        x = x,
+        K = K,
+        method = method,
+        family = family,
+        init = init,
+        init_args = init_args,
+        weights = weights,
+        scale = scale,
+        robust = robust,
+        robust_args = robust_args,
+        sd_threshold = sd_threshold,
+        max_iter = max_iter,
+        tol = tol,
+        tol_r2 = tol_r2,
+        max_kappa = max_kappa,
+        eps = eps,
+        verbose = verbose,
+        missing = missing,
+        nrep = nrep,
+        data = data,
+        ...
+    )
+    .aa_fit_prepared(setup[["ctx"]], setup[["block"]], setup[["prep"]])
 }
 
 .aa_final_loss <- function(fit) {
@@ -460,17 +537,17 @@ run_aa.fd <- function(x, K, ...) {
     mask <- attr(X, "mask")
 
     if (identical(scale_mode, "matrix")) {
-        if (!is.null(mask))
+        retained_names <- names(original_center)
+        if (!is.null(mask)) {
+            retained_names <- retained_names[mask]
             scale <- scale[mask, mask, drop = FALSE]
+        }
         scale_factor <- t(chol(as.matrix(scale)))  # lower triangular
         X <- as.matrix(X) %*% scale_factor
-        retained_names <- names(original_center)
-        if (!is.null(mask))
-            retained_names <- retained_names[mask]
         colnames(X) <- retained_names
         attr(X, "mask") <- mask
         # Compressed storage
-        attr(X, "scale:factor") <- Matrix::pack(as(Matrix::Matrix(scale_factor), "unpackedMatrix"))
+        attr(X, "scale:factor") <- .aa_pack_lower_tri(scale_factor)
     } else if (identical(scale_mode, "vector")) {
         if (!is.null(mask))
             scale <- scale[mask]
@@ -523,7 +600,7 @@ run_aa.fd <- function(x, K, ...) {
         attr(X, "bigM.value") <- bigM
     }
 
-    list(X = X, undo_scale = .aa_undo_scale)
+    list(X = X)
 }
 
 .aa_euclidean_edge_case <- function(ctx, prep) {

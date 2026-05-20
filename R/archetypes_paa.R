@@ -131,7 +131,6 @@ archetypes_paa <- function(x,
             prep[["X"]] <- prep[["P"]]
             prep[["spec"]] <- spec
             prep[["family"]] <- family
-            prep[["undo_scale"]] <- function(A, X) A
             prep
         },
         edge_case = function(ctx, prep) NULL,

@@ -104,7 +104,7 @@ test_that("run_aa formula input can use the formula environment", {
 test_that("run_aa formula input requires K", {
     expect_error(
         run_aa(Species ~ ., data = iris, max_iter = 1L),
-        "`K` must be supplied"
+        "argument \"K\" is missing"
     )
 })
 
@@ -269,9 +269,10 @@ test_that("scale preprocessing supports TRUE, FALSE, vector, and matrix transfor
     )
 
     matrix_scale_factor <- attr(pre_matrix[["X"]], "scale:factor")
-    expect_true(inherits(matrix_scale_factor, "packedMatrix"))
-    expect_true(inherits(matrix_scale_factor, "triangularMatrix"))
-    expect_equal(length(matrix_scale_factor@x), ncol(pre_matrix[["X"]]) * (ncol(pre_matrix[["X"]]) + 1L) / 2)
+    expect_type(matrix_scale_factor, "double")
+    expect_equal(matrix_scale_factor[[1L]], ncol(pre_matrix[["X"]]))
+    expect_equal(length(matrix_scale_factor) - 1L, ncol(pre_matrix[["X"]]) * (ncol(pre_matrix[["X"]]) + 1L) / 2)
+    expect_equal(.aa_unpack_lower_tri(matrix_scale_factor), t(chol(diag(1 / sd^2))))
     expect_equal(unname(colMeans(pre_default[["X"]])), rep(0, ncol(X)), tolerance = 1e-12)
     expect_equal(unname(apply(pre_default[["X"]], 2L, stats::sd)), rep(1, ncol(X)))
     expect_equal(pre_raw[["X"]], X, ignore_attr = TRUE)
@@ -281,11 +282,14 @@ test_that("scale preprocessing supports TRUE, FALSE, vector, and matrix transfor
         tolerance = 1e-10
     )
     expect_equal(pre_vector[["X"]], pre_matrix[["X"]], ignore_attr = TRUE)
+    vector_map <- .aa_euclidean_feature_map(pre_vector[["X"]])
+    matrix_map <- .aa_euclidean_feature_map(pre_matrix[["X"]])
+    raw_map <- .aa_euclidean_feature_map(pre_raw[["X"]])
     expect_equal(
-        pre_vector[["undo_scale"]](pre_vector[["X"]][1:2, ], pre_vector[["X"]]),
-        pre_matrix[["undo_scale"]](pre_matrix[["X"]][1:2, ], pre_matrix[["X"]])
+        .aa_feature_map_inverse(vector_map, pre_vector[["X"]][1:2, ]),
+        .aa_feature_map_inverse(matrix_map, pre_matrix[["X"]][1:2, ])
     )
-    expect_equal(pre_raw[["undo_scale"]](pre_raw[["X"]][1:2, ], pre_raw[["X"]]), X[1:2, ])
+    expect_equal(.aa_feature_map_inverse(raw_map, pre_raw[["X"]][1:2, ]), X[1:2, ])
 })
 
 test_that("euclidean preprocessing applies sqrt-normalized sample weights", {
@@ -492,7 +496,6 @@ test_that("non-convergence warning reports realized iteration count", {
     )
     prep <- list(
         X = X,
-        undo_scale = function(A, X) A,
         family = "gaussian"
     )
     fit <- list(

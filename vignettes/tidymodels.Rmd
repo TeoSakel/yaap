@@ -99,45 +99,37 @@ the classic `archetypes` package workflow. It is useful for comparing candidate
 `K` values on the same data, but it is still a model-selection aid rather
 than a substitute for scientific judgment.
 
-Here we fit `K = 1, ..., 6` to the normalized arrest variables. The
-one-archetype baseline is useful for RSS and $R^2$, but the adapted AIC can be
-undefined for `K = 1`, so we score the grid by RSS and compute AIC separately
-where it is defined.
+Here we fit an `archetypes_path` for `K = 1, ..., 6` to the normalized
+arrest variables. The path stores one copy of the common data and lets us
+extract any fitted model with `[[` after scoring the sequence.
 
 ```{r k-selection-fit}
-rss <- function(fit) {
-    utils::tail(fit$loss$loss, 1L)
-}
-
-aic_or_na <- function(fit) {
-    if (nrow(coordinates(fit)) == 1L) NA_real_ else AIC(fit)
-}
-
 arrests_scaled <- as.data.frame(scale(arrests))
 rownames(arrests_scaled) <- state
 
 set.seed(42)
-k_values <- 1:6
-fits_k <- lapply(k_values, function(k) {
-    run_aa(
-        arrests_scaled,
-        K = k,
-        init = "furthest_sum",
-        max_iter = 100,
-        tol_r2 = 0,
-        max_kappa = Inf
-    )
-})
+fit_path <- archetypes_path(
+    arrests_scaled,
+    K = 6,
+    init = "furthest_sum",
+    max_iter = 100,
+    tol_r2 = 0,
+    max_kappa = Inf
+)
+
+rss_tbl <- screeplot(fit_path, y = "loss", plot = FALSE)
+r2_tbl <- screeplot(fit_path, y = "r2", plot = FALSE)
+aic_tbl <- screeplot(fit_path, plot = FALSE)
 
 k_tbl <- data.frame(
-    K = k_values,
-    rss = vapply(fits_k, rss, numeric(1L)),
-    r2 = vapply(fits_k, function(fit) utils::tail(fit$loss$r2, 1L), numeric(1L)),
-    AIC = vapply(fits_k, aic_or_na, numeric(1L))
+    K = fit_path$K,
+    rss = rss_tbl$value,
+    r2 = r2_tbl$value,
+    AIC = aic_tbl$value
 )
 selected_ix <- which.min(k_tbl$AIC)
 selected_K <- k_tbl$K[selected_ix]
-fit <- fits_k[[selected_ix]]
+fit <- fit_path[[selected_ix]]
 analysis_K <- 3L
 
 knitr::kable(
@@ -149,34 +141,30 @@ knitr::kable(
 ```{r k-selection-plot, results = "hold", fig.width = 9, fig.height = 3.5, out.width = "100%", fig.cap = "RSS, unexplained variance, and adapted AIC across candidate values of K."}
 op <- par(mfrow = c(1, 3), mar = c(4, 4, 2.5, 0.5), bty = "n")
 
-plot(
-    k_tbl$K, k_tbl$rss,
-    type = "b", pch = 19,
+screeplot(
+    fit_path,
+    y = "loss",
     col = "steelblue4",
     frame.plot = FALSE,
-    xlab = "Number of archetypes (K)",
     ylab = "Reconstruction loss",
     main = "RSS"
 )
 abline(v = selected_K, lty = 2, col = "firebrick")
 
-plot(
-    k_tbl$K, 1 - k_tbl$r2,
-    type = "b", pch = 19,
+screeplot(
+    fit_path,
+    y = function(fit) 1 - utils::tail(fit$loss$r2, 1L),
     col = "steelblue4",
     frame.plot = FALSE,
-    xlab = "Number of archetypes (K)",
     ylab = expression(1 - R^2),
     main = "Unexplained Variance"
 )
 abline(v = selected_K, lty = 2, col = "firebrick")
 
-plot(
-    k_tbl$K, k_tbl$AIC,
-    type = "b", pch = 19,
+screeplot(
+    fit_path,
     col = "steelblue4",
     frame.plot = FALSE,
-    xlab = "Number of archetypes (K)",
     ylab = "Adapted AIC",
     main = "Information Criterion"
 )
