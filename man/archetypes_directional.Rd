@@ -61,8 +61,10 @@ precision (default: \code{"row_norm"})}
 line-search update before stopping as stalled (default: 5)}
 }
 \value{
-An object of class \code{\link{directional_archetypes}}, extending
-\code{archetypes}.
+An object of class \code{directional_archetypes}, extending
+\code{archetypes}. Directional methods define unit-normalized
+fitted values and residuals, composition prediction for new directional
+data, and report \code{AIC()} as unsupported for Watson-loss fits.
 }
 \description{
 Fits directional archetypal analysis (DAA) via projected gradient descent,

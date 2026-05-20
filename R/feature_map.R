@@ -1,10 +1,12 @@
 # feature_map.R: Internal feature-space transforms for prediction
 
-.aa_feature_map_transform <- function(map, newdata, ...)
+.aa_feature_map_transform <- function(map, newdata, ...) {
     UseMethod(".aa_feature_map_transform")
+}
 
-.aa_feature_map_inverse <- function(map, z, ...)
+.aa_feature_map_inverse <- function(map, z, ...) {
     UseMethod(".aa_feature_map_inverse")
+}
 
 .aa_identity_feature_map <- function(coordinates) {
     A <- as.matrix(coordinates)
@@ -34,13 +36,16 @@
 }
 
 .aa_feature_map_transform.unsupported_feature_map <- function(map, newdata, ...) {
-    msg <- sprintf("Feature-map prediction is not defined for %s fits.",
-                   map[["method"]])
+    msg <- sprintf(
+        "Feature-map prediction is not defined for %s fits.",
+        map[["method"]]
+    )
     stop(msg, call. = FALSE)
 }
 
-.aa_feature_map_inverse.unsupported_feature_map <- function(map, z, ...)
+.aa_feature_map_inverse.unsupported_feature_map <- function(map, z, ...) {
     NULL
+}
 
 .aa_kernel_feature_map <- function() {
     structure(
@@ -49,16 +54,19 @@
     )
 }
 
-.aa_feature_map_transform.kernel_feature_map <- function(map, newdata, ...)
+.aa_feature_map_transform.kernel_feature_map <- function(map, newdata, ...) {
     stop("Feature-map prediction is not defined for kernel fits.", call. = FALSE)
+}
 
 .aa_feature_map_inverse.kernel_feature_map <- function(map, z, object = NULL, ...) {
-    if (is.null(object) || is.null(object[["data"]]))
+    if (is.null(object) || is.null(object[["data"]])) {
         return(NULL)
+    }
 
     X <- object[["data"]]
-    if (inherits(X, "fd"))
+    if (inherits(X, "fd")) {
         X <- .aa_fd_to_matrix(X)
+    }
 
     B <- coefficients(object)
     A <- B %*% X
@@ -68,8 +76,9 @@
 }
 
 .aa_drop_bigM_column <- function(mat, bigM = NULL) {
-    if (is.null(bigM))
+    if (is.null(bigM)) {
         return(as.matrix(mat))
+    }
     as.matrix(mat)[, -bigM, drop = FALSE]
 }
 
@@ -84,18 +93,21 @@
         names(restore_center) <- x_names %||% paste0("V", seq_along(restore_center))
     }
     original_names <- names(restore_center) %||% colnames(X_no_bigM)
-    if (is.null(original_names))
+    if (is.null(original_names)) {
         original_names <- paste0("V", seq_along(restore_center))
+    }
     names(restore_center) <- original_names
 
     retained <- attr(X, "mask")
-    if (is.null(retained))
+    if (is.null(retained)) {
         retained <- rep(TRUE, length(original_names))
+    }
     names(retained) <- original_names
 
     center <- attr(X, "scaled:center")
-    if (!is.null(center))
+    if (!is.null(center)) {
         names(center) <- names(center) %||% original_names
+    }
 
     structure(
         list(
@@ -116,9 +128,12 @@
         newdata[, map[["original_names"]], with = FALSE]
     } else if (!is.null(colnames(newdata))) {
         missing <- setdiff(map[["original_names"]], colnames(newdata))
-        if (length(missing) > 0L)
-            stop(sprintf("`newdata` is missing required columns: %s",
-                         paste(missing, collapse = ", ")), call. = FALSE)
+        if (length(missing) > 0L) {
+            stop(sprintf(
+                "`newdata` is missing required columns: %s",
+                paste(missing, collapse = ", ")
+            ), call. = FALSE)
+        }
         newdata[, map[["original_names"]], drop = FALSE]
     } else {
         newdata
@@ -140,8 +155,9 @@
     scale_mode <- map[["scale_mode"]]
     if (identical(scale_mode, "vector")) {
         center <- map[["center"]]
-        if (!is.null(center))
+        if (!is.null(center)) {
             X <- sweep(as.matrix(X), 2L, center[retained], "-")
+        }
 
         scale_factor <- map[["scale_factor"]] %||% rep(1, ncol(X))
         X <- if (inherits(X, "sparseMatrix")) {

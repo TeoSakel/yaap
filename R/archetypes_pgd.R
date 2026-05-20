@@ -123,7 +123,7 @@
 #' @references
 #' Mørup, M., & Hansen, L. K. (2012).
 #' Archetypal analysis for machine learning and data mining.
-#' *Neurocomputing*, 80, 54-63. \url{https://dx.doi.org/10.1016/j.neucom.2011.06.033}
+#' *Neurocomputing*, 80, 54-63. \doi{10.1016/j.neucom.2011.06.033}
 #'
 #' @export
 archetypes_pgd <- function(x,
@@ -194,8 +194,12 @@ archetypes_pgd <- function(x,
                 step_shrinkage = step_shrinkage,
                 max_no_update = max_no_update
             )
-            stopifnot("delta must be single non-negative number" = is_non_negative(delta))
-            stopifnot("pseudo_pgd must be TRUE or FALSE" = is_logical(pseudo_pgd))
+            if (!is_non_negative(delta)) {
+                stop("`delta` must be a single non-negative number.", call. = FALSE)
+            }
+            if (!is_logical(pseudo_pgd)) {
+                stop("`pseudo_pgd` must be TRUE or FALSE.", call. = FALSE)
+            }
             invisible(TRUE)
         },
         preprocess = function(ctx) .aa_euclidean_preprocess(ctx, bigM = 0),
@@ -257,8 +261,9 @@ archetypes_pgd <- function(x,
                                 max_iter_optimizer,
                                 step_shrinkage,
                                 max_no_update) {
-    if (!is.null(weight_fun))
+    if (!is.null(weight_fun)) {
         stop("`robust = TRUE` is not supported with `missing = TRUE`.", call. = FALSE)
+    }
 
     if (pseudo_pgd) {
         project <- proj_l1
@@ -287,9 +292,9 @@ archetypes_pgd <- function(x,
     B <- aB / a
 
     A <- .aa_pgd_missing_A(aB, X, M, denom_eps)
-    R <- .aa_pgd_missing_resid(M, S, A, X)  # residuals matrix
-    xss <- norm(X, "F")^2  # X sum of squares; invariant for fixed X
-    rss <- norm(R, "F")^2  # residual sum of squares -> objective to minimize
+    R <- .aa_pgd_missing_resid(M, S, A, X) # residuals matrix
+    xss <- norm(X, "F")^2 # X sum of squares; invariant for fixed X
+    rss <- norm(R, "F")^2 # residual sum of squares -> objective to minimize
     loss_terms <- list(rss = rss, xss = xss, A = A)
     loss[["loss"]][1L] <- rss
     loss[["r2"]][1L] <- 1 - rss / xss
@@ -401,8 +406,9 @@ archetypes_pgd <- function(x,
             # Refine step sizes for next iteration.
             step_S <- step_S * step_shrinkage
             step_B <- step_B * step_shrinkage
-            if (update_alpha)
+            if (update_alpha) {
                 step_a <- step_a * step_shrinkage
+            }
 
             if (verbose) {
                 fmt <- paste(
@@ -469,11 +475,11 @@ archetypes_pgd <- function(x,
 
     # define gradient & projection functions
     if (pseudo_pgd) {
-        grad_S  <- grad_S_l1
+        grad_S <- grad_S_l1
         grad_aB <- grad_aB_l1
         project <- proj_l1
     } else {
-        grad_S  <- grad_S_trace
+        grad_S <- grad_S_trace
         grad_aB <- grad_aB_trace
         project <- proj_simplex
     }
@@ -484,16 +490,16 @@ archetypes_pgd <- function(x,
     a_lo <- max(1 - delta, a_lo) # lower bound for a
     a_hi <- 1 + delta # upper bound for a
     clip <- function(a) pmax(pmin(a, a_hi), a_lo) # clip a to [a_lo, a_hi]
-    a  <- rowSums(B)
+    a <- rowSums(B)
     slack_tol <- 1e-6
     if (any(a < a_lo - slack_tol) || any(a > a_hi + slack_tol)) {
         fmt <- "Initialize B marginals are outside the specified delta range [%.3f, %.3f]"
         stop(sprintf(fmt, a_lo, a_hi))
     }
-    B  <- B / a # normalize B to row-stochastic
+    B <- B / a # normalize B to row-stochastic
 
     # Initialize Variables and loss terms
-    A0 <- A  # keep initial archetypes for output
+    A0 <- A # keep initial archetypes for output
     loss_terms <- loss_fun(
         X, A, S,
         weight_fun = weight_fun
@@ -522,7 +528,7 @@ archetypes_pgd <- function(x,
     StX <- loss_terms[["StX"]] # (K x M)
     xss <- loss_terms[["xss"]] # scalar = ||X||^2; invariant for fixed X
     rss <- loss_terms[["rss"]] # scalar = ||X - SA||^2
-    row_xss <- loss_terms[["row_xss"]]  # (N x 1) row-wise sum of squares; invariant for fixed X
+    row_xss <- loss_terms[["row_xss"]] # (N x 1) row-wise sum of squares; invariant for fixed X
     row_weights <- loss_terms[["row_weights"]]
     StXXt <- loss_terms[["StXXt"]] # (K x N)
 
@@ -542,18 +548,18 @@ archetypes_pgd <- function(x,
         ## Update S
         grad <- grad_S(S, AAt, XAt, row_weights = row_weights) # (N x K) - diag(a) is absorbed in A
         for (k in seq_len(max_iter_optimizer)) { # line search
-            S_new   <- project(S - step_S * grad, eps = eps)
+            S_new <- project(S - step_S * grad, eps = eps)
             S_new_weighted <- .aa_weight_rows(S_new, row_weights)
             StS_new <- crossprod(S_new_weighted, S_new)
             StX_new <- crossprod(S_new_weighted, X)
             StXXt_new <- tcrossprod(StX_new, X)
             rss_new <- xss - 2 * sum(A * StX_new) + sum(StS_new * AAt)
             if (rss_new < rss) { # update variables
-                S      <- S_new
-                StS    <- StS_new
-                StX    <- StX_new
-                rss    <- rss_new
-                StXXt  <- StXXt_new
+                S <- S_new
+                StS <- StS_new
+                StX <- StX_new
+                rss <- rss_new
+                StXXt <- StXXt_new
                 step_S <- step_S / step_shrinkage # leave room for shrinkage
                 accepted_update <- TRUE
                 break
@@ -563,15 +569,15 @@ archetypes_pgd <- function(x,
 
         ## Update B
         grad_aB_step <- grad_aB(B, A, X, StS, StXXt) # (K x N)
-        grad <- a * grad_aB_step  # grad_B
+        grad <- a * grad_aB_step # grad_B
         for (k in seq_len(max_iter_optimizer)) { # line search
             B_new <- project(B - step_B * grad, eps = eps)
             A_new <- (a * B_new) %*% X
             AAt_new <- tcrossprod(A_new)
             rss_new <- xss - 2 * sum(A_new * StX) + sum(StS * AAt_new)
             if (rss_new < rss) {
-                B   <- B_new
-                A   <- A_new
+                B <- B_new
+                A <- A_new
                 rss <- rss_new
                 AAt <- AAt_new
                 XAt <- tcrossprod(X, A)
@@ -584,16 +590,16 @@ archetypes_pgd <- function(x,
 
         ## Update a:
         if (update_alpha) {
-            grad <- grad_alpha(B, grad_aB_step)  # grad_a
+            grad <- grad_alpha(B, grad_aB_step) # grad_a
             for (k in seq_len(max_iter_optimizer)) {
-                a_new    <- clip(a - step_a * grad)
+                a_new <- clip(a - step_a * grad)
                 a_update <- a_new / a # to undo aA multiplication
-                A_new    <- a_update * A
-                AAt_new  <- AAt * tcrossprod(a_update) # fast outer product
-                rss_new  <- xss - 2 * sum(A_new * StX) + sum(StS * AAt_new)
+                A_new <- a_update * A
+                AAt_new <- AAt * tcrossprod(a_update) # fast outer product
+                rss_new <- xss - 2 * sum(A_new * StX) + sum(StS * AAt_new)
                 if (rss_new < rss) { # update variables
-                    a   <- a_new
-                    A   <- A_new
+                    a <- a_new
+                    A <- A_new
                     rss <- rss_new
                     AAt <- AAt_new
                     XAt <- sweep(XAt, 2, a_update, "*")
@@ -686,16 +692,16 @@ archetypes_pgd <- function(x,
 }
 
 .aa_pgd_loss <- function(X, A, S, xss = NULL, rss = NULL,
-                               StS = NULL, StX = NULL, AAt = NULL, XAt = NULL,
-                               StXXt = NULL,
-                               ...) {
-    xss   <- xss   %||% norm(X, "F")^2
-    AAt   <- AAt   %||% tcrossprod(A)
-    XAt   <- XAt   %||% tcrossprod(X, A)
-    StS   <- StS   %||% crossprod(S)
-    StX   <- StX   %||% crossprod(S, X)
+                         StS = NULL, StX = NULL, AAt = NULL, XAt = NULL,
+                         StXXt = NULL,
+                         ...) {
+    xss <- xss %||% norm(X, "F")^2
+    AAt <- AAt %||% tcrossprod(A)
+    XAt <- XAt %||% tcrossprod(X, A)
+    StS <- StS %||% crossprod(S)
+    StX <- StX %||% crossprod(S, X)
+    rss <- rss %||% (xss - 2 * sum(A * StX) + sum(StS * AAt))
     StXXt <- StXXt %||% tcrossprod(StX, X)
-    rss   <- rss   %||% (xss - 2 * sum(A * StX) + sum(StS * AAt))
 
     list(
         rss = rss,
@@ -711,10 +717,10 @@ archetypes_pgd <- function(x,
 }
 
 .aa_pgd_weighted_loss <- function(X, A, S, weight_fun, row_xss = NULL,
-                                        AAt = NULL, XAt = NULL, ...) {
+                                  AAt = NULL, XAt = NULL, ...) {
     row_xss <- row_xss %||% rowSums(X * X)
-    AAt     <- AAt     %||% tcrossprod(A)
-    XAt     <- XAt     %||% tcrossprod(X, A)
+    AAt <- AAt %||% tcrossprod(A)
+    XAt <- XAt %||% tcrossprod(X, A)
 
     row_rss <- .aa_trace_row_rss(row_xss, S, XAt, AAt)
     row_weights <- weight_fun(row_rss)
@@ -818,9 +824,10 @@ grad_B_matrix_l1 <- function(grad_aB, a, B) {
         return(Xhat - X)
     }
 
-    entries <- Matrix::summary(M)  # i, j, x for nonzero entries of M
-    if (length(entries[["i"]]) == 0L)
+    entries <- Matrix::summary(M) # i, j, x for nonzero entries of M
+    if (length(entries[["i"]]) == 0L) {
         return(Matrix::sparseMatrix(dims = dim(M), dimnames = dimnames(M)))
+    }
     vals <- rowSums(S[entries[["i"]], , drop = FALSE] * t(A[, entries[["j"]], drop = FALSE]))
     Xhat <- Matrix::sparseMatrix(
         i = entries[["i"]],

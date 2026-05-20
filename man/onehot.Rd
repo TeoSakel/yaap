@@ -64,11 +64,11 @@ Missing values produce rows of all zeros.
 onehot(c(1, 2, 1, 3))
 
 # Factor: columns follow factor levels (and are named)
-f <- factor(c("red", "blue", "red", NA, "green"), levels = c("red","blue","green"))
+f <- factor(c("red", "blue", "red", NA, "green"), levels = c("red", "blue", "green"))
 onehot(f)
 
 # Character: automatically treated as a factor
-onehot(c("cat","dog","cat"), sparse = TRUE)
+onehot(c("cat", "dog", "cat"), sparse = TRUE)
 
 # Reserving extra columns for future/unseen categories (numeric input only)
 onehot(c(1, 2, 1), sparse = FALSE, nc = 5)

@@ -124,6 +124,10 @@ columns are dropped before fitting (default: 1e-6).}
 
 \item{verbose}{whether to print progress messages (default: \code{FALSE}).}
 
+\item{missing}{logical or \code{NULL}; whether to fit the missing-data PGD objective.
+\code{NULL} auto-detects missing values in dense inputs. Only \code{method = "pgd"}
+supports \code{TRUE}; other methods set or require \code{FALSE}.}
+
 \item{nrep}{number of random restarts; the best fit (lowest final loss)
 is returned (default: 1).}
 }

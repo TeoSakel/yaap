@@ -41,11 +41,11 @@ archetypes_path.formula <- function(formula,
                                     ...,
                                     subset,
                                     na.action) {
-
     path_args <- .aa_path_dots(...)
     call <- path_args[["call"]] %||% match.call()
-    if (is.null(path_args[["call"]]))
+    if (is.null(path_args[["call"]])) {
         call[[1L]] <- quote(archetypes_path)
+    }
 
     terms <- stats::delete.response(stats::terms(formula, data = data))
     mf_call <- match.call(expand.dots = FALSE)
@@ -59,10 +59,12 @@ archetypes_path.formula <- function(formula,
     attr(terms, "intercept") <- 0L
     X <- stats::model.matrix(terms, mf)
     intercept <- colnames(X) == "(Intercept)"
-    if (any(intercept))
+    if (any(intercept)) {
         X <- X[, !intercept, drop = FALSE]
-    if (ncol(X) == 0L)
+    }
+    if (ncol(X) == 0L) {
         stop("Formula input must select at least one predictor column.", call. = FALSE)
+    }
 
     out <- do.call(
         .aa_archetypes_path_default,
@@ -83,20 +85,25 @@ archetypes_path.fd <- function(x, K, ...) {
 
     method_args <- list(...)
     if ("scale" %in% names(method_args)) {
-        msg <- paste("`scale` is computed from the fd basis and",
-                     "cannot be supplied to `archetypes_path.fd()`.")
+        msg <- paste(
+            "`scale` is computed from the fd basis and",
+            "cannot be supplied to `archetypes_path.fd()`."
+        )
         stop(msg, call. = FALSE)
     }
 
     coefs <- t(stats::coef(data))
-    stopifnot("`fd` must have a 2-D coefficient matrix." = length(dim(coefs)) == 2L)
+    if (length(dim(coefs)) != 2L) {
+        stop("`fd` must have a 2-D coefficient matrix.", call. = FALSE)
+    }
 
     G <- fda::eval.penalty(data[["basis"]], Lfdobj = 0)
 
     path_args <- .aa_path_dots(...)
     call <- path_args[["call"]] %||% match.call()
-    if (is.null(path_args[["call"]]))
+    if (is.null(path_args[["call"]])) {
         call[[1L]] <- quote(archetypes_path)
+    }
 
     out <- do.call(
         .aa_archetypes_path_default,
@@ -133,8 +140,9 @@ archetypes_path.default <- function(x,
                                     ...) {
     path_args <- .aa_path_dots(...)
     call <- path_args[["call"]] %||% match.call()
-    if (is.null(path_args[["call"]]))
+    if (is.null(path_args[["call"]])) {
         call[[1L]] <- quote(archetypes_path)
+    }
     do.call(
         .aa_archetypes_path_default,
         c(
@@ -187,9 +195,9 @@ archetypes_path.default <- function(x,
                                         missing = NULL,
                                         nrep = 1L,
                                         ...) {
-    K       <- .aa_path_normalize_K(K, expand_scalar = TRUE)
-    data    <- if (inherits(x, "data.frame")) as.matrix(x) else x
-    eps     <- eps %||% ifelse(inherits(data, "sparseMatrix"), 0, 1e-8)
+    K <- .aa_path_normalize_K(K, expand_scalar = TRUE)
+    data <- if (inherits(x, "data.frame")) as.matrix(x) else x
+    eps <- eps %||% ifelse(inherits(data, "sparseMatrix"), 0, 1e-8)
     missing <- missing %||% any(is.na(data))
 
     .aa_fit_path_engine(
@@ -223,10 +231,15 @@ archetypes_path.default <- function(x,
                                     call,
                                     method,
                                     family = "gaussian") {
-    stopifnot("`models` must be a list" = is.list(models))
-    stopifnot("`K` must match `models`" = length(K) == length(models))
-    if (!all(vapply(models, inherits, logical(1L), what = "archetypes")))
+    if (!is.list(models)) {
+        stop("`models` must be a list.", call. = FALSE)
+    }
+    if (length(K) != length(models)) {
+        stop("`K` must match `models`.", call. = FALSE)
+    }
+    if (!all(vapply(models, inherits, logical(1L), what = "archetypes"))) {
         stop("`models` must contain only archetypes fits.", call. = FALSE)
+    }
     names(models) <- names(models) %||% paste0("K", K)
     structure(
         list(
@@ -264,8 +277,9 @@ archetypes_path.default <- function(x,
                                 data = NULL,
                                 ...) {
     K <- .aa_path_normalize_K(K, expand_scalar = FALSE)
-    if (is_tabular(init))
+    if (is_tabular(init)) {
         stop("`init` cannot be a matrix when fitting an archetypes path.", call. = FALSE)
+    }
 
     setup_call <- call
     setup_call[["K"]] <- max(K)
@@ -326,12 +340,15 @@ archetypes_path.default <- function(x,
     # Extract fit
     models <- raw[["models"]]
     if (is_count(i)) {
-        stopifnot("Model index is out of bounds." = i <= length(models))
+        if (i > length(models)) {
+            stop("Model index is out of bounds.", call. = FALSE)
+        }
         idx <- as.integer(i)
     } else if (is_single_string(i)) {
         idx <- match(i, names(models))
-        if (is.na(idx))
+        if (is.na(idx)) {
             stop(sprintf("Unknown archetypes path model name: %s", i), call. = FALSE)
+        }
     } else {
         stop("`i` must be a single model index or model name.", call. = FALSE)
     }
@@ -340,10 +357,12 @@ archetypes_path.default <- function(x,
     # Inflate the fit with shared data and metadata from the path
     fit[["data"]] <- raw[["data"]]
     fit[["call"]][["K"]] <- raw[["K"]][[idx]]
-    if (!is.null(raw[["formula"]]))
+    if (!is.null(raw[["formula"]])) {
         fit[["formula"]] <- raw[["formula"]]
-    if (!is.null(raw[["terms"]]))
+    }
+    if (!is.null(raw[["terms"]])) {
         fit[["terms"]] <- raw[["terms"]]
+    }
     fit
 }
 
@@ -352,23 +371,28 @@ archetypes_path.default <- function(x,
 `[.archetypes_path` <- function(x, i, ...) {
     raw <- unclass(x)
     models <- raw[["models"]]
-    if (missing(i))
+    if (missing(i)) {
         i <- seq_along(models)
+    }
 
     idx <- if (is_all_count(i)) {
-        stopifnot("Model index is out of bounds." = all(i <= length(models)))
+        if (any(i > length(models))) {
+            stop("Model index is out of bounds.", call. = FALSE)
+        }
         as.integer(i)
     } else if (is.character(i) && length(i) > 0L && !anyNA(i)) {
         match(i, names(models))
     } else if (is.logical(i) && !anyNA(i)) {
-        stopifnot("Logical mask length must be equal to the number of models." =
-                      length(i) == length(models))
+        if (length(i) != length(models)) {
+            stop("Logical mask length must equal the number of models.", call. = FALSE)
+        }
         which(i)
     } else {
         stop("`i` must be model indices, model names, or a logical model mask.", call. = FALSE)
     }
-    if (anyNA(idx))
+    if (anyNA(idx)) {
         stop("Unknown archetypes path model.", call. = FALSE)
+    }
 
     out <- .aa_new_archetypes_path(
         models = models[idx],
@@ -419,16 +443,18 @@ print.archetypes_path <- function(x, ...) {
 #'
 #' @exportS3Method
 screeplot.archetypes_path <- function(x, y = NULL, plot = TRUE, ...) {
-    stopifnot("`plot` must be TRUE or FALSE." = is.logical(plot))
+    if (!is.logical(plot)) {
+        stop("`plot` must be TRUE or FALSE.", call. = FALSE)
+    }
     raw <- unclass(x)
 
     # Extract metrics from fits
-    fits      <- lapply(seq_along(raw[["models"]]), function(i) x[[i]])
-    metric    <- .aa_path_metric_name(raw, y)
-    values    <- vapply(fits, .aa_path_metric_value, numeric(1L), y = y,      metric = metric)
-    loss      <- vapply(fits, .aa_path_metric_value, numeric(1L), y = "loss", metric = "loss")
-    r2        <- vapply(fits, .aa_path_metric_value, numeric(1L), y = "r2",   metric = "r2")
-    n_iter    <- vapply(fits, function(fit) nrow(fit[["loss"]]) - 1L, integer(1L))
+    fits <- lapply(seq_along(raw[["models"]]), function(i) x[[i]])
+    metric <- .aa_path_metric_name(raw, y)
+    values <- vapply(fits, .aa_path_metric_value, numeric(1L), y = y, metric = metric)
+    loss <- vapply(fits, .aa_path_metric_value, numeric(1L), y = "loss", metric = "loss")
+    r2 <- vapply(fits, .aa_path_metric_value, numeric(1L), y = "r2", metric = "r2")
+    n_iter <- vapply(fits, function(fit) nrow(fit[["loss"]]) - 1L, integer(1L))
     converged <- vapply(fits, function(fit) isTRUE(fit[["converged"]]), logical(1L))
 
     out <- data.frame(
@@ -466,12 +492,16 @@ screeplot.archetypes_path <- function(x, y = NULL, plot = TRUE, ...) {
 }
 
 .aa_path_normalize_K <- function(K, expand_scalar = FALSE) {
-    stopifnot("`expand_scalar` must be TRUE or FALSE" = is_logical(expand_scalar))
-    if (length(K) < 1L || !is_all_count(K))
+    if (!is_logical(expand_scalar)) {
+        stop("`expand_scalar` must be TRUE or FALSE.", call. = FALSE)
+    }
+    if (length(K) < 1L || !is_all_count(K)) {
         stop("`K` must be a positive integer vector.", call. = FALSE)
+    }
     K <- as.integer(K)
-    if (expand_scalar && length(K) == 1L)
+    if (expand_scalar && length(K) == 1L) {
         K <- seq_len(K)
+    }
     sort(unique(K))
 }
 
@@ -479,14 +509,17 @@ screeplot.archetypes_path <- function(x, y = NULL, plot = TRUE, ...) {
     if (is.null(y)) {
         method <- x[["method"]]
         family <- x[["family"]] %||% "gaussian"
-        if (method %in% c("pgd", "nnls") && identical(family, "gaussian"))
+        if (method %in% c("pgd", "nnls") && identical(family, "gaussian")) {
             return("AIC")
+        }
         return("r2")
     }
-    if (is.function(y))
+    if (is.function(y)) {
         return("function")
-    if (!is_non_empty_string(y))
+    }
+    if (!is_non_empty_string(y)) {
         stop("`y` must be NULL, a single loss-column name, 'AIC', or a function.", call. = FALSE)
+    }
     y
 }
 
@@ -503,7 +536,8 @@ screeplot.archetypes_path <- function(x, y = NULL, plot = TRUE, ...) {
         }
         utils::tail(loss[[metric]], 1L)
     }
-    if (!(is_number(value) || (identical(length(value), 1L) && is.numeric(value) && is.na(value))))
+    if (!(is_number(value) || (identical(length(value), 1L) && is.numeric(value) && is.na(value)))) {
         stop("`y` function must return a single numeric value.", call. = FALSE)
+    }
     as.numeric(value)
 }

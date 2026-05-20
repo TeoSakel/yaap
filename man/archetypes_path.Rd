@@ -3,13 +3,15 @@
 \name{archetypes_path}
 \alias{archetypes_path}
 \alias{archetypes_path.formula}
-\alias{archetypes_path.default}
 \alias{archetypes_path.fd}
+\alias{archetypes_path.default}
 \title{Fit an Archetypes Path Across K}
 \usage{
 archetypes_path(x, ...)
 
 \method{archetypes_path}{formula}(formula, data = NULL, K, ..., subset, na.action)
+
+\method{archetypes_path}{fd}(x, K, ...)
 
 \method{archetypes_path}{default}(
   x,
@@ -33,8 +35,6 @@ archetypes_path(x, ...)
   nrep = 1L,
   ...
 )
-
-\method{archetypes_path}{fd}(x, K, ...)
 }
 \arguments{
 \item{x}{numeric matrix, data frame, formula, or supported specialized input.}
@@ -119,6 +119,10 @@ columns are dropped before fitting (default: 1e-6).}
 (default: 0 for sparse input, 1e-8 for dense).}
 
 \item{verbose}{whether to print progress messages (default: \code{FALSE}).}
+
+\item{missing}{logical or \code{NULL}; whether to fit the missing-data PGD objective.
+\code{NULL} auto-detects missing values in dense inputs. Only \code{method = "pgd"}
+supports \code{TRUE}; other methods set or require \code{FALSE}.}
 
 \item{nrep}{number of random restarts; the best fit (lowest final loss)
 is returned (default: 1).}

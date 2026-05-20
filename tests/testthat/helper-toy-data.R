@@ -1,7 +1,8 @@
 toy_path <- function() {
     path <- system.file("extdata", "toy.csv", package = "yaap")
-    if (!nzchar(path))
+    if (!nzchar(path)) {
         path <- file.path("..", "..", "inst", "extdata", "toy.csv")
+    }
     path
 }
 
@@ -43,10 +44,12 @@ expect_archetypes_fit <- function(fit,
     expect_row_stochastic(fit[["compositions"]])
     expect_true(is_all_finite(fit[["loss"]][["loss"]]))
 
-    if (!is.null(fitted_dim))
+    if (!is.null(fitted_dim)) {
         expect_equal(dim(fitted(fit)), fitted_dim)
-    if (!is.null(residual_dim))
+    }
+    if (!is.null(residual_dim)) {
         expect_equal(dim(residuals(fit)), residual_dim)
+    }
 }
 
 manual_fit <- function() {

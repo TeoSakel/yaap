@@ -97,13 +97,21 @@ test_that("PAA warns and ignores explicit run_aa scaling", {
 })
 
 test_that("PAA validates family-specific inputs", {
-    expect_error(archetypes_paa(matrix(c(0, 2, 1, 0), ncol = 2), 2L, family = "bernoulli"),
-                 "Bernoulli")
-    expect_error(archetypes_paa(matrix(c(0, -1, 1, 0), ncol = 2), 2L, family = "poisson"),
-                 "Poisson")
-    expect_error(archetypes_paa(matrix(c(0, 0, 1, 0), ncol = 2, byrow = TRUE),
-                                2L, family = "multinomial"),
-                 "positive totals")
+    expect_error(
+        archetypes_paa(matrix(c(0, 2, 1, 0), ncol = 2), 2L, family = "bernoulli"),
+        "Bernoulli"
+    )
+    expect_error(
+        archetypes_paa(matrix(c(0, -1, 1, 0), ncol = 2), 2L, family = "poisson"),
+        "Poisson"
+    )
+    expect_error(
+        archetypes_paa(matrix(c(0, 0, 1, 0), ncol = 2, byrow = TRUE),
+            2L,
+            family = "multinomial"
+        ),
+        "positive totals"
+    )
 })
 
 test_that("PAA fitted and predict are family-aware", {

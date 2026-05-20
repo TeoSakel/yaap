@@ -12,8 +12,9 @@ test_that("aa_init covers every initialization method", {
     for (method in methods) {
         set.seed(1)
         args <- list(X = X, K = 3L, method = method)
-        if (method == "hull_outmost")
+        if (method == "hull_outmost") {
             args[["hull_method"]] <- "projected"
+        }
 
         init <- do.call(aa_init, args)
 
@@ -34,16 +35,26 @@ test_that("aa_init validates required method arguments", {
     expect_error(aa_init(X, K = 3L, method = "random", batch_size = nrow(X) + 1L), "batch_size")
     expect_error(aa_init(X, K = 3L, method = "random", batch_type = "bad"), "should be one of")
     expect_error(aa_init(X, K = 3L, method = "random", batch_replace = NA), "batch_replace")
-    expect_error(aa_init(X, K = 3L, method = "hull_outmost", hull_method = "bad"),
-                 "should be one of")
-    expect_error(aa_init(X, K = 3L, method = "hull_outmost", projected_dim = 0),
-                 "projected_dim")
-    expect_error(aa_init(X, K = 3L, method = "hull_outmost", n_partitions = 0),
-                 "n_partitions")
-    expect_error(aa_init(X, K = 3L, method = "hull_outmost", n_projection_max = 0),
-                 "n_projection_max")
-    expect_error(aa_init(X, K = 3L, method = "hull_outmost", use_unique_candidates = NA),
-                 "use_unique_candidates")
+    expect_error(
+        aa_init(X, K = 3L, method = "hull_outmost", hull_method = "bad"),
+        "should be one of"
+    )
+    expect_error(
+        aa_init(X, K = 3L, method = "hull_outmost", projected_dim = 0),
+        "projected_dim"
+    )
+    expect_error(
+        aa_init(X, K = 3L, method = "hull_outmost", n_partitions = 0),
+        "n_partitions"
+    )
+    expect_error(
+        aa_init(X, K = 3L, method = "hull_outmost", n_projection_max = 0),
+        "n_projection_max"
+    )
+    expect_error(
+        aa_init(X, K = 3L, method = "hull_outmost", use_unique_candidates = NA),
+        "use_unique_candidates"
+    )
 })
 
 test_that("furthest_sum refinement returns valid unique indices", {

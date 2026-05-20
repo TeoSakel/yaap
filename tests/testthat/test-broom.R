@@ -2,7 +2,7 @@ test_that("tidy.archetypes returns correct long-form for 'coordinates'", {
     fit <- manual_fit()
     X <- fit[["data"]]
 
-    td <- tidy(fit)  # default: matrix = "coordinates"
+    td <- tidy(fit) # default: matrix = "coordinates"
 
     expect_s3_class(td, "tbl_df")
     expect_named(td, c("archetype", "term", "value"))
@@ -81,8 +81,8 @@ test_that("augment.archetypes errors when no data available", {
     X <- toy_matrix()
     fit <- archetypes(
         A            = matrix(1:6, 3, 2),
-        coefficients = matrix(1/3, 3, 3),
-        compositions = matrix(1/3, 3, 3),
+        coefficients = matrix(1 / 3, 3, 3),
+        compositions = matrix(1 / 3, 3, 3),
         loss         = data.frame(loss = 0, r2 = 1, k_S = 1, k_A = 1),
         feature_map  = .aa_identity_feature_map(matrix(1:6, 3, 2))
     )
@@ -94,7 +94,7 @@ test_that("augment.archetypes accepts explicit new data", {
     X <- fit[["data"]]
 
     X_new <- X[2:4, ]
-    aug   <- augment(fit, data = X_new)
+    aug <- augment(fit, data = X_new)
 
     expect_equal(nrow(aug), 3L)
     comp_cols <- paste0(".", anames(fit))
@@ -111,7 +111,7 @@ test_that("tidy/glance/augment dispatch without attaching broom", {
     set.seed(1)
     X <- toy_matrix()
     fit <- suppressWarnings(run_aa(X, K = 2L, max_iter = 5L))
-    expect_s3_class(tidy(fit),   "tbl_df")
+    expect_s3_class(tidy(fit), "tbl_df")
     expect_s3_class(glance(fit), "tbl_df")
     expect_s3_class(augment(fit), "tbl_df")
 })
@@ -132,7 +132,7 @@ test_that("tidy.kernel_archetypes works for coordinates", {
 test_that("tidy.kernel_archetypes warns and returns empty tibble when coordinates is NULL", {
     set.seed(1)
     X <- toy_matrix()
-    G   <- exp(-as.matrix(dist(X))^2 / median(as.matrix(dist(X)))^2)
+    G <- exp(-as.matrix(dist(X))^2 / median(as.matrix(dist(X)))^2)
     fit <- suppressWarnings(run_aa(G, K = 3L, method = "kernel", kernel = "precomputed", max_iter = 5L))
 
     expect_false("coordinates" %in% names(fit))

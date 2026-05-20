@@ -1,6 +1,6 @@
 ---
 title: "Introduction to Archetypal Analysis with yaap"
-bibliography: ../references.bib
+bibliography: references.bib
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -506,6 +506,7 @@ any composition weight above 0.8 is removed, so no sample is close to any
 true vertex.
 
 ```{r delta-data-fit, warning=FALSE, fig.cap = "Truncated simplex: Larger delta lets archetypes escape the data hull and approach the true positions."}
+set.seed(1)
 K_d <- 3  # number of archetypes (simplex vertices)
 M_d <- 2  # number of features (2D for easy visualization)
 N_init <- 1000  # initial number of samples before truncation
@@ -526,7 +527,7 @@ X_delta <- S_trunc %*% A_true
 print(nrow(X_delta))  # observations after truncation
 
 # Fit models with different delta values
-delta_vals <- c(0, 0.25, 0.5)
+delta_vals <- c(0, 0.2, 0.35)
 res_delta  <- lapply(
     delta_vals,
     function(d) archetypes_pgd(X_delta, K = K_d, delta = d)

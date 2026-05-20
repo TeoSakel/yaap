@@ -116,7 +116,9 @@ archetypes_nnls <- function(x,
         check = function(ctx) {
             .aa_euclidean_check(ctx)
             if (!is.null(bigM)) {
-                stopifnot("`bigM` must be NULL or a positive number" = is_positive(bigM))
+                if (!is_positive(bigM)) {
+                    stop("`bigM` must be NULL or a positive number.", call. = FALSE)
+                }
             }
             .aa_check_max_no_update(max_no_update)
             invisible(TRUE)
@@ -137,10 +139,11 @@ archetypes_nnls <- function(x,
                         max_kappa = ctx[["max_kappa"]],
                         eps = ctx[["eps"]],
                         verbose = ctx[["verbose"]],
-                        loss_fun = if (!identical(ctx[["robust"]], FALSE))
+                        loss_fun = if (!identical(ctx[["robust"]], FALSE)) {
                             .aa_nnls_weighted_loss
-                        else
+                        } else {
                             .aa_nnls_loss
+                        }
                     ),
                     init_vars,
                     list(
@@ -166,10 +169,10 @@ archetypes_nnls <- function(x,
         A <- A[, -iM, drop = FALSE]
     }
 
-    xss <- xss %||% norm(X, "F")^2  # computed once
-    AAt <- tcrossprod(A)     # (K x K)
-    XAt <- tcrossprod(X, A)  # (N x K)
-    StS <- crossprod(S)      # (K x K)
+    xss <- xss %||% norm(X, "F")^2 # computed once
+    AAt <- tcrossprod(A) # (K x K)
+    XAt <- tcrossprod(X, A) # (N x K)
+    StS <- crossprod(S) # (K x K)
     rss <- xss - 2 * sum(S * XAt) + sum(StS * AAt)
 
     list(
@@ -214,8 +217,9 @@ archetypes_nnls <- function(x,
 }
 
 .aa_nnls_diagnostics <- function(loss, i, loss_terms, max_kappa, k_A = NA_real_) {
-    if ((i - 1L) %% 10 != 0L)
+    if ((i - 1L) %% 10 != 0L) {
         return(loss)
+    }
 
     if (max_kappa > 1) {
         loss[["k_S"]][i] <- sqrt(1 / rcond(loss_terms[["StS"]]))
@@ -259,7 +263,7 @@ archetypes_nnls <- function(x,
     #   S = (N x K) Archetypes Scores (new coordinates)
     #   rss = ||X - SA||^2 = ||X||^2 - 2*tr(SAXt) + tr(StS AAt) Residual Sum of Squares
     A0 <- A
-    Xt <- t(X)  # compute Xt once to reuse for B update
+    Xt <- t(X) # compute Xt once to reuse for B update
     loss_terms <- loss_fun(X, A, S, weight_fun = weight_fun)
     xss <- loss_terms[["xss"]]
     row_xss <- loss_terms[["row_xss"]]
@@ -304,7 +308,7 @@ archetypes_nnls <- function(x,
 
     if (verbose) message("Starting main loop...")
     for (i in seq_len(max_iter)) {
-        j <- i + 1L  # loss row to update
+        j <- i + 1L # loss row to update
         # S update
         S_raw <- .aa_solve_nnls(X, t(A), use_svd = FALSE) # Project X to A-simplex
         max_simplex_error <- max(max_simplex_error, max(abs(rowSums(S_raw) - 1)))
@@ -415,7 +419,8 @@ archetypes_nnls <- function(x,
     }
     # TODO: parallelize
     Beta <- matrix(0, nrow = nrow(Y), ncol = ncol(X))
-    for (i in seq_len(nrow(Y)))
+    for (i in seq_len(nrow(Y))) {
         Beta[i, ] <- stats::coef(nnls::nnls(X, Y[i, ]))
+    }
     Beta
 }

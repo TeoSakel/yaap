@@ -4,8 +4,9 @@ toy_benchmark_baseline_path <- function() {
         file.path("tests", "testthat", "benchmark-toy-baseline.csv")
     )
     existing <- candidates[file.exists(candidates)]
-    if (length(existing) > 0)
+    if (length(existing) > 0) {
         return(existing[[1L]])
+    }
 
     candidates[[2L]]
 }
@@ -67,14 +68,16 @@ run_toy_benchmarks <- function(iterations = toy_benchmark_iterations()) {
 }
 
 read_toy_benchmark_baseline <- function(path = toy_benchmark_baseline_path()) {
-    if (!file.exists(path))
+    if (!file.exists(path)) {
         stop("Benchmark baseline file not found: ", path, call. = FALSE)
+    }
 
     baseline <- utils::read.csv(path, stringsAsFactors = FALSE)
     required <- c("name", "median_sec", "iterations", "package_version", "updated_at")
     missing <- setdiff(required, names(baseline))
-    if (length(missing) > 0)
+    if (length(missing) > 0) {
         stop("Benchmark baseline is missing columns: ", paste(missing, collapse = ", "), call. = FALSE)
+    }
 
     baseline
 }
@@ -103,8 +106,9 @@ compare_toy_benchmarks <- function(current,
 format_toy_benchmark_failures <- function(comparison,
                                           threshold = toy_benchmark_slowdown_threshold()) {
     failures <- comparison[!comparison[["passed"]], , drop = FALSE]
-    if (nrow(failures) == 0L)
+    if (nrow(failures) == 0L) {
         return("")
+    }
 
     lines <- sprintf(
         "%s: current %.3fs, baseline %.3fs, ratio %.2fx",

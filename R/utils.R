@@ -52,7 +52,9 @@ is_all_non_negative <- function(x) is_all_finite(x) && all(x >= 0)
 
 is_row_stochastic <- function(x, tol = sqrt(.Machine$double.eps)) {
     Sx <- tryCatch(rowSums(x), error = function(e) NULL)
-    if (is.null(Sx)) return(FALSE)
+    if (is.null(Sx)) {
+        return(FALSE)
+    }
     vals <- if (inherits(x, "Matrix")) methods::slot(x, "x") else as.numeric(x)
     non_negative <- all(is.finite(vals)) && all(vals >= -tol)
     non_negative && isTRUE(all.equal(Sx, rep(1, length(Sx)), check.attributes = FALSE, tolerance = tol))
@@ -67,27 +69,36 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # Weighting Function for Robust Archetypal Analysis ---------------------------------------------
 
 .aa_robust_label <- function(robust) {
-    if (identical(robust, FALSE))
+    if (identical(robust, FALSE)) {
         return(NULL)
-    if (identical(robust, TRUE))
+    }
+    if (identical(robust, TRUE)) {
         return("psi.bisquare")
-    if (is_non_empty_string(robust))
+    }
+    if (is_non_empty_string(robust)) {
         return(robust)
-    if (is.function(robust))
+    }
+    if (is.function(robust)) {
         return("function")
+    }
     NULL
 }
 
 .aa_resolve_robust <- function(robust, robust_args = list()) {
-    if (identical(robust, FALSE))
+    if (identical(robust, FALSE)) {
         return(NULL)
+    }
 
-    stopifnot("`robust_args` must be a list." = is.list(robust_args))
-    if (any(names(robust_args) %in% c("u", "deriv")))
+    if (!is.list(robust_args)) {
+        stop("`robust_args` must be a list.", call. = FALSE)
+    }
+    if (any(names(robust_args) %in% c("u", "deriv"))) {
         stop("`robust_args` cannot include `u` or `deriv`.", call. = FALSE)
+    }
 
-    if (identical(robust, TRUE))
+    if (identical(robust, TRUE)) {
         robust <- "psi.bisquare"
+    }
 
     error_msg <- "`robust` must be FALSE, TRUE, a MASS psi function name, or a function."
     if (is_non_empty_string(robust)) {
@@ -96,26 +107,30 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
             get(robust, envir = asNamespace("MASS"), mode = "function", inherits = FALSE),
             error = function(e) NULL
         )
-        if (!is.function(psi_fun))
+        if (!is.function(psi_fun)) {
             stop(error_msg, call. = FALSE)
+        }
         return(list(fun = psi_fun, label = robust))
     }
 
-    if (is.function(robust))
+    if (is.function(robust)) {
         return(list(fun = robust, label = "function"))
+    }
     stop(error_msg, call. = FALSE)
 }
 
 .aa_weight_fun <- function(robust, robust_args = list()) {
     spec <- .aa_resolve_robust(robust, robust_args)
-    if (is.null(spec))
+    if (is.null(spec)) {
         return(NULL)
+    }
 
     function(row_rss) {
         row_resid <- sqrt(pmax(row_rss, 0))
         scale <- stats::mad(row_resid, center = 0)
-        if (!is.finite(scale) || scale <= .Machine$double.eps)
+        if (!is.finite(scale) || scale <= .Machine$double.eps) {
             return(rep(1, length(row_rss)))
+        }
 
         weights <- do.call(
             spec[["fun"]],
@@ -126,76 +141,47 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 }
 
 .aa_weight_rows <- function(X, row_weights = NULL) {
-    if (is.null(row_weights))
+    if (is.null(row_weights)) {
         return(X)
+    }
     X * row_weights
 }
 
 .aa_check_row_weights <- function(row_weights, n) {
-    if (is.null(row_weights))
+    if (is.null(row_weights)) {
         return(NULL)
-    stopifnot("row_weights must match rows in X" = length(row_weights) == n)
-    stopifnot("row_weights must be finite and non-negative" = is_all_non_negative(row_weights))
+    }
+    if (length(row_weights) != n) {
+        stop("`row_weights` must have one value per row of `X`.", call. = FALSE)
+    }
+    if (!is_all_non_negative(row_weights)) {
+        stop("`row_weights` must be finite and non-negative.", call. = FALSE)
+    }
     row_weights
 }
 
-# Scale data without forcing sparse inputs through dense centering.
-.aa_scale_safe <- function(X, center = !inherits(X, "sparseMatrix"), scale = TRUE) {
-    is_sparse <- inherits(X, "sparseMatrix")
-    X_attrs <- attributes(X)
 
-    # Normalize center
-    if (is.numeric(center)) {
-        if (length(center) == 1L)
-            center <- rep(center, ncol(X))
-        stopifnot(length(center) == ncol(X))
-        if (all(center == 0))
-            center <- FALSE
-    }
-
-    if (isTRUE(center))
-        center <- colMeans(X)
-
-    if (!isFALSE(center)) {
-        X <- sweep(as.matrix(X), 2L, center, "-")
-        if (is_sparse) {
-            msg <- paste(
-                "Centering matrices breaks sparsity;",
-                "consider using `center = FALSE`.",
-            )
-            warning(msg, call. = FALSE)
+.aa_check_sample_weights <- function(weights, n, allow_null = TRUE) {
+    if (is.null(weights)) {
+        if (allow_null) {
+            return(NULL)
         }
-        is_sparse <- FALSE
+        stop("weights must not be NULL", call. = FALSE)
     }
-
-    if (!isTRUE(scale)) {
-        if (!isFALSE(center))
-            attr(X, "scaled:center") <- center
-        return(X)
+    if (length(weights) != n) {
+        fmt <- "Number of weights (%d) must equal number of rows in data (%d)"
+        stop(sprintf(fmt, length(weights), n), call. = FALSE)
     }
-
-    if (is.numeric(scale)) {
-        if (length(scale) == 1L)
-            scale <- rep(scale, ncol(X))
-        stopifnot(length(scale) == ncol(X))
-        x_scale <- scale
-    } else {
-        n <- nrow(X)
-        x_mean <- colMeans(X)
-        x2 <- colSums(X * X)
-        x_var <- pmax((x2 - n * x_mean * x_mean) / max(n - 1L, 1L), 0)
-        x_scale <- sqrt(x_var)
+    if (!is_all_non_negative(weights)) {
+        stop("`weights` must be finite and non-negative.", call. = FALSE)
     }
-    names(x_scale) <- colnames(X)
-    safe_scale <- ifelse(x_scale > 0, x_scale, 1)
-
-    X <- if (is_sparse) Matrix::colScale(X, 1 / safe_scale) else sweep(X, 2L, safe_scale, "/")
-    if (!is.null(X_attrs[["dimnames"]]))
-        dimnames(X) <- X_attrs[["dimnames"]]
-    if (!isFALSE(center))
-        attr(X, "scaled:center") <- center
-    attr(X, "scaled:scale") <- x_scale
-    X
+    if (!any(weights > 0)) {
+        stop("at least one weight must be positive.", call. = FALSE)
+    }
+    if (any(weights == 0)) {
+        warning("Some sample weights are zero.", call. = FALSE)
+    }
+    weights
 }
 
 # Mathematical Subroutines -----------------------------------------------------
@@ -203,12 +189,13 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # Compute squared Euclidean distance of each sample from center
 .aa_dist2 <- function(X, center = FALSE) {
     x2 <- rowSums(X * X)
-    if (isFALSE(center))
+    if (isFALSE(center)) {
         return(x2)
+    }
 
     x_mean <- if (isTRUE(center)) colMeans(X) else as.numeric(center)
     stopifnot("center must match columns in X" = length(x_mean) == ncol(X))
-    centered_x2 <- x2 - 2*as.numeric(X %*% x_mean) + as.numeric(x_mean %*% x_mean)
+    centered_x2 <- x2 - 2 * as.numeric(X %*% x_mean) + as.numeric(x_mean %*% x_mean)
     pmax(centered_x2, 0)
 }
 
@@ -219,15 +206,16 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     stopifnot(ncol(X) == ncol(Y))
 
     # squared distances from cosine law ||x||^2 + ||y||^2 − 2<x,y>
-    D2 <- outer(rowSums(X * X), rowSums(Y * Y), "+") - 2*tcrossprod(X, Y)
-    pmax(D2, 0)     # ensure non-negative distances
+    D2 <- outer(rowSums(X * X), rowSums(Y * Y), "+") - 2 * tcrossprod(X, Y)
+    pmax(D2, 0) # ensure non-negative distances
 }
 
 # Centered log-ratio transform after row closure, with zero replacement.
 .aa_clr <- function(X, zero_replace = sqrt(.Machine$double.eps)) {
     totals <- rowSums(X)
-    if (any(totals <= 0))
+    if (any(totals <= 0)) {
         stop("Cannot apply clr transform to rows with non-positive total", call. = FALSE)
+    }
     closed <- X / totals
     closed <- pmax(closed, zero_replace)
     log_closed <- log(closed)
@@ -238,16 +226,20 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # variance.  Returns NA when the input is empty or has a single unique value.
 .aa_otsu_threshold <- function(x, n_bins = 256L) {
     x <- x[is.finite(x)]
-    if (length(x) == 0L) return(NA_real_)
+    if (length(x) == 0L) {
+        return(NA_real_)
+    }
     rng <- range(x)
-    if (rng[1L] == rng[2L]) return(NA_real_)
+    if (rng[1L] == rng[2L]) {
+        return(NA_real_)
+    }
     breaks <- seq(rng[1L], rng[2L], length.out = n_bins + 1L)
     h <- graphics::hist(x, breaks = breaks, plot = FALSE)
     p <- h$counts / sum(h$counts)
     mids <- h$mids
     omega <- cumsum(p)
-    mu    <- cumsum(p * mids)
-    mu_T  <- mu[length(mu)]
+    mu <- cumsum(p * mids)
+    mu_T <- mu[length(mu)]
     valid <- omega > 0 & omega < 1
     sigma_b2 <- rep(-Inf, length(mids))
     sigma_b2[valid] <- (mu_T * omega[valid] - mu[valid])^2 /
@@ -259,14 +251,15 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # (based on the cluster means)
 .aa_effic <- function(X, Y) {
     # X, Y: data matrices (N×M), rows = samples, cols = features
-    Sx <- stats::cov(X)  # (M×M)
+    Sx <- stats::cov(X) # (M×M)
     Sy <- stats::cov(Y)
 
     # Try using Cholesky to invert PD matrix
     cx <- tryCatch(chol(Sx), error = function(e) NULL)
     if (is.null(cx)) {
         warning("cov(X) is singular; using Moore-Penrose pseudo-inverse for efficiency.",
-                call. = FALSE)
+            call. = FALSE
+        )
         .aa_require_namespace_for("MASS", "singular-covariance efficiency fallback")
         return(sum(diag(MASS::ginv(Sx) %*% Sy)))
     }
@@ -281,16 +274,16 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 .aa_sym_eigen <- function(S, k) {
     if (requireNamespace("RSpectra", quietly = TRUE)) {
         ev <- RSpectra::eigs_sym(S, k = k, which = "LM")
-        d  <- ev$values
-        V  <- ev$vectors
+        d <- ev$values
+        V <- ev$vectors
     } else if (requireNamespace("irlba", quietly = TRUE)) {
         ev <- irlba::partial_eigen(S, n = k)
-        d  <- ev$values
-        V  <- ev$vectors
+        d <- ev$values
+        V <- ev$vectors
     } else {
         ev <- eigen(S, symmetric = TRUE)
-        d  <- ev$values[seq_len(k)]
-        V  <- ev$vectors[, seq_len(k), drop = FALSE]
+        d <- ev$values[seq_len(k)]
+        V <- ev$vectors[, seq_len(k), drop = FALSE]
     }
     pos <- d > .Machine$double.eps * max(abs(d))
     list(d = d[pos], V = V[, pos, drop = FALSE])
@@ -300,19 +293,19 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # Returns a list with $data (N x k training-sample projections) and
 # $archetypes (K x k archetype projections).
 .aa_kernel_kpca <- function(G, H, k = 2L) {
-    cm   <- colMeans(G)
-    gm   <- mean(G)
-    Gc   <- sweep(G - cm, 2L, cm, "-") + gm
-    ev   <- .aa_sym_eigen(Gc, k)
-    dsq  <- sqrt(ev$d)
-    V    <- ev$V
-    k    <- length(dsq)
+    cm <- colMeans(G)
+    gm <- mean(G)
+    Gc <- sweep(G - cm, 2L, cm, "-") + gm
+    ev <- .aa_sym_eigen(Gc, k)
+    dsq <- sqrt(ev$d)
+    V <- ev$V
+    k <- length(dsq)
     cnames <- paste0("KPCA", seq_len(k))
     X_proj <- sweep(V, 2L, dsq, "*")
     rownames(X_proj) <- rownames(G)
     colnames(X_proj) <- cnames
-    KH     <- H %*% G
-    KH     <- sweep(KH - rowMeans(KH), 2L, cm, "-") + gm
+    KH <- H %*% G
+    KH <- sweep(KH - rowMeans(KH), 2L, cm, "-") + gm
     A_proj <- sweep(KH %*% V, 2L, dsq, "/")
     rownames(A_proj) <- rownames(H)
     colnames(A_proj) <- cnames
@@ -322,17 +315,36 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # Archetypes Fitting Subroutines -----------------------------------------------------
 
 .aa_check_fit_controls <- function(ctx, n = nrow(ctx[["x"]])) {
-    stopifnot("max_iter must be a non-negative integer" =
-                  is_count(ctx[["max_iter"]], start_from = 0L))
-    stopifnot("tol must be positive" = is_positive(ctx[["tol"]]))
-    stopifnot("tol_r2 must be between (0, 1)" = ctx[["tol_r2"]] >= 0 && ctx[["tol_r2"]] <= 1)
-    stopifnot("K must be a positive integer less than or equal to the number of samples" =
-                  is_count(ctx[["K"]]) && ctx[["K"]] <= n)
-    stopifnot("max_kappa must be >=1" =
-                  identical(ctx[["max_kappa"]], Inf) ||
-                  (is_number(ctx[["max_kappa"]]) && ctx[["max_kappa"]] >= 1))
-    stopifnot("eps must be non-negative" = is_non_negative(ctx[["eps"]]))
-    stopifnot("robust_args must be a list" = is.list(ctx[["robust_args"]]))
+    if (!is_count(ctx[["max_iter"]], start_from = 0L)) {
+        stop("`max_iter` must be a non-negative integer.", call. = FALSE)
+    }
+    if (!is_positive(ctx[["tol"]])) {
+        stop("`tol` must be positive.", call. = FALSE)
+    }
+    if (!(is_number(ctx[["tol_r2"]]) && ctx[["tol_r2"]] >= 0 && ctx[["tol_r2"]] <= 1)) {
+        stop("`tol_r2` must be between 0 and 1.", call. = FALSE)
+    }
+    if (!(is_count(ctx[["K"]]) && ctx[["K"]] <= n)) {
+        stop(
+            paste(
+                "`K` must be a positive integer less than or equal to",
+                "the number of samples."
+            ),
+            call. = FALSE
+        )
+    }
+    if (!(
+        identical(ctx[["max_kappa"]], Inf) ||
+            (is_number(ctx[["max_kappa"]]) && ctx[["max_kappa"]] >= 1)
+    )) {
+        stop("`max_kappa` must be at least 1 or `Inf`.", call. = FALSE)
+    }
+    if (!is_non_negative(ctx[["eps"]])) {
+        stop("`eps` must be non-negative.", call. = FALSE)
+    }
+    if (!is.list(ctx[["robust_args"]])) {
+        stop("`robust_args` must be a list.", call. = FALSE)
+    }
     .aa_resolve_robust(ctx[["robust"]], ctx[["robust_args"]])
     invisible(TRUE)
 }
@@ -351,34 +363,54 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 }
 
 .aa_check_scale <- function(scale, p) {
-    if (is_logical(scale)) return(invisible(TRUE))
+    if (is_logical(scale)) {
+        return(invisible(TRUE))
+    }
 
     if (is.numeric(scale) && is.null(dim(scale))) {
-        stopifnot("vector scale must have one value per feature" = length(scale) == p)
-        stopifnot("vector scale must be finite positive" = is_all_positive(scale))
+        if (length(scale) != p) {
+            stop("Vector `scale` must have one value per feature.", call. = FALSE)
+        }
+        if (!is_all_positive(scale)) {
+            stop("Vector `scale` values must be finite and positive.", call. = FALSE)
+        }
         return(invisible(TRUE))
     }
 
     is_scale_matrix <- is_matrix(scale)
-    stopifnot("scale must be TRUE, FALSE, a numeric vector, or a dense or sparse matrix" =
-                  is_scale_matrix)
-    stopifnot("matrix scale must have one row and column per feature" =
-                  identical(dim(scale), c(p, p)))
+    if (!is_scale_matrix) {
+        stop(
+            paste(
+                "`scale` must be TRUE, FALSE, a numeric vector,",
+                "or a dense or sparse matrix."
+            ),
+            call. = FALSE
+        )
+    }
+    if (!identical(dim(scale), c(p, p))) {
+        stop("Matrix `scale` must have one row and column per feature.", call. = FALSE)
+    }
 
     values <- if (isS4(scale) && "x" %in% methods::slotNames(scale)) {
         scale@x
     } else {
         as.vector(scale)
     }
-    stopifnot("matrix scale contains missing or non-finite values" = is_all_finite(values))
+    if (!is_all_finite(values)) {
+        stop("Matrix `scale` contains missing or non-finite values.", call. = FALSE)
+    }
     is_symmetric <- if (inherits(scale, "Matrix")) {
         Matrix::isSymmetric(scale)
     } else {
         isSymmetric(scale)
     }
-    stopifnot("matrix scale must be symmetric" = is_symmetric)
+    if (!is_symmetric) {
+        stop("Matrix `scale` must be symmetric.", call. = FALSE)
+    }
     is_pd <- !inherits(try(chol(as.matrix(scale)), silent = TRUE), "try-error")
-    stopifnot("matrix scale must be positive definite" = is_pd)
+    if (!is_pd) {
+        stop("Matrix `scale` must be positive definite.", call. = FALSE)
+    }
     invisible(TRUE)
 }
 
@@ -387,8 +419,9 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 .aa_checks_edge_cases <- function(data, K, verbose = FALSE, M = NULL) {
     out <- NULL
     if (K == nrow(data)) { # X = A
-        if (verbose)
+        if (verbose) {
             message("K equals number of samples, returning identity archetypes")
+        }
         out <- .aa_identity_fit(data, M = M)
     } else if (K == 1L) { # Archetype = mean of X
         if (verbose) message("K equals 1, returning mean archetype")
@@ -400,7 +433,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # Edge case K == N: each sample is its own archetype
 .aa_identity_fit <- function(X, M = NULL, call = NULL) {
     A <- X
-    rownames(A) <- paste0("A", seq_len(nrow(X)))  # remove row names for consistency
+    rownames(A) <- paste0("A", seq_len(nrow(X))) # remove row names for consistency
     identity <- if (inherits(X, "sparseMatrix")) Matrix::Diagonal(nrow(X)) else diag(nrow(X))
     B <- S <- identity
     dimnames(B) <- list(rownames(A), rownames(X))
@@ -466,8 +499,9 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 }
 
 .aa_col_sds <- function(X) {
-    if (!inherits(X, "sparseMatrix"))
+    if (!inherits(X, "sparseMatrix")) {
         return(matrixStats::colSds(X))
+    }
 
     n <- nrow(X)
     x_mean <- colMeans(X)
@@ -510,16 +544,18 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 
 .aa_pack_lower_tri <- function(x) {
     x <- as.matrix(x)
-    if (nrow(x) != ncol(x))
+    if (nrow(x) != ncol(x)) {
         stop("`x` must be a square matrix.", call. = FALSE)
+    }
     c(nrow(x), x[lower.tri(x, diag = TRUE)])
 }
 
 .aa_unpack_lower_tri <- function(x) {
     p <- as.integer(x[[1L]])
     expected <- p * (p + 1L) / 2L
-    if (!is.finite(p) || p < 0L || length(x) != expected + 1L)
+    if (!is.finite(p) || p < 0L || length(x) != expected + 1L) {
         stop("Packed lower-triangular matrix has invalid dimensions.", call. = FALSE)
+    }
 
     out <- matrix(0, nrow = p, ncol = p)
     out[lower.tri(out, diag = TRUE)] <- x[-1L]
@@ -527,8 +563,9 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 }
 
 .aa_preprocess_missing <- function(data, sd_threshold, verbose, scale = TRUE) {
-    if (is_matrix(scale))
+    if (is_matrix(scale)) {
         stop("matrix `scale` is not supported with `missing = TRUE`.", call. = FALSE)
+    }
 
     requested_scale_true <- isTRUE(scale)
     scale_mode <- if (identical(scale, FALSE)) "none" else "vector"
@@ -573,18 +610,21 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
         M <- Matrix::Matrix(M, sparse = TRUE)
         X <- Matrix::drop0(Matrix::Matrix(X, sparse = TRUE))
         attr(X, "scaled:scale") <- stats[["sd"]]
-        if (isTRUE(scale))
+        if (isTRUE(scale)) {
             attr(X, "scaled:center") <- stats[["mean"]]
+        }
     }
 
     X <- .aa_filter_low_variance(X, sd_threshold)
     mask <- attr(X, "mask")
-    if (!is.null(mask))
+    if (!is.null(mask)) {
         M <- M[, mask, drop = FALSE]
+    }
 
     if (!requested_scale_true && is.numeric(scale) && is.null(dim(scale))) {
-        if (!is.null(mask))
+        if (!is.null(mask)) {
             scale <- scale[mask]
+        }
         scale_factor <- ifelse(scale > 0, scale, 1)
         x_attrs <- attributes(X)
         X <- if (inherits(X, "sparseMatrix")) {
@@ -595,16 +635,18 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
         attributes(X) <- utils::modifyList(attributes(X), x_attrs)
         attr(X, "scale:factor") <- scale_factor
     } else if (requested_scale_true) {
-        if (!is.null(mask))
+        if (!is.null(mask)) {
             scale <- scale[mask]
+        }
         attr(X, "scale:factor") <- ifelse(scale > 0, scale, 1)
     }
 
     attr(X, "scale:mode") <- scale_mode
     attr(X, "restore:center") <- original_center
     attr(X, "missing") <- TRUE
-    if (inherits(M, "sparseMatrix"))
+    if (inherits(M, "sparseMatrix")) {
         M <- Matrix::drop0(M)
+    }
 
     list(X = X, M = M)
 }
@@ -624,8 +666,9 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 
 .aa_scale_sparse_observed <- function(X, center, scale) {
     entries <- Matrix::summary(X)
-    if (length(entries[["i"]]) == 0L)
+    if (length(entries[["i"]]) == 0L) {
         return(X)
+    }
     vals <- (entries[["x"]] - center[entries[["j"]]]) / scale[entries[["j"]]]
     Matrix::drop0(Matrix::sparseMatrix(
         i = entries[["i"]],
@@ -639,13 +682,15 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 .aa_fit_space_col_sds <- function(X) {
     scale_mode <- attr(X, "scale:mode")
     data_scale <- attr(X, "scaled:scale")
-    if (identical(scale_mode, "none") && !is.null(data_scale))
+    if (identical(scale_mode, "none") && !is.null(data_scale)) {
         return(data_scale)
+    }
 
     if (identical(scale_mode, "vector")) {
         scale_factor <- attr(X, "scale:factor")
-        if (!is.null(data_scale) && !is.null(scale_factor))
+        if (!is.null(data_scale) && !is.null(scale_factor)) {
             return(data_scale / scale_factor)
+        }
     }
 
     .aa_col_sds(X)
@@ -654,8 +699,9 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 .aa_auto_bigM <- function(X, multiplier = 200) {
     feature_sd <- .aa_fit_space_col_sds(X)
     feature_scale <- sqrt(mean(feature_sd^2))
-    if (!is.finite(feature_scale) || feature_scale <= .Machine$double.eps)
+    if (!is.finite(feature_scale) || feature_scale <= .Machine$double.eps) {
         feature_scale <- 1
+    }
     multiplier * feature_scale * sqrt(2 / max(ncol(X), 1L))
 }
 
@@ -663,8 +709,9 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # maps `init` from original data space to preprocessed space of X.
 .aa_preprocess_init <- function(init, X) {
     # If `init` is not a matrix, return it as is (it will be processed by the init function)
-    if (!is_tabular(init))
+    if (!is_tabular(init)) {
         return(init)
+    }
 
     iM <- attr(X, "bigM")
     n_features <- ncol(X) - !is.null(iM)
@@ -681,17 +728,21 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     # Scale `init` to match X
     init <- as.matrix(init)
     x_center <- attr(X, "scaled:center")
-    if (!is.null(x_center))
+    if (!is.null(x_center)) {
         init <- sweep(init, 2L, x_center, "-")
+    }
 
     # Filter `init` to match filtered features in X
-    if (!is.null(mask) && ncol(init) == length(mask))
+    if (!is.null(mask) && ncol(init) == length(mask)) {
         init <- init[, mask, drop = FALSE]
+    }
 
-    if (identical(attr(X, "scale:mode"), "matrix"))
+    if (identical(attr(X, "scale:mode"), "matrix")) {
         init <- init %*% .aa_unpack_lower_tri(attr(X, "scale:factor"))
-    if (identical(attr(X, "scale:mode"), "vector"))
+    }
+    if (identical(attr(X, "scale:mode"), "vector")) {
         init <- sweep(init, 2L, attr(X, "scale:factor"), "/")
+    }
 
     # Add bigM column to init
     if (!is.null(iM)) {
@@ -709,12 +760,19 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 # if missing, generate default names A1, A2, ..., AK
 .aa_init_names <- function(A) {
     nm <- rownames(A)
-    if (is.null(nm))
+    if (is.null(nm)) {
         return(paste0("A", seq_len(nrow(A))))
+    }
 
-    stopifnot("Archetype names must not be missing" = !any(is.na(nm)))
-    stopifnot("Archetype names must not be empty"   = all(nzchar(nm)))
-    stopifnot("Archetype names must be unique"      = !anyDuplicated(nm))
+    if (any(is.na(nm))) {
+        stop("Archetype names must not be missing.", call. = FALSE)
+    }
+    if (!all(nzchar(nm))) {
+        stop("Archetype names must not be empty.", call. = FALSE)
+    }
+    if (anyDuplicated(nm)) {
+        stop("Archetype names must be unique.", call. = FALSE)
+    }
     nm
 }
 

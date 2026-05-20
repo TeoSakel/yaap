@@ -32,8 +32,9 @@ tidy.archetypes <- function(x, matrix = c("coordinates", "coefficients", "compos
     switch(matrix,
         coordinates = {
             A <- coordinates(x)
-            if (inherits(A, "fd"))
+            if (inherits(A, "fd")) {
                 A <- .aa_fd_to_matrix(A)
+            }
             .aa_pivot_matrix(
                 mat      = A,
                 row_name = "archetype",
@@ -83,8 +84,9 @@ tidy.kernel_archetypes <- function(x, matrix = c("coordinates", "coefficients", 
     matrix <- match.arg(matrix)
     if (identical(matrix, "coordinates")) {
         A <- coordinates(x)
-        if (inherits(A, "fd"))
+        if (inherits(A, "fd")) {
             A <- .aa_fd_to_matrix(A)
+        }
         if (is.null(A)) {
             warning(paste(
                 "`coordinates()` is NULL for this kernel_archetypes object.",
@@ -134,7 +136,7 @@ tidy.kernel_archetypes <- function(x, matrix = c("coordinates", "coefficients", 
 #' @exportS3Method generics::glance
 glance.archetypes <- function(x, ...) {
     loss_df <- x[["loss"]]
-    n       <- nrow(loss_df)
+    n <- nrow(loss_df)
     tibble::tibble(
         K         = ncol(compositions(x)),
         converged = isTRUE(x[["converged"]]),
@@ -150,7 +152,7 @@ glance.archetypes <- function(x, ...) {
 #' @exportS3Method generics::glance
 glance.kernel_archetypes <- function(x, ...) {
     loss_df <- x[["loss"]]
-    n       <- nrow(loss_df)
+    n <- nrow(loss_df)
     tibble::tibble(
         K         = nrow(x[["coefficients"]]),
         converged = isTRUE(x[["converged"]]),
@@ -185,19 +187,20 @@ glance.kernel_archetypes <- function(x, ...) {
 augment.archetypes <- function(x, data = NULL, ...) {
     if (is.null(data)) {
         stored <- x[["data"]]
-        if (is.null(stored))
+        if (is.null(stored)) {
             stop(paste(
                 "Data must be provided either as an argument to `augment()` or",
                 "when constructing the archetypes object."
             ), call. = FALSE)
+        }
         out <- tibble::as_tibble(stored)
-        S   <- compositions(x)
+        S <- compositions(x)
     } else {
         out <- tibble::as_tibble(data)
-        S   <- predict(x, newdata = data, type = "compositions", ...)
+        S <- predict(x, newdata = data, type = "compositions", ...)
     }
     comp_names <- paste0(".", anames(x))
-    comp_df    <- tibble::as_tibble(S, .name_repair = "minimal")
+    comp_df <- tibble::as_tibble(S, .name_repair = "minimal")
     colnames(comp_df) <- comp_names
     tibble::add_column(out, comp_df)
 }
@@ -211,15 +214,16 @@ augment.archetypes <- function(x, data = NULL, ...) {
 #' @exportS3Method generics::augment
 augment.kernel_archetypes <- function(x, data = NULL, ...) {
     raw <- if (!is.null(data)) data else x[["data"]]
-    if (is.null(raw))
+    if (is.null(raw)) {
         stop(paste(
             "Data must be provided either as an argument to `augment()` or",
             "when constructing the kernel_archetypes object."
         ), call. = FALSE)
-    out        <- tibble::as_tibble(raw)
-    S          <- compositions(x)
+    }
+    out <- tibble::as_tibble(raw)
+    S <- compositions(x)
     comp_names <- paste0(".", anames(x))
-    comp_df    <- tibble::as_tibble(S, .name_repair = "minimal")
+    comp_df <- tibble::as_tibble(S, .name_repair = "minimal")
     colnames(comp_df) <- comp_names
     tibble::add_column(out, comp_df)
 }
@@ -239,7 +243,7 @@ augment.kernel_archetypes <- function(x, data = NULL, ...) {
     # rep(..., each = nrow)  repeats each column label K times (X1,X1,..,X1, X2,..)
     out <- tibble::tibble(
         row = rep(row_ids, times = ncol(mat)),
-        col = rep(col_ids, each  = nrow(mat)),
+        col = rep(col_ids, each = nrow(mat)),
         value = as.vector(mat)
     )
     colnames(out)[1:2] <- c(row_name, col_name)

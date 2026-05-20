@@ -48,23 +48,29 @@ plot_archetypes_compositions <- function(compositions,
                                          ...) {
     S <- as.matrix(compositions)
     # Sanity checks
-    if (!is.numeric(S))
+    if (!is.numeric(S)) {
         stop("`compositions` must be a numeric matrix or data frame", call. = FALSE)
-    if (!all(is.finite(S)))
+    }
+    if (!all(is.finite(S))) {
         stop("`compositions` must contain only finite values", call. = FALSE)
-    if (any(S < 0))
+    }
+    if (any(S < 0)) {
         stop("`compositions` must contain non-negative composition weights", call. = FALSE)
-    if (nrow(S) == 0L || ncol(S) == 0L)
+    }
+    if (nrow(S) == 0L || ncol(S) == 0L) {
         stop("`compositions` must have at least one row and one column", call. = FALSE)
+    }
 
     # Set defaults
     rownames(S) <- rownames(S) %||% seq_len(nrow(S))
     colnames(S) <- colnames(S) %||% paste0("A", seq_len(ncol(S)))
     if (!is.null(distance)) {
-        if (missing(distance_rows))
+        if (missing(distance_rows)) {
             distance_rows <- distance
-        if (missing(distance_cols))
+        }
+        if (missing(distance_cols)) {
             distance_cols <- distance
+        }
     }
 
     row_hclust <- .aa_composition_hclust(cluster_rows, S, "rows", distance_rows, linkage)
@@ -94,8 +100,9 @@ plot_archetypes_compositions <- function(compositions,
     if (isTRUE(plot)) {
         old_par <- graphics::par(no.readonly = TRUE)
         on.exit(graphics::par(old_par), add = TRUE)
-        if (isTRUE(legend))
+        if (isTRUE(legend)) {
             graphics::par(mar = old_par[["mar"]] + c(0, 0, 0, 4))
+        }
         do.call(graphics::barplot, barplot_args)
         if (isTRUE(legend)) {
             usr <- graphics::par("usr")
@@ -116,12 +123,12 @@ plot_archetypes_compositions <- function(compositions,
     }
 
     out <- data.frame(
-        sample    = rep(rownames(S_plot), times = ncol(S_plot)),
-        archetype = rep(colnames(S_plot), each  = nrow(S_plot)),
-        weight    = as.vector(S_plot),
+        sample = rep(rownames(S_plot), times = ncol(S_plot)),
+        archetype = rep(colnames(S_plot), each = nrow(S_plot)),
+        weight = as.vector(S_plot),
         stringsAsFactors = FALSE
     )
-    out[["sample"]]    <- factor(out[["sample"]],    levels = rownames(S_plot))
+    out[["sample"]] <- factor(out[["sample"]], levels = rownames(S_plot))
     out[["archetype"]] <- factor(out[["archetype"]], levels = colnames(S_plot))
     invisible(out)
 }
@@ -137,8 +144,9 @@ plot_archetypes_compositions <- function(compositions,
 #'
 #' @export
 plot_archetypes_loss <- function(loss, plot = TRUE, ...) {
-    if (is.null(loss[["loss"]]))
+    if (is.null(loss[["loss"]])) {
         stop("`loss` must contain a `loss` column for loss plots", call. = FALSE)
+    }
     iterations <- seq_len(nrow(loss)) - 1L
     values <- loss[["loss"]]
     plot_args <- list(
@@ -148,8 +156,9 @@ plot_archetypes_loss <- function(loss, plot = TRUE, ...) {
         xlab = "Iteration",
         ylab = "Loss"
     ) %|p|% list(...)
-    if (isTRUE(plot))
+    if (isTRUE(plot)) {
         do.call(graphics::plot, plot_args)
+    }
     invisible(data.frame(iteration = iterations, loss = values))
 }
 
@@ -174,25 +183,28 @@ plot_archetypes_profiles <- function(coordinates,
                                      ...) {
     if (inherits(coordinates, "fd")) {
         plot_args <- list(...)
-        if (isTRUE(plot))
+        if (isTRUE(plot)) {
             do.call(graphics::plot, c(list(x = coordinates), plot_args))
+        }
         return(invisible(NULL))
     }
 
     A <- as.matrix(coordinates)
-    if (!is.numeric(A))
+    if (!is.numeric(A)) {
         stop("`coordinates` must be numeric.", call. = FALSE)
-    if (ncol(A) < 1L)
+    }
+    if (ncol(A) < 1L) {
         stop("Profile plots require at least one feature.", call. = FALSE)
+    }
     family <- family %||% "gaussian"
 
     dots <- list(...)
     ylab <- dots[["ylab"]] %||%
         if (identical(family, "gaussian")) "Value" else sprintf("%s parameter", family)
-    xlab         <- dots[["xlab"]]          %||% "Feature"
-    col          <- dots[["col"]]
-    legend_text  <- dots[["legend.text"]]   %||% archetype_names
-    args_legend  <- dots[["args.legend"]]   %||% list(bty = "n")
+    xlab <- dots[["xlab"]] %||% "Feature"
+    col <- dots[["col"]]
+    legend_text <- dots[["legend.text"]] %||% archetype_names
+    args_legend <- dots[["args.legend"]] %||% list(bty = "n")
 
     barplot_args <- list(
         height = A,
@@ -206,14 +218,15 @@ plot_archetypes_profiles <- function(coordinates,
     dots[["height"]] <- NULL
     barplot_args[names(dots)] <- dots
 
-    if (isTRUE(plot))
+    if (isTRUE(plot)) {
         do.call(graphics::barplot, barplot_args)
+    }
     arch_names <- archetype_names %||% rownames(A) %||% seq_len(nrow(A))
     feat_names <- colnames(A) %||% seq_len(ncol(A))
     out <- data.frame(
         archetype = rep(arch_names, times = ncol(A)),
-        feature   = rep(feat_names, each  = nrow(A)),
-        value     = as.vector(A),
+        feature = rep(feat_names, each = nrow(A)),
+        value = as.vector(A),
         stringsAsFactors = FALSE
     )
     invisible(out)
@@ -253,28 +266,34 @@ plot_archetypes_coordinates <- function(coordinates,
                                         args.data.scatter = list(),
                                         plot = TRUE,
                                         ...) {
-    if (!is.list(args.data.scatter))
+    if (!is.list(args.data.scatter)) {
         stop("`args.data.scatter` must be a list", call. = FALSE)
+    }
     projection <- match.arg(projection)
-    if (is.null(data) && !identical(projection, "none"))
+    if (is.null(data) && !identical(projection, "none")) {
         stop("`projection` can only be 'none' when `data` is NULL.", call. = FALSE)
+    }
 
     A <- as.matrix(coordinates)
-    if (!is.numeric(A))
+    if (!is.numeric(A)) {
         stop("`coordinates` must be numeric.", call. = FALSE)
-    if (nrow(A) == 0L || ncol(A) == 0L)
+    }
+    if (nrow(A) == 0L || ncol(A) == 0L) {
         stop("`coordinates` must have at least one row and one column.", call. = FALSE)
+    }
     X <- NULL
     if (!is.null(data)) {
         X <- as.matrix(data)
-        if (!is.numeric(X))
+        if (!is.numeric(X)) {
             stop("`data` must be numeric.", call. = FALSE)
+        }
         if (ncol(X) != ncol(A)) {
             fmt <- "`data` has %d columns but `coordinates` has %d columns"
             stop(sprintf(fmt, ncol(X), ncol(A)), call. = FALSE)
         }
-        if (nrow(X) == 0L)
+        if (nrow(X) == 0L) {
             stop("`data` must contain at least one row.", call. = FALSE)
+        }
     }
 
     if (is.null(colnames(A))) {
@@ -284,22 +303,24 @@ plot_archetypes_coordinates <- function(coordinates,
             colnames(A) <- paste0("V", seq_len(ncol(A)))
         }
     }
-    if (!is.null(X) && is.null(colnames(X)))
+    if (!is.null(X) && is.null(colnames(X))) {
         colnames(X) <- colnames(A)
+    }
 
     pc <- NULL
     if (identical(projection, "pca")) {
         pc <- stats::prcomp(X, center = TRUE, scale. = FALSE, rank. = 2L)
-        X  <- pc[["x"]]
-        A  <- predict(pc, newdata = A)
+        X <- pc[["x"]]
+        A <- predict(pc, newdata = A)
         colnames(X) <- colnames(A) <- c("PC1", "PC2")
     }
 
-    if (ncol(A) < 2L)
+    if (ncol(A) < 2L) {
         stop("Coordinate plots require at least two dimensions.", call. = FALSE)
+    }
 
     dots <- list(...)
-    coord_args <- .aa_coordinate_args(dots, args.data.scatter)  # internal helper; uses %|p|%
+    coord_args <- .aa_coordinate_args(dots, args.data.scatter) # internal helper; uses %|p|%
     canvas_args <- coord_args[["canvas"]]
     archetype_args <- coord_args[["archetype"]]
     data_args <- coord_args[["data"]]
@@ -335,8 +356,9 @@ plot_archetypes_coordinates <- function(coordinates,
     )
     df_arch <- cbind(as.data.frame(A), df_arch)
 
-    if (is.null(X))
+    if (is.null(X)) {
         return(invisible(df_arch))
+    }
 
     df_X <- data.frame(
         name = rownames(X) %||% seq_len(nrow(X)),
@@ -348,41 +370,56 @@ plot_archetypes_coordinates <- function(coordinates,
 }
 
 .aa_composition_dist <- function(data, distance) {
-    if (inherits(distance, "dist"))
+    if (inherits(distance, "dist")) {
         return(distance)
+    }
     if (is.function(distance)) {
         d <- distance(data)
-        if (inherits(d, "dist"))
+        if (inherits(d, "dist")) {
             return(d)
+        }
         return(stats::as.dist(d))
     }
 
-    stopifnot("Clustering distance must be a non-empty string, function, or dist object" = is_non_empty_string(distance))
+    if (!is_non_empty_string(distance)) {
+        stop(
+            paste(
+                "Clustering distance must be a non-empty string,",
+                "function, or dist object."
+            ),
+            call. = FALSE
+        )
+    }
     distance <- ifelse(distance == "correlation", "pearson", distance)
-    if (distance %in% c("pearson", "spearman", "kendall"))
+    if (distance %in% c("pearson", "spearman", "kendall")) {
         return(stats::as.dist(1 - stats::cor(t(data), method = distance)))
+    }
     stats::dist(data, method = distance)
 }
 
 .aa_component_order <- function(components, mode) {
-    if (mode == "PC1")
+    if (mode == "PC1") {
         return(order(components[, 1L]))
-    if (ncol(components) < 2L)
+    }
+    if (ncol(components) < 2L) {
         return(NULL)
+    }
     order(atan2(components[, 2L], components[, 1L]))
 }
 
 .aa_composition_hclust <- function(value, data, margin, distance, linkage) {
     cluster_arg <- if (margin == "rows") "cluster_rows" else "cluster_cols"
-    if (inherits(value, "hclust"))
+    if (inherits(value, "hclust")) {
         return(value)
+    }
     if (is_single_string(value)) {
         mode <- toupper(value)
-        if (!(mode %in% c("PC1", "AOP")))
+        if (!(mode %in% c("PC1", "AOP"))) {
             stop(
                 sprintf("`%s` must be logical, 'PC1', 'AOP', or an hclust object", cluster_arg),
                 call. = FALSE
             )
+        }
         pca <- stats::prcomp(
             data,
             center = TRUE,
@@ -391,25 +428,30 @@ plot_archetypes_coordinates <- function(coordinates,
         )
         components <- if (margin == "rows") pca[["x"]] else pca[["rotation"]]
         order <- .aa_component_order(components, mode)
-        if (is.null(order))
+        if (is.null(order)) {
             return(NULL)
+        }
         return(list(order = order))
     }
-    if (!is.logical(value))
+    if (!is.logical(value)) {
         stop(
             sprintf("`%s` must be logical, 'PC1', 'AOP', or an hclust object", cluster_arg),
             call. = FALSE
         )
-    if (!isTRUE(value))
+    }
+    if (!isTRUE(value)) {
         return(NULL)
+    }
     if (margin == "rows") {
-        if (nrow(data) < 2L)
+        if (nrow(data) < 2L) {
             return(NULL)
+        }
         transformed <- .aa_clr(data)
         return(stats::hclust(.aa_composition_dist(transformed, distance), method = linkage))
     }
-    if (ncol(data) < 2L)
+    if (ncol(data) < 2L) {
         return(NULL)
+    }
     stats::hclust(.aa_composition_dist(t(data), distance), method = linkage)
 }
 

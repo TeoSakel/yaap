@@ -1,7 +1,8 @@
 test_that("dependency metadata keeps optional solvers optional", {
     desc_path <- system.file("DESCRIPTION", package = "yaap")
-    if (!nzchar(desc_path))
+    if (!nzchar(desc_path)) {
         desc_path <- testthat::test_path("..", "..", "DESCRIPTION")
+    }
     desc <- read.dcf(desc_path)[1L, ]
     imports <- desc[["Imports"]]
     suggests <- desc[["Suggests"]]
@@ -56,16 +57,17 @@ test_that("robust weight function resolves MASS psi functions", {
     )
     expect_equal(weight_fun(TRUE, list())(rep(0, 4)), rep(1, 4))
     expect_true(weight_fun("psi.huber", list(k = 1.345))(row_rss)[4] <
-                    weight_fun("psi.huber", list(k = 1.345))(row_rss)[2])
+        weight_fun("psi.huber", list(k = 1.345))(row_rss)[2])
     expect_true(weight_fun("psi.hampel", list(a = 2, b = 4, c = 8))(row_rss)[4] <
-                    weight_fun("psi.hampel", list(a = 2, b = 4, c = 8))(row_rss)[2])
+        weight_fun("psi.hampel", list(a = 2, b = 4, c = 8))(row_rss)[2])
 })
 
 test_that("robust weight function accepts custom MASS-contract psi functions", {
     weight_fun <- get(".aa_weight_fun", asNamespace("yaap"))
     psi <- function(u, deriv = 0) {
-        if (deriv != 0)
+        if (deriv != 0) {
             return(rep(1, length(u)))
+        }
         ifelse(abs(u) <= 1, 1, 0.25)
     }
 

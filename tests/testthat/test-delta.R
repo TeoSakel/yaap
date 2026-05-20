@@ -41,5 +41,5 @@ test_that("pgd delta relaxes coefficient row sums within bounds", {
 
     expect_equal(unname(rowsums[[1]]), rep(1, 3L), tolerance = 1e-8)
     expect_true(any(abs(rowsums[[2]] - 1) > 1e-4) ||
-                any(abs(rowsums[[3]] - 1) > 1e-4))
+        any(abs(rowsums[[3]] - 1) > 1e-4))
 })

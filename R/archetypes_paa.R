@@ -107,16 +107,22 @@ archetypes_paa <- function(x,
     )
     list(
         check = function(ctx) {
-            if (ctx[["missing"]])
+            if (ctx[["missing"]]) {
                 stop("`missing = TRUE` is not supported for `method = 'paa'`.", call. = FALSE)
-            if (!identical(ctx[["robust"]], FALSE))
+            }
+            if (!identical(ctx[["robust"]], FALSE)) {
                 stop("`robust` is not supported for `method = 'paa'`.", call. = FALSE)
-            if (!is.null(ctx[["weights"]]))
+            }
+            if (!is.null(ctx[["weights"]])) {
                 stop("`weights` are not supported for `method = 'paa'`.", call. = FALSE)
-            if (!identical(ctx[["scale"]], FALSE))
+            }
+            if (!identical(ctx[["scale"]], FALSE)) {
                 warning("`scale` is ignored for `method = 'paa'`.", call. = FALSE)
+            }
             .aa_check_fit_controls(ctx)
-            stopifnot("eps must be positive" = ctx[["eps"]] > 0)
+            if (!(is_number(ctx[["eps"]]) && ctx[["eps"]] > 0)) {
+                stop("`eps` must be positive for `method = \"paa\"`.", call. = FALSE)
+            }
             .aa_check_projected_gradient_controls(
                 step_size = step_size,
                 max_iter_optimizer = max_iter_optimizer,
@@ -178,8 +184,7 @@ archetypes_paa <- function(x,
         X / rowSums(X)
     }
 
-    switch(
-        family,
+    switch(family,
         gaussian = list(
             family = family,
             prepare = function(data) {
@@ -193,8 +198,9 @@ archetypes_paa <- function(x,
             family = family,
             prepare = function(data) {
                 X <- as_numeric_matrix(data)
-                stopifnot("Bernoulli data must lie in [0, 1]" =
-                              all(X >= 0 & X <= 1))
+                if (!all(X >= 0 & X <= 1)) {
+                    stop("Bernoulli data must lie in [0, 1].", call. = FALSE)
+                }
                 P <- clip_prob(X)
                 list(X = X, P = P)
             },
@@ -211,7 +217,9 @@ archetypes_paa <- function(x,
             family = family,
             prepare = function(data) {
                 X <- as_numeric_matrix(data)
-                stopifnot("Poisson data must be non-negative" = all(X >= 0))
+                if (!all(X >= 0)) {
+                    stop("Poisson data must be non-negative.", call. = FALSE)
+                }
                 list(X = X, P = clip_pos(X))
             },
             objective = function(X, Y) {
@@ -227,8 +235,12 @@ archetypes_paa <- function(x,
             family = family,
             prepare = function(data) {
                 X <- as_numeric_matrix(data)
-                stopifnot("Multinomial data must be non-negative" = all(X >= 0))
-                stopifnot("Multinomial rows must have positive totals" = all(rowSums(X) > 0))
+                if (!all(X >= 0)) {
+                    stop("Multinomial data must be non-negative.", call. = FALSE)
+                }
+                if (!all(rowSums(X) > 0)) {
+                    stop("Multinomial rows must have positive totals.", call. = FALSE)
+                }
                 list(X = X, P = normalize_rows(X))
             },
             objective = function(X, Y) {
@@ -282,8 +294,10 @@ archetypes_paa <- function(x,
     step_B <- step_size
 
     if (max_iter == 0L) {
-        return(list(A0 = A0, A = A, B = B, S = S, i = 0L,
-                    loss = loss, converged = TRUE))
+        return(list(
+            A0 = A0, A = A, B = B, S = S, i = 0L,
+            loss = loss, converged = TRUE
+        ))
     }
 
     if (verbose) message("Starting PAA optimization loop...")
@@ -312,8 +326,9 @@ archetypes_paa <- function(x,
 
         # B-update: hold compositions S fixed and move archetypes within the
         # convex hull of the fixed parameter profiles P.
-        if (accepted_update)
+        if (accepted_update) {
             grad_Y <- spec[["gradient"]](X, Y)
+        }
         grad_A <- crossprod(S, grad_Y)
         grad_B <- pseudo_grad(B, tcrossprod(grad_A, P))
         for (k in seq_len(max_iter_optimizer)) {
@@ -336,8 +351,9 @@ archetypes_paa <- function(x,
         # TODO: consider adding slack parametrers for poisson and potentially bernoulli
         if (!accepted_update) {
             no_update <- no_update + 1L
-            for (nm in names(loss))
+            for (nm in names(loss)) {
                 loss[[nm]][j] <- loss[[nm]][i]
+            }
             if (verbose) {
                 fmt <- paste(
                     "Iteration %d: PAA candidate did not improve loss;",
@@ -389,7 +405,7 @@ archetypes_paa <- function(x,
     obj <- spec[["objective"]](X, Y)
     step_S <- step_size
     converged <- FALSE
-    eps2 <- 1e-16  #  small constant to prevent division by zero in convergence check
+    eps2 <- 1e-16 #  small constant to prevent division by zero in convergence check
     for (i in seq_len(max_iter)) {
         grad_Y <- spec[["gradient"]](X, Y)
         grad_S <- tcrossprod(grad_Y, A)

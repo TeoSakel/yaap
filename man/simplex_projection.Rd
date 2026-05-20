@@ -38,5 +38,5 @@ proj_l1(mat)
 \references{
 Condat, L. (2016). Fast projection onto the simplex and the L_1 ball.
 Mathematical Programming, 158(1), 575-585.
-\url{http://dx.doi.org/10.1007/s10107-015-0946-6}
+\doi{10.1007/s10107-015-0946-6}
 }

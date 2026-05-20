@@ -1,6 +1,6 @@
 ---
 title: "Choosing an Initialization Method for Archetypal Analysis"
-bibliography: ../references.bib
+bibliography: references.bib
 output:
   rmarkdown::html_vignette:
     toc: true
@@ -771,8 +771,8 @@ X <- as.matrix(toy)
 K <- 3
 dir_variants <- list(
     `random` = list(method = "random"),
-    `dirichlet α = 1` = list(method = "dirichlet", alpha = 1),
-    `dirichlet α = 0.01` = list(method = "dirichlet", alpha = 0.01)
+    `dirichlet alpha = 1` = list(method = "dirichlet", alpha = 1),
+    `dirichlet alpha = 0.01` = list(method = "dirichlet", alpha = 0.01)
 )
 n_dir_runs <- 3
 

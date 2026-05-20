@@ -76,8 +76,10 @@ or a custom psi function. See \code{\link[MASS:rlm]{MASS::rlm()}} for psi detail
 line-search update before stopping as stalled (default: 5)}
 }
 \value{
-An object of class \code{\link{kernel_archetypes}}, extending
-\code{archetypes}.
+An object of class \code{kernel_archetypes}, extending
+\code{archetypes}. Kernel methods expose Hilbert-space residual norms,
+input-space coordinate proxies when data are stored, and explicitly reject
+out-of-sample \code{predict()} until cross-Gram evaluation is part of the API.
 }
 \description{
 Fits archetypal analysis (AA) in a reproducing kernel Hilbert space (RKHS)
@@ -147,7 +149,7 @@ archetypes_kernel_pgd(as.matrix(toy), K = 3)
 \references{
 Mørup, M., & Hansen, L. K. (2012).
 Archetypal analysis for machine learning and data mining.
-\emph{Neurocomputing}, 80, 54-63. \url{https://dx.doi.org/10.1016/j.neucom.2011.06.033}
+\emph{Neurocomputing}, 80, 54-63. \doi{10.1016/j.neucom.2011.06.033}
 }
 \seealso{
 \code{\link[=run_aa]{run_aa()}} for the common entry point and full parameter documentation.

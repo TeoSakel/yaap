@@ -23,7 +23,7 @@
 #' @references
 #' Condat, L. (2016). Fast projection onto the simplex and the L_1 ball.
 #' Mathematical Programming, 158(1), 575-585.
-#' \url{http://dx.doi.org/10.1007/s10107-015-0946-6}
+#' \doi{10.1007/s10107-015-0946-6}
 #'
 #' @name simplex_projection
 NULL
@@ -31,19 +31,24 @@ NULL
 #' @rdname simplex_projection
 #' @export
 proj_simplex <- function(mat, eps = 0) {
-    stopifnot("eps must be non-negative" = is_non_negative(eps))
+    if (!is_non_negative(eps)) {
+        stop("`eps` must be non-negative.", call. = FALSE)
+    }
     proj_row <- function(v) {
         sv <- sum(v)
-        if (abs(sv - 1) <= length(v) * eps) return(v / sv)
-        u     <- sort(v, decreasing = TRUE)
-        cssv  <- cumsum(u)
-        rho   <- max(which(u > (cssv - 1) / seq_along(u)))
+        if (abs(sv - 1) <= length(v) * eps) {
+            return(v / sv)
+        }
+        u <- sort(v, decreasing = TRUE)
+        cssv <- cumsum(u)
+        rho <- max(which(u > (cssv - 1) / seq_along(u)))
         theta <- (cssv[rho] - 1) / rho
         pmax(v - theta, 0)
     }
     out <- pmax(mat, eps)
-    for (i in seq_len(nrow(out)))  # TODO: implement in parallel
+    for (i in seq_len(nrow(out))) { # TODO: implement in parallel
         out[i, ] <- proj_row(out[i, ])
+    }
     out
 }
 
@@ -51,9 +56,11 @@ proj_simplex <- function(mat, eps = 0) {
 #' @rdname simplex_projection
 #' @export
 proj_l1 <- function(mat, eps = 0) {
-    stopifnot("eps must be non-negative" = is_non_negative(eps))
-    out <- pmax(mat, eps)      # project to 1st orthant
-    out <- out / rowSums(out)  # l1-normalize each row
+    if (!is_non_negative(eps)) {
+        stop("`eps` must be non-negative.", call. = FALSE)
+    }
+    out <- pmax(mat, eps) # project to 1st orthant
+    out <- out / rowSums(out) # l1-normalize each row
     out
 }
 
@@ -93,21 +100,25 @@ proj_l1 <- function(mat, eps = 0) {
 #'
 #' @export
 fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_l1, lambda = 1e-8) {
-
     # Prepare Inputs
     X <- if (is.vector(X)) matrix(X, nrow = 1L) else as.matrix(X)
     A <- as.matrix(A)
 
     # Check inputs
-    stopifnot("eps must be non-negative" = is_non_negative(eps))
-    stopifnot("lambda must be non-negative" = is_non_negative(lambda))
-    stopifnot("Incompatible dimensions between archetypes and new data" = ncol(A) == ncol(X))
+    if (!is_non_negative(eps)) {
+        stop("`eps` must be non-negative.", call. = FALSE)
+    }
+    if (!is_non_negative(lambda)) {
+        stop("`lambda` must be non-negative.", call. = FALSE)
+    }
+    if (ncol(A) != ncol(X)) {
+        stop("`A` and `X` must have the same number of columns.", call. = FALSE)
+    }
 
     # Main
     method <- match.arg(method)
-    S <- switch(
-        method,
-        nnls = project(.aa_solve_nnls(X, t(A)), eps = eps),  # TODO: add bigM?
+    S <- switch(method,
+        nnls = project(.aa_solve_nnls(X, t(A)), eps = eps), # TODO: add bigM?
         QP   = .aa_fit_qp(A, X, eps, proj_l1, lambda)
     )
 
@@ -118,21 +129,23 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
 }
 
 .aa_fit_qp <- function(A,
-                   X,
-                   eps,
-                   project = NULL,
-                   lambda = 1e-8,
-                   row_sum_bounds = c(1, 1),
-                   feature = 'fit_simplex(method = "QP")',
-                   ...) {
-
+                       X,
+                       eps,
+                       project = NULL,
+                       lambda = 1e-8,
+                       row_sum_bounds = c(1, 1),
+                       feature = 'fit_simplex(method = "QP")',
+                       ...) {
     .aa_require_namespace_for("quadprog", feature)
 
     N <- nrow(X)
     K <- nrow(A)
-    stopifnot("row_sum_bounds must be a length-two numeric vector" = length(row_sum_bounds) == 2L)
-    stopifnot("row_sum_bounds must be non-negative and ordered" =
-                  row_sum_bounds[1L] >= 0 && row_sum_bounds[1L] <= row_sum_bounds[2L])
+    if (!(is.numeric(row_sum_bounds) && length(row_sum_bounds) == 2L)) {
+        stop("`row_sum_bounds` must be a length-two numeric vector.", call. = FALSE)
+    }
+    if (!(row_sum_bounds[1L] >= 0 && row_sum_bounds[1L] <= row_sum_bounds[2L])) {
+        stop("`row_sum_bounds` must be non-negative and ordered.", call. = FALSE)
+    }
 
     # The QP program formulation is:
     # min 0.5 s' Q s - d' s  with constraints t(Amat) %*% s >= bvec
@@ -143,12 +156,12 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     diag(Dmat) <- diag(Dmat) + lambda # for numerical stability
     if (diff(row_sum_bounds) == 0) {
         # Equality 1' s = bound via meq = 1, plus inequalities s >= 0.
-        meq  <- 1L
+        meq <- 1L
         Amat <- cbind(matrix(1, nrow = K, ncol = 1L), diag(K))
         bvec <- c(row_sum_bounds[1L], rep(0, K))
     } else {
         # Inequalities lower <= 1' s <= upper, plus s >= 0.
-        meq  <- 0L
+        meq <- 0L
         Amat <- cbind(rep(1, K), rep(-1, K), diag(K))
         bvec <- c(row_sum_bounds[1L], -row_sum_bounds[2L], rep(0, K))
     }
@@ -156,12 +169,13 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     # Main Loop
     S <- matrix(eps, nrow = N, ncol = K)
     for (i in seq_len(N)) {
-        dvec   <- A %*% X[i, ]
+        dvec <- A %*% X[i, ]
         S[i, ] <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)$solution
     }
     # Make sure to project onto simplex if we only enforced equality constraints (i.e., no upper bound)
-    if (meq == 1L && !is.null(project))
+    if (meq == 1L && !is.null(project)) {
         S <- project(S, eps) * row_sum_bounds[1L]
+    }
     S
 }
 
@@ -198,11 +212,11 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
 #' onehot(c(1, 2, 1, 3))
 #'
 #' # Factor: columns follow factor levels (and are named)
-#' f <- factor(c("red", "blue", "red", NA, "green"), levels = c("red","blue","green"))
+#' f <- factor(c("red", "blue", "red", NA, "green"), levels = c("red", "blue", "green"))
 #' onehot(f)
 #'
 #' # Character: automatically treated as a factor
-#' onehot(c("cat","dog","cat"), sparse = TRUE)
+#' onehot(c("cat", "dog", "cat"), sparse = TRUE)
 #'
 #' # Reserving extra columns for future/unseen categories (numeric input only)
 #' onehot(c(1, 2, 1), sparse = FALSE, nc = 5)
@@ -258,7 +272,7 @@ onehot.default <- function(ind, sparse = FALSE, nc = NULL, ...) {
 onehot.factor <- function(ind, sparse = FALSE, ...) {
     lvl <- levels(ind)
     ind <- as.integer(ind)
-    nc  <- length(lvl)
+    nc <- length(lvl)
     out <- onehot.default(ind, sparse = sparse, nc = nc)
     dimnames(out)[[2]] <- lvl
     out
@@ -269,3 +283,5 @@ onehot.factor <- function(ind, sparse = FALSE, ...) {
 onehot.character <- function(ind, sparse = FALSE, ...) {
     onehot.factor(as.factor(ind), sparse = sparse)
 }
+
+# TODO: explain that these can be used to construct the `init` value by custom function

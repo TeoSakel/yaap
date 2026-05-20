@@ -12,7 +12,7 @@ formula or specialized object front ends.
 
 - Core fitting entry point: `R/run_aa.R`.
 - Direct solver wrappers: `R/archetypes_*.R`.
-- Base S3 object and methods: `R/archetype_class.R`.
+- Base S3 object and methods: `R/archetypes_class.R`.
 - Initialization helpers: `R/init.R`.
 - Matrix/simplex utilities: `R/projections.R`, `R/utils.R`.
 - Plotting, broom, and recipe interfaces: `R/plotting.R`, `R/broom.R`,
@@ -199,9 +199,12 @@ R CMD check --as-cran yaap_*.tar.gz
 ## Style Notes
 
 - Follow the existing four-space indentation style in R files.
+- Run `styler` with `strict=FALSE` to reformat the code after you write it.
 - Use explicit `return()` only when exiting early; match the surrounding style.
 - Prefer `[[` for list component access in internal code when consistency or
   partial-match avoidance matters.
 - Keep comments factual and useful. Avoid comments that restate obvious code.
 - Keep public argument names stable unless the user explicitly asks for an API break.
-- Avoid defining tiny functions unless they very wordy or are used multiple times.
+- Avoid writing tiny functions that are only used once. Prefer short comments
+  headers for section to explain what they do or use local/anonymous functions when
+  a function is required as an argument

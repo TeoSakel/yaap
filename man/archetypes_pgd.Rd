@@ -176,5 +176,5 @@ archetypes_pgd(as.matrix(toy), K = 3)
 \references{
 Mørup, M., & Hansen, L. K. (2012).
 Archetypal analysis for machine learning and data mining.
-\emph{Neurocomputing}, 80, 54-63. \url{https://dx.doi.org/10.1016/j.neucom.2011.06.033}
+\emph{Neurocomputing}, 80, 54-63. \doi{10.1016/j.neucom.2011.06.033}
 }

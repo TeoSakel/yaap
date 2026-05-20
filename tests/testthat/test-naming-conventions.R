@@ -1,7 +1,8 @@
 test_that("internal helper names follow package conventions", {
     r_files <- list.files("../../R", pattern = "[.]R$", full.names = TRUE)
-    if (!length(r_files))
+    if (!length(r_files)) {
         r_files <- list.files("R", pattern = "[.]R$", full.names = TRUE)
+    }
 
     lines <- unlist(lapply(r_files, readLines, warn = FALSE), use.names = FALSE)
     defs <- sub("^([.]?[A-Za-z][A-Za-z0-9_.]*)[[:space:]]*(<-|=)[[:space:]]*function.*", "\\1", lines)
@@ -12,7 +13,7 @@ test_that("internal helper names follow package conventions", {
         "aa_init", "anames", "anames<-", "archetypes_directional",
         "archetypes_kernel_pgd", "archetypes_nnls", "archetypes_paa",
         "archetypes_path", "archetypes_pgd", "compositions", "consistency", "coordinates",
-        "directional_archetypes", "fit_simplex", "kernel_archetypes",
+        "fit_simplex",
         "onehot", "plot_archetypes_compositions", "plot_archetypes_coordinates",
         "plot_archetypes_loss", "plot_archetypes_profiles", "proj_l1",
         "proj_simplex", "run_aa", "step_archetypes"

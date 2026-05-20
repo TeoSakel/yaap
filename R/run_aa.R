@@ -76,7 +76,6 @@ run_aa.formula <- function(formula,
                            ...,
                            subset,
                            na.action) {
-
     call <- match.call()
     call[[1L]] <- quote(run_aa)
 
@@ -101,10 +100,12 @@ run_aa.formula <- function(formula,
     attr(terms, "intercept") <- 0L
     X <- stats::model.matrix(terms, mf)
     intercept <- colnames(X) == "(Intercept)"
-    if (any(intercept))
+    if (any(intercept)) {
         X <- X[, !intercept, drop = FALSE]
-    if (ncol(X) == 0L)
+    }
+    if (ncol(X) == 0L) {
         stop("Formula input must select at least one predictor column.", call. = FALSE)
+    }
 
     fit <- .aa_fit_engine(
         call = call,
@@ -170,6 +171,9 @@ run_aa.formula <- function(formula,
 #' @param eps small positive number for numerical stability
 #'   (default: 0 for sparse input, 1e-8 for dense).
 #' @param verbose whether to print progress messages (default: `FALSE`).
+#' @param missing logical or `NULL`; whether to fit the missing-data PGD objective.
+#'   `NULL` auto-detects missing values in dense inputs. Only `method = "pgd"`
+#'   supports `TRUE`; other methods set or require `FALSE`.
 #' @param nrep number of random restarts; the best fit (lowest final loss)
 #'   is returned (default: 1).
 #' @param ... additional arguments passed to the selected solver. See
@@ -255,9 +259,11 @@ run_aa.fd <- function(x, K, ...) {
     .aa_require_namespace_for("fda", "functional-data archetypal analysis")
 
     method_args <- list(...)
-    if ("scale" %in% names(method_args))
+    if ("scale" %in% names(method_args)) {
         stop("`scale` is computed from the fd basis and cannot be supplied to `run_aa.fd()`.",
-             call. = FALSE)
+            call. = FALSE
+        )
+    }
 
     call <- match.call()
     call[[1L]] <- quote(run_aa)
@@ -272,9 +278,11 @@ run_aa.fd <- function(x, K, ...) {
     }
 
     coefs <- stats::coef(data)
-    if (length(dim(coefs)) != 2L)
+    if (length(dim(coefs)) != 2L) {
         stop("`run_aa.fd()` currently supports fd objects with a 2-D coefficient matrix.",
-             call. = FALSE)
+            call. = FALSE
+        )
+    }
 
     B <- t(coefs)
     G <- fda::eval.penalty(data[["basis"]], Lfdobj = 0)
@@ -315,8 +323,12 @@ run_aa.fd <- function(x, K, ...) {
                                  ...) {
     method <- match.arg(method, c("pgd", "nnls", "kernel", "directional", "paa"))
     init <- init %||% ifelse(identical(method, "directional"), "dirichlet", "furthest_sum")
-    stopifnot("`missing` must be TRUE or FALSE" = is_logical(missing))
-    stopifnot("`nrep` must be a single positive integer" = is_count(nrep))
+    if (!is_logical(missing)) {
+        stop("`missing` must be TRUE or FALSE.", call. = FALSE)
+    }
+    if (!is_count(nrep)) {
+        stop("`nrep` must be a single positive integer.", call. = FALSE)
+    }
     nrep <- as.integer(nrep)
     method_args <- list(...)
     precomputed_kernel <- identical(method, "kernel") &&
@@ -346,8 +358,7 @@ run_aa.fd <- function(x, K, ...) {
         nrep = nrep
     )
 
-    block <- switch(
-        method,
+    block <- switch(method,
         pgd         = .aa_pgd_block(ctx, ...),
         nnls        = .aa_nnls_block(ctx, ...),
         kernel      = .aa_kernel_block(ctx, ...),
@@ -360,8 +371,10 @@ run_aa.fd <- function(x, K, ...) {
 }
 
 .aa_fit_prepared <- function(ctx, block, prep) {
-    out <- block[["edge_case"]](ctx, prep)  # check for K = 1 or K == N
-    if (!is.null(out)) return(out)
+    out <- block[["edge_case"]](ctx, prep) # check for K = 1 or K == N
+    if (!is.null(out)) {
+        return(out)
+    }
 
     # Run multiple restarts and return the best fit
     # TODO: add parallelization option for multiple restarts
@@ -433,41 +446,42 @@ run_aa.fd <- function(x, K, ...) {
 }
 
 .aa_check_x <- function(x, missing = FALSE, validate_values = TRUE) {
-    stopifnot("data must be a matrix-like object" = is_tabular(x))
+    if (!is_tabular(x)) {
+        stop("`x` must be a matrix-like object or data frame.", call. = FALSE)
+    }
     if (inherits(x, "sparseMatrix")) {
-        if (!methods::is(x, "dMatrix"))
-            stop("data must be numeric", call. = FALSE)
+        if (!methods::is(x, "dMatrix")) {
+            stop("`x` must contain numeric data.", call. = FALSE)
+        }
         values <- x@x
     } else {
         values <- as.matrix(x)
-        stopifnot("data must be numeric" = is.numeric(values))
+        if (!is.numeric(values)) {
+            stop("`x` must contain numeric data.", call. = FALSE)
+        }
     }
-    if (!validate_values)
+    if (!validate_values) {
         return(invisible(TRUE))
-    if (missing) {
-        stopifnot("observed data contains non-finite values" =
-                      all(is.na(values) | is.finite(values)))
-    } else {
-        stopifnot("data contains missing values" = !any(is.na(values)))
-        stopifnot("data contains non-finite values" = all(is.finite(values)))
     }
-    invisible(TRUE)
-}
-
-.aa_check_missing_route <- function(ctx) {
-    if (!identical(ctx[["method"]], "pgd") && ctx[["missing"]])
-        stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
-    if (ctx[["missing"]] && !identical(ctx[["robust"]], FALSE))
-        stop("`robust` is not supported with `missing = TRUE`.", call. = FALSE)
-    if (ctx[["missing"]] && !is.null(ctx[["weights"]]))
-        stop("`weights` are not supported with `missing = TRUE`.", call. = FALSE)
-    if (ctx[["missing"]] && is_matrix(ctx[["scale"]]))
-        stop("matrix `scale` is not supported with `missing = TRUE`.", call. = FALSE)
+    if (missing) {
+        if (!all(is.na(values) | is.finite(values))) {
+            stop("Observed entries in `x` must be finite.", call. = FALSE)
+        }
+    } else {
+        if (any(is.na(values))) {
+            stop("`x` contains missing values.", call. = FALSE)
+        }
+        if (!all(is.finite(values))) {
+            stop("`x` contains non-finite values.", call. = FALSE)
+        }
+    }
     invisible(TRUE)
 }
 
 .aa_check_max_no_update <- function(max_no_update) {
-    stopifnot("max_no_update must be a positive integer" = is_count(max_no_update))
+    if (!is_count(max_no_update)) {
+        stop("`max_no_update` must be a positive integer.", call. = FALSE)
+    }
     invisible(TRUE)
 }
 
@@ -475,270 +489,15 @@ run_aa.fd <- function(x, K, ...) {
                                                   max_iter_optimizer,
                                                   step_shrinkage,
                                                   max_no_update) {
-    stopifnot("step_size must be positive" = is_positive(step_size))
-    stopifnot("max_iter_optimizer must be a positive integer" = is_count(max_iter_optimizer))
-    stopifnot("step_shrinkage must be between (0, 1)" =
-                  is_number(step_shrinkage) && step_shrinkage > 0 && step_shrinkage < 1)
+    if (!is_positive(step_size)) {
+        stop("`step_size` must be positive.", call. = FALSE)
+    }
+    if (!is_count(max_iter_optimizer)) {
+        stop("`max_iter_optimizer` must be a positive integer.", call. = FALSE)
+    }
+    if (!(is_number(step_shrinkage) && step_shrinkage > 0 && step_shrinkage < 1)) {
+        stop("`step_shrinkage` must be between 0 and 1.", call. = FALSE)
+    }
     .aa_check_max_no_update(max_no_update)
     invisible(TRUE)
-}
-
-.aa_euclidean_check <- function(ctx) {
-    .aa_check_missing_route(ctx)
-    .aa_check_fit_controls(ctx)
-    .aa_check_scale(ctx[["scale"]], ncol(ctx[["x"]]))
-}
-
-.aa_euclidean_preprocess <- function(ctx, bigM = 0) {
-    data <- ctx[["x"]]
-    sd_threshold <- ctx[["sd_threshold"]]
-    weights <- ctx[["weights"]]
-    scale <- ctx[["scale"]]
-
-    if (ctx[["verbose"]]) message("Preprocessing data...")
-
-    if (ctx[["missing"]])
-        return(.aa_preprocess_missing(data, sd_threshold, ctx[["verbose"]], scale = scale))
-
-    if (inherits(data, "sparseMatrix"))
-        data <- Matrix::drop0(data)
-
-    original_center <- colMeans(data)
-    names(original_center) <- colnames(data)
-    scale_mode <- if (identical(scale, FALSE)) {
-        "none"
-    } else if (isTRUE(scale) || (is.numeric(scale) && is.null(dim(scale)))) {
-        "vector"
-    } else {
-        "matrix"
-    }
-
-    X <- if (inherits(data, "sparseMatrix")) {
-        data
-    } else {
-        as.matrix(data)
-    }
-    if (isTRUE(scale)) {
-        n <- nrow(data)
-        x_mean <- colMeans(data)
-        x2 <- colSums(data * data)
-        x_var <- pmax((x2 - n * x_mean * x_mean) / max(n - 1L, 1L), 0)
-        scale <- sqrt(x_var)
-        names(scale) <- colnames(data)
-
-        if (!inherits(data, "sparseMatrix")) {
-            X <- sweep(X, 2L, x_mean, "-")
-            attr(X, "scaled:center") <- x_mean
-        }
-        attr(X, "scaled:scale") <- scale
-    }
-
-    X <- .aa_filter_low_variance(X, sd_threshold)
-    mask <- attr(X, "mask")
-
-    if (identical(scale_mode, "matrix")) {
-        retained_names <- names(original_center)
-        if (!is.null(mask)) {
-            retained_names <- retained_names[mask]
-            scale <- scale[mask, mask, drop = FALSE]
-        }
-        scale_factor <- t(chol(as.matrix(scale)))  # lower triangular
-        X <- as.matrix(X) %*% scale_factor
-        colnames(X) <- retained_names
-        attr(X, "mask") <- mask
-        # Compressed storage
-        attr(X, "scale:factor") <- .aa_pack_lower_tri(scale_factor)
-    } else if (identical(scale_mode, "vector")) {
-        if (!is.null(mask))
-            scale <- scale[mask]
-        scale_factor <- ifelse(scale > 0, scale, 1)
-        x_attrs <- attributes(X)
-        X <- if (inherits(X, "sparseMatrix")) {
-            Matrix::colScale(X, 1 / scale_factor)
-        } else {
-            sweep(X, 2L, scale_factor, "/")
-        }
-        attributes(X) <- utils::modifyList(attributes(X), x_attrs)
-        attr(X, "scale:factor") <- scale_factor
-    }
-    attr(X, "scale:mode") <- scale_mode
-    attr(X, "restore:center") <- original_center
-    N <- nrow(X)
-    if (is.null(bigM))
-        bigM <- .aa_auto_bigM(X)
-
-    if (!is.null(weights)) {
-        if (length(weights) != N) {
-            fmt <- "Number of weights (%d) must equal number of rows in data (%d)"
-            stop(sprintf(fmt, length(weights), N))
-        }
-        stopifnot("Weights contain NA values" = !any(is.na(weights)))
-        stopifnot("Weights must be non-negative" = all(weights >= 0))
-        stopifnot("at least one weight must be positive" = any(weights > 0))
-        if (any(weights == 0))
-            warning("Some sample weights are zero.", call. = FALSE)
-        weights <- weights / mean(weights)
-        x_attrs <- attributes(X)
-        X <- X * sqrt(weights)  # sqrt will be undone during square loss computation
-        attributes(X) <- utils::modifyList(attributes(X), x_attrs)
-        attr(X, "weights") <- weights
-    }
-
-    if (bigM > 0) {
-        x_attrs <- attributes(X)
-        bigM_col <- matrix(bigM, nrow = N, ncol = 1L, dimnames = list(rownames(X), "bigM"))
-        if (inherits(X, "sparseMatrix"))
-            bigM_col <- as(bigM_col, "sparseMatrix")
-        X <- cbind(bigM_col, X)
-        attr(X, "scaled:center") <- x_attrs[["scaled:center"]]
-        attr(X, "scaled:scale") <- x_attrs[["scaled:scale"]]
-        attr(X, "scale:mode") <- x_attrs[["scale:mode"]]
-        attr(X, "scale:factor") <- x_attrs[["scale:factor"]]
-        attr(X, "restore:center") <- x_attrs[["restore:center"]]
-        attr(X, "mask") <- x_attrs[["mask"]]
-        attr(X, "bigM") <- 1L
-        attr(X, "bigM.value") <- bigM
-    }
-
-    list(X = X)
-}
-
-.aa_euclidean_edge_case <- function(ctx, prep) {
-    out <- .aa_checks_edge_cases(
-        prep[["X"]],
-        ctx[["K"]],
-        ctx[["verbose"]],
-        M = prep[["M"]]
-    )
-    if (is.null(out)) return(NULL)
-    .aa_euclidean_output(
-        ctx,
-        prep,
-        list(
-            A0 = out[["init"]],
-            A = coordinates(out),
-            B = out[["coefficients"]],
-            S = out[["compositions"]],
-            delta = out[["slack"]],
-            i = nrow(out[["loss"]]) - 1L,
-            loss = out[["loss"]],
-            converged = out[["converged"]]
-        ),
-        fit_info = list(method = ctx[["method"]])
-    )
-}
-
-.aa_euclidean_init <- function(ctx, prep, delta = 0) {
-    X <- prep[["X"]]
-    init <- ctx[["init"]]
-    init_args <- ctx[["init_args"]]
-    if (ctx[["verbose"]]) message("Initializing archetypes...")
-    L <- ctx[["max_iter"]] + 1L
-
-    if (is_tabular(init)) {
-        init <- .aa_preprocess_init(init, X)
-        if (length(init_args) > 0L) {
-            warning("`init_args` are ignored when `init` is a matrix", call. = FALSE)
-            init_args <- list()
-        }
-        return(.aa_matrix_init(X, ctx[["K"]], init, ctx[["eps"]], L, delta))
-    }
-
-    if (is_non_empty_string(init)) {
-        init_args <- c(list(method = init), init_args)
-        init <- aa_init
-    } else if (!is.function(init)) {
-        stop("`init` must be a function, a single non-empty string, or archetypes coordinate matrix")
-    }
-
-    init_vars <- do.call(init, args = c(list(X = X, K = ctx[["K"]]), init_args))
-    rownames(init_vars[["A"]]) <- .aa_init_names(init_vars[["A"]])
-    rownames(init_vars[["B"]]) <- rownames(init_vars[["A"]])
-    init_vars[["S"]] <- .aa_init_S(X, init_vars[["A"]], eps = ctx[["eps"]])
-    init_vars[["loss"]] <- list(loss = rep(NA_real_, L), r2 = rep(NA_real_, L))
-    init_vars
-}
-
-.aa_euclidean_output <- function(ctx, prep, fit, fit_info = list()) {
-    X <- if (!is.null(prep[["output_X"]])) prep[["output_X"]] else prep[["X"]]
-    feature_map <- .aa_euclidean_feature_map(X)
-    feature_map[["eps"]] <- ctx[["eps"]]
-
-    j <- fit[["i"]] + 1L
-    loss <- as.data.frame(fit[["loss"]])[seq_len(j), , drop = FALSE]
-    rownames(loss) <- NULL
-
-    A_feature <- .aa_drop_bigM_column(fit[["A"]], attr(X, "bigM"))
-    A <- fit[["A"]]
-    A0 <- fit[["A0"]]
-    archetype_names <- if (!is.null(A0)) rownames(A0) else rownames(A)
-    A <- .aa_feature_map_inverse(feature_map, A_feature)
-    if (!is.null(A0))
-        A0 <- .aa_feature_map_inverse(feature_map, .aa_drop_bigM_column(A0, attr(X, "bigM")))
-
-    family <- prep[["family"]] %||% ctx[["family"]] %||% "gaussian"
-
-    if (is.null(archetype_names))
-        archetype_names <- paste0("A", seq_len(nrow(A)))
-    rownames(A) <- rownames(fit[["B"]]) <- colnames(fit[["S"]]) <- archetype_names
-    rownames(A_feature) <- archetype_names
-    if (!is.null(A0))
-        rownames(A0) <- archetype_names
-    colnames(fit[["B"]]) <- rownames(fit[["S"]]) <- rownames(X)
-
-    if (!fit[["converged"]]) {
-        fmt <- "Algorithm did not converge after %d iterations"
-        warning(sprintf(fmt, fit[["i"]]), call. = FALSE)
-    }
-
-    if (ctx[["verbose"]]) {
-        fmt <- ifelse(fit[["converged"]],
-                      "Converged after %d iterations:",
-                      "Final iteration %d:")
-        fmt <- paste(fmt, "loss = %.4g, R2 = %.3f")
-        message(sprintf(fmt, fit[["i"]], loss[j, "loss"], loss[j, "r2"]))
-    }
-
-    init <- ctx[["init"]]
-    if (!is.null(init) && !is.character(init))
-        init <- if (is.function(init)) "function" else "matrix"
-    fit_info <- fit_info %|p|% list(
-        family = prep[["family"]] %||% ctx[["family"]] %||% "gaussian",
-        robust = !identical(ctx[["robust"]], FALSE),
-        robust_psi = .aa_robust_label(ctx[["robust"]]) %||% NA_character_,
-        robust_args = I(list(ctx[["robust_args"]])),
-        missing = isTRUE(ctx[["missing"]]),
-        delta = fit[["delta"]] %||% 0,
-        init = init,
-        scaling = .aa_scale_label(ctx[["scale"]]),
-        sample_weights = !is.null(ctx[["weights"]])
-    )
-
-    archetypes(
-        call         = ctx[["call"]],
-        data         = ctx[["x"]],
-        weights      = if (!is.null(fit[["row_weights"]])) fit[["row_weights"]] else attr(prep[["X"]], "weights"),
-        init         = A0,
-        coefficients = fit[["B"]],
-        compositions = fit[["S"]],
-        slack        = fit[["delta"]] %||% 0,
-        loss         = loss,
-        converged    = fit[["converged"]],
-        family       = family,
-        fit_info     = fit_info,
-        feature_map  = feature_map,
-        A            = A_feature
-    )
-}
-
-.aa_scale_label <- function(scale) {
-    if (identical(scale, FALSE))
-        return("none")
-    if (isTRUE(scale))
-        return("z-score")
-    if (is.numeric(scale) && is.null(dim(scale)))
-        return("custom")
-    if (is_matrix(scale))
-        return("metric")
-    "custom"
 }

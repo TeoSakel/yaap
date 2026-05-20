@@ -25,8 +25,9 @@
 #' vol. 10, no. 7, pp. 1160-1171, 2016.
 #'
 #' @export
-consistency <- function(x, y, ...)
+consistency <- function(x, y, ...) {
     UseMethod("consistency")
+}
 
 #' @rdname consistency
 #' @param what Component to compare: compositions, coefficients, or coordinates.
@@ -41,11 +42,11 @@ consistency.archetypes <- function(x,
                                    what = c("compositions", "coefficients", "coordinates"),
                                    data = NULL,
                                    ...) {
-    if (missing(y))
+    if (missing(y)) {
         stop("`y` must be supplied when comparing archetypes objects.", call. = FALSE)
+    }
     what <- match.arg(what)
-    switch(
-        what,
+    switch(what,
         compositions = .aa_nmi(
             .aa_consistency_weights(x, "compositions"),
             .aa_consistency_weights(y, "compositions")
@@ -62,33 +63,38 @@ consistency.archetypes <- function(x,
 }
 
 .aa_consistency_weights <- function(fit, what) {
-    x <- switch(
-        what,
+    x <- switch(what,
         compositions = compositions(fit),
         coefficients = t(fit[["coefficients"]])
     )
     x <- as.matrix(x)
     row_total <- rowSums(x)
     ok <- is.finite(row_total) & row_total > 0
-    if (any(!ok))
+    if (any(!ok)) {
         stop("Consistency weights contain rows with zero or non-finite total.", call. = FALSE)
+    }
     x / row_total
 }
 
 .aa_nmi <- function(x, y) {
-    stopifnot("Consistency matrices must have the same number of rows." = nrow(x) == nrow(y))
-    stopifnot("Consistency matrices must be row-stochastic." = is_row_stochastic(x) && is_row_stochastic(y))
+    if (nrow(x) != nrow(y)) {
+        stop("Consistency matrices must have the same number of rows.", call. = FALSE)
+    }
+    if (!(is_row_stochastic(x) && is_row_stochastic(y))) {
+        stop("Consistency matrices must be row-stochastic.", call. = FALSE)
+    }
     n <- nrow(x)
-    pxy <- crossprod(x, y) / n  # joint distribution of archetype co-membership
-    pxx <- crossprod(x) / n  # joint distribution of archetype co-membership in x
-    pyy <- crossprod(y) / n  # joint distribution of archetype co-membership in y
+    pxy <- crossprod(x, y) / n # joint distribution of archetype co-membership
+    pxx <- crossprod(x) / n # joint distribution of archetype co-membership in x
+    pyy <- crossprod(y) / n # joint distribution of archetype co-membership in y
     2 * .aa_mi_from_joint(pxy) / (.aa_mi_from_joint(pxx) + .aa_mi_from_joint(pyy))
 }
 
 .aa_mi_from_joint <- function(pxy) {
     total <- sum(pxy)
-    if (!isTRUE(all.equal(total, 1, tolerance = 1e-8)))
+    if (!isTRUE(all.equal(total, 1, tolerance = 1e-8))) {
         pxy <- pxy / total
+    }
     px <- rowSums(pxy)
     py <- colSums(pxy)
     expected <- outer(px, py)
@@ -101,41 +107,50 @@ consistency.archetypes <- function(x,
     ay <- .aa_consistency_coordinates(y)
     kx <- nrow(ax)
     ky <- nrow(ay)
-    if (kx > ky)
+    if (kx > ky) {
         return(NA_real_)
+    }
     data <- .aa_consistency_data_matrix(data)
-    if (ncol(ax) != ncol(data) || ncol(ay) != ncol(data))
+    if (ncol(ax) != ncol(data) || ncol(ay) != ncol(data)) {
         stop("Coordinate consistency requires input-space coordinates.", call. = FALSE)
+    }
 
     d2 <- .aa_greedy_coordinate_d2(ax, ay)
     denom <- mean(matrixStats::colVars(data))
-    if (!is.finite(denom) || denom <= 0)
+    if (!is.finite(denom) || denom <= 0) {
         stop("Coordinate consistency requires data with positive column variance.", call. = FALSE)
+    }
     1 - mean(d2) / denom
 }
 
 .aa_consistency_coordinates <- function(fit) {
     if (inherits(fit, "kernel_archetypes")) {
         coords <- coordinates(fit)
-        if (is.null(coords))
+        if (is.null(coords)) {
             stop("Kernel archetypes require `coordinates` for coordinate consistency.",
-                 call. = FALSE)
+                call. = FALSE
+            )
+        }
         return(as.matrix(coords))
     }
     coords <- coordinates(fit)
-    if (is.null(coords))
+    if (is.null(coords)) {
         stop("Coordinate consistency requires fitted coordinates.", call. = FALSE)
-    if (inherits(coords, "fd"))
+    }
+    if (inherits(coords, "fd")) {
         return(.aa_fd_to_matrix(coords))
+    }
     as.matrix(coords)
 }
 
 .aa_consistency_data_matrix <- function(data) {
-    if (inherits(data, "fd"))
+    if (inherits(data, "fd")) {
         data <- .aa_fd_to_matrix(data)
+    }
     data <- as.matrix(data)
-    if (!is.numeric(data))
+    if (!is.numeric(data)) {
         stop("Coordinate consistency requires numeric input data.", call. = FALSE)
+    }
     data
 }
 

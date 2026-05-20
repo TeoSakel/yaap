@@ -47,28 +47,28 @@
 #' library(recipes)
 #' data(iris)
 #' rec <- recipe(Species ~ ., data = iris) |>
-#'   step_archetypes(all_numeric_predictors(), num_comp = 3L) |>
-#'   prep(training = iris)
+#'     step_archetypes(all_numeric_predictors(), num_comp = 3L) |>
+#'     prep(training = iris)
 #' bake(rec, new_data = iris)
 #' }
 #'
 #' @export
 step_archetypes <- function(
-    recipe,
-    ...,
-    role              = "predictor",
-    trained           = FALSE,
-    num_comp          = 3L,
-    delta             = 0,
-    fit_method        = "pgd",
-    options           = list(),
-    reconstruct       = FALSE,
-    keep_original_cols = FALSE,
-    res               = NULL,
-    col_names         = NULL,
-    seed              = sample.int(1e5L, 1L),
-    skip              = FALSE,
-    id                = recipes::rand_id("archetypes")
+  recipe,
+  ...,
+  role = "predictor",
+  trained = FALSE,
+  num_comp = 3L,
+  delta = 0,
+  fit_method = "pgd",
+  options = list(),
+  reconstruct = FALSE,
+  keep_original_cols = FALSE,
+  res = NULL,
+  col_names = NULL,
+  seed = sample.int(1e5L, 1L),
+  skip = FALSE,
+  id = recipes::rand_id("archetypes")
 ) {
     rlang::check_installed(c("recipes", "withr"), reason = "required by step_archetypes()")
     recipes::add_step(
@@ -93,8 +93,8 @@ step_archetypes <- function(
 }
 
 .aa_step_archetypes_new <- function(
-    terms, role, trained, num_comp, delta, fit_method, options,
-    reconstruct, keep_original_cols, res, col_names, seed, skip, id
+  terms, role, trained, num_comp, delta, fit_method, options,
+  reconstruct, keep_original_cols, res, col_names, seed, skip, id
 ) {
     recipes::step(
         subclass           = "archetypes",
@@ -204,13 +204,13 @@ tidy.step_archetypes <- function(x, matrix = "coordinates", ...) {
 #' @exportS3Method tune::tunable
 tunable.step_archetypes <- function(x, ...) {
     tibble::tibble(
-        name         = c("num_comp", "delta"),
-        call_info    = list(
+        name = c("num_comp", "delta"),
+        call_info = list(
             list(pkg = "dials", fun = "num_comp", range = c(1L, 10L)),
-            list(pkg = "dials", fun = "mixture",  range = c(0,  1  ))
+            list(pkg = "dials", fun = "mixture", range = c(0, 1))
         ),
-        source       = "recipe",
-        component    = "step_archetypes",
+        source = "recipe",
+        component = "step_archetypes",
         component_id = x$id
     )
 }

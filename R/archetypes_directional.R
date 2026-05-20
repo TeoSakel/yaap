@@ -63,8 +63,10 @@
 #' `B` as a one-hot matrix so that archetypes start at actual data points
 #' on the hemisphere.
 #'
-#' @returns An object of class \code{\link{directional_archetypes}}, extending
-#'   \code{archetypes}.
+#' @returns An object of class \code{directional_archetypes}, extending
+#'   \code{archetypes}. Directional methods define unit-normalized
+#'   fitted values and residuals, composition prediction for new directional
+#'   data, and report \code{AIC()} as unsupported for Watson-loss fits.
 #'
 #' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'
@@ -157,15 +159,7 @@ archetypes_directional <- function(x,
                 step_shrinkage = step_shrinkage,
                 max_no_update = max_no_update
             )
-            if (!is.null(ctx[["weights"]])) {
-                stopifnot(
-                    "weights must match rows in data" =
-                        length(ctx[["weights"]]) == nrow(X)
-                )
-                stopifnot("weights contain NA values" = !any(is.na(ctx[["weights"]])))
-                stopifnot("weights must be non-negative" = all(ctx[["weights"]] >= 0))
-                stopifnot("at least one weight must be positive" = any(ctx[["weights"]] > 0))
-            }
+            .aa_check_sample_weights(ctx[["weights"]], nrow(X))
             .aa_check_no_zero_rows(X)
         },
         preprocess = function(ctx) {
@@ -219,7 +213,7 @@ archetypes_directional <- function(x,
         },
         final_loss = .aa_final_loss,
         prepare_output = function(ctx, prep, fit) {
-            directional_archetypes(
+            .aa_new_directional_archetypes(
                 coordinates = fit[["A"]],
                 coefficients = fit[["B"]],
                 compositions = fit[["S"]],

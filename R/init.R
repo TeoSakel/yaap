@@ -38,8 +38,8 @@
 #'
 #' - `"random"`: selects uniformly at random `K` archetypes from `X`.
 #' - `"dirichlet"`: draws each archetype as a random convex combination of all
-#'   data points by sampling `B` row-wise from a Dirichlet(α, ..., α)
-#'   distribution (Gamma(α, 1) weights normalized to unit sum). `alpha = 1`
+#'   data points by sampling `B` row-wise from a Dirichlet(alpha, ..., alpha)
+#'   distribution (Gamma(alpha, 1) weights normalized to unit sum). `alpha = 1`
 #'   (default) gives a uniform distribution over the simplex; `alpha < 1`
 #'   concentrates mass near simplex vertices, yielding sparser rows; `alpha > 1`
 #'   concentrates mass toward the centroid. Accepts optional `alpha` argument
@@ -77,7 +77,7 @@
 #' Mørup, M., & Hansen, L. K. (2012).
 #' Archetypal analysis for machine learning and data mining.
 #' Neurocomputing, 80, 54-63.
-#' \url{https://doi.org/10.1016/j.neucom.2011.06.033}
+#' \doi{10.1016/j.neucom.2011.06.033}
 #'
 #' Mair, S., & Sjölund, J. (2023).
 #' Archetypal analysis++: Rethinking the initialization strategy.
@@ -107,13 +107,18 @@ aa_init <- function(X,
                     n_projection_max = NULL,
                     use_unique_candidates = FALSE,
                     ...) {
-
     # Input checks -----------------------------------------------------------
-    stopifnot("K must be a positive integer" = is_count(K))
-    stopifnot("Number of samples must be at least K" = nrow(X) >= K)
+    if (!is_count(K)) {
+        stop("`K` must be a positive integer.", call. = FALSE)
+    }
+    if (nrow(X) < K) {
+        stop("Number of samples must be at least `K`.", call. = FALSE)
+    }
 
 
-    stopifnot("`method` must be a single string" = is_single_string(method))
+    if (!is_single_string(method)) {
+        stop("`method` must be a single string.", call. = FALSE)
+    }
     method <- match.arg(
         method,
         c(
@@ -127,7 +132,9 @@ aa_init <- function(X,
         )
     )
     batch_type <- match.arg(batch_type)
-    stopifnot("batch_replace must be TRUE or FALSE" = is_logical(batch_replace))
+    if (!is_logical(batch_replace)) {
+        stop("`batch_replace` must be TRUE or FALSE.", call. = FALSE)
+    }
     batch_size <- .aa_validate_batch_size(
         batch_size,
         n = nrow(X),
@@ -138,14 +145,21 @@ aa_init <- function(X,
     if (method == "hull_outmost") {
         hull_method <- match.arg(hull_method, c("full", "projected", "partitioned"))
 
-        stopifnot("`projected_dim` must be between [1, ncol(X)]" =
-                      is_count(projected_dim) && projected_dim <= ncol(X))
-        stopifnot("`n_partitions` must be a positive integer" = is_count(n_partitions))
+        if (!(is_count(projected_dim) && projected_dim <= ncol(X))) {
+            stop("`projected_dim` must be between 1 and `ncol(X)`.", call. = FALSE)
+        }
+        if (!is_count(n_partitions)) {
+            stop("`n_partitions` must be a positive integer.", call. = FALSE)
+        }
 
-        stopifnot("`use_unique_candidates` must be a single logical" = is_logical(use_unique_candidates))
+        if (!is_logical(use_unique_candidates)) {
+            stop("`use_unique_candidates` must be TRUE or FALSE.", call. = FALSE)
+        }
 
         if (!is.null(n_projection_max)) {
-            stopifnot("`n_projection_max` must be a positive integer" = is_count(n_projection_max))
+            if (!is_count(n_projection_max)) {
+                stop("`n_projection_max` must be a positive integer.", call. = FALSE)
+            }
         }
     }
 
@@ -165,14 +179,13 @@ aa_init <- function(X,
     )
     X_init <- X[batch, , drop = FALSE]
 
-    result <- switch(
-        method,
-        random             = uniform_archetypes(X_init, K, ...),
-        dirichlet          = dirichlet(X_init, K, ...),
-        furthest_first     = furthest_first(X_init, K, ...),
-        kmeans_pp          = kmeans_pp(X_init, K, ...),
-        furthest_sum       = furthest_sum(X_init, K, ...),
-        aa_pp              = aa_pp(
+    result <- switch(method,
+        random = uniform_archetypes(X_init, K, ...),
+        dirichlet = dirichlet(X_init, K, ...),
+        furthest_first = furthest_first(X_init, K, ...),
+        kmeans_pp = kmeans_pp(X_init, K, ...),
+        furthest_sum = furthest_sum(X_init, K, ...),
+        aa_pp = aa_pp(
             X,
             K,
             batch_size = batch_size,
@@ -180,7 +193,7 @@ aa_init <- function(X,
             batch_replace = batch_replace,
             ...
         ),
-        hull_outmost       = hull_outmost(
+        hull_outmost = hull_outmost(
             X_init,
             K,
             hull_method = hull_method,
@@ -192,23 +205,34 @@ aa_init <- function(X,
         )
     )
     if (is.list(result)) {
-        if (is.null(batch_size))
+        if (is.null(batch_size)) {
             return(result)
+        }
         return(.aa_expand_init_batch(result, X, batch, sparse = sparse))
     }
-    if (method == "aa_pp")
+    if (method == "aa_pp") {
         return(.aa_ind_to_init(X, result, sparse = sparse))
+    }
     .aa_ind_to_init(X, batch[result], sparse = sparse)
 }
 
 .aa_validate_batch_size <- function(batch_size, n, K, replace = FALSE) {
-    if (is.null(batch_size))
+    if (is.null(batch_size)) {
         return(NULL)
-    stopifnot("`batch_size` must be a positive integer at least K" =
-                  is_count(batch_size, start_from = K))
+    }
+    if (!is_count(batch_size, start_from = K)) {
+        stop("`batch_size` must be a positive integer at least `K`.", call. = FALSE)
+    }
     if (!replace) {
-        stopifnot("`batch_size` must be no larger than the number of samples when `batch_replace = FALSE`" =
-                      batch_size <= n)
+        if (batch_size > n) {
+            stop(
+                paste(
+                    "`batch_size` must be no larger than the number of samples",
+                    "when `batch_replace = FALSE`."
+                ),
+                call. = FALSE
+            )
+        }
     }
     as.integer(batch_size)
 }
@@ -220,8 +244,9 @@ aa_init <- function(X,
     nr <- nrow(x)
     has_rows <- !is.null(nr)
     n <- if (has_rows) nr else length(x)
-    if (is.null(size))
+    if (is.null(size)) {
         return(seq_len(n))
+    }
     prob <- if (!has_rows && identical(type, "distal")) {
         x
     } else if (identical(type, "distal")) {
@@ -238,8 +263,9 @@ aa_init <- function(X,
     B[, batch] <- B_batch
     rownames(B) <- rownames(B_batch)
     colnames(B) <- rownames(X)
-    if (sparse)
+    if (sparse) {
         B <- as(B, "sparseMatrix")
+    }
     A <- as.matrix(B %*% X)
     rownames(A) <- rownames(B)
     list(A = A, B = B)
@@ -248,8 +274,7 @@ aa_init <- function(X,
 uniform_archetypes <- function(X, K, ...) sample(nrow(X), K, replace = FALSE)
 
 furthest_first <- function(X, K, distances = NULL, center_dists = NULL, ...) {
-
-    b <- integer(K)  # indices of archetypes
+    b <- integer(K) # indices of archetypes
 
     # 1) randomly select the first archetype
     dists <- center_dists %||% .aa_dist2(X, center = TRUE)
@@ -267,8 +292,7 @@ furthest_first <- function(X, K, distances = NULL, center_dists = NULL, ...) {
 
 kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"),
                       distances = NULL, center_dists = NULL, ...) {
-
-    b <- integer(K)  # indices of archetypes
+    b <- integer(K) # indices of archetypes
 
     # 1) randomly select the first archetype
     dists <- center_dists %||% .aa_dist2(X, center = TRUE)
@@ -284,8 +308,9 @@ kmeans_pp <- function(X, K, sparse = inherits(X, "sparseMatrix"),
 }
 
 furthest_sum <- function(X, K, distances = NULL, refinement_steps = 10L, ...) {
-    stopifnot("`refinement_steps` must be a single non-negative integer" =
-                is_count(refinement_steps, start_from = 0L))
+    if (!is_count(refinement_steps, start_from = 0L)) {
+        stop("`refinement_steps` must be a single non-negative integer.", call. = FALSE)
+    }
 
     N <- nrow(X)
     effective_refinement_steps <- min(refinement_steps, max(N - K, 0L))
@@ -293,14 +318,15 @@ furthest_sum <- function(X, K, distances = NULL, refinement_steps = 10L, ...) {
 
     # 1) randomly select the first archetype
     ind_t <- sample(N, 1L)
-    b <- ind_t  # queue of active archetype indices
+    b <- ind_t # queue of active archetype indices
     sum_dist <- numeric(N)
     eligible <- rep(TRUE, N)
     eligible[ind_t] <- FALSE
 
     get_dists <- function(ind) {
-        if (is.null(distances))
+        if (is.null(distances)) {
             return(.aa_dist2(X, X[ind, , drop = FALSE]))
+        }
         distances[, ind]
     }
 
@@ -335,9 +361,11 @@ aa_pp <- function(X,
     # A++ initialization for Archetypal Analysis - Mair and Brefeld, 2019
 
     # if K is 2 AA++ reduces to kmeans++
-    if (K == 2 && is.null(batch_size)) return(kmeans_pp(X, K, ...))
+    if (K == 2 && is.null(batch_size)) {
+        return(kmeans_pp(X, K, ...))
+    }
 
-    b <- integer(K)  # indices of archetypes
+    b <- integer(K) # indices of archetypes
 
     # 1) randomly select the first archetype
     first_batch <- .aa_sample(
@@ -360,17 +388,19 @@ aa_pp <- function(X,
     second_candidates <- available[second_batch]
     b[2L] <- second_candidates[
         .aa_sample(.aa_dist2(X[second_candidates, , drop = FALSE], X[b[1L], ]),
-                   size = 1L,
-                   replace = TRUE)
+            size = 1L,
+            replace = TRUE
+        )
     ]
-    if (K == 2)
+    if (K == 2) {
         return(b)
+    }
 
     # 3) compute the first K-2 archetypes by iteratively running AA and sampling
     # from the points distal to the current archetype convex-hull.
     eps <- ifelse(sparse, 1e-8, 0)
     for (k in 3:K) {
-        A <- X[b[1:(k - 1)], , drop = FALSE]  # current archetypes
+        A <- X[b[1:(k - 1)], , drop = FALSE] # current archetypes
 
         available <- setdiff(seq_len(nrow(X)), b[1:(k - 1)])
         current_batch_size <- if (is.null(batch_size)) NULL else min(batch_size, length(available))
@@ -384,7 +414,7 @@ aa_pp <- function(X,
         X_candidates <- X[candidates, , drop = FALSE]
         S <- proj_l1(.aa_solve_nnls(X_candidates, t(A)), eps = eps)
         res <- X_candidates - S %*% A
-        dists <- rowSums(res * res)  # squared residuals
+        dists <- rowSums(res * res) # squared residuals
         dists[!is.finite(dists)] <- 0
         b[k] <- candidates[
             .aa_sample(dists, size = 1L, replace = TRUE)
@@ -405,8 +435,7 @@ hull_outmost <- function(X,
 
     # Choose how to construct the candidate hull set; selection logic is shared below.
     # Returns a vector of row indices of X that are candidates for selection as archetypes.
-    candidate_rows <- switch(
-        hull_method,
+    candidate_rows <- switch(hull_method,
         full = .aa_build_hull_candidates_full(X),
         projected = .aa_build_hull_candidates_projected(
             X,
@@ -456,8 +485,9 @@ hull_outmost <- function(X,
         geometry::convhulln(X_dense, options = "Fx"),
         error = function(e) NULL
     )
-    if (is.null(facets))
+    if (is.null(facets)) {
         return(seq_len(N))
+    }
 
     if (is.null(dim(facets))) {
         idx <- as.integer(facets)
@@ -472,18 +502,22 @@ hull_outmost <- function(X,
                                                 projected_dim = 2L,
                                                 n_projection_max = NULL) {
     D <- ncol(X)
-    stopifnot("`projected_dim` must be an integer in [1, ncol(X)]" = is_count(projected_dim) && projected_dim <= D)
+    if (!(is_count(projected_dim) && projected_dim <= D)) {
+        stop("`projected_dim` must be an integer between 1 and `ncol(X)`.", call. = FALSE)
+    }
 
-    if (projected_dim == D)
+    if (projected_dim == D) {
         return(.aa_build_hull_candidates_full(X))
+    }
 
     # Projected-hull strategy: aggregate envelope points across low-dimensional views.
     # Views are constructed by projecting (selecting) on random subsets of features.
     combs <- utils::combn(D, projected_dim)
     n_combs <- ncol(combs)
     selected <- seq_len(n_combs)
-    if (!is.null(n_projection_max) && n_projection_max < n_combs)
+    if (!is.null(n_projection_max) && n_projection_max < n_combs) {
         selected <- sample.int(n_combs, size = n_projection_max, replace = FALSE)
+    }
 
     rows <- integer(0)
     for (j in selected) {
@@ -505,8 +539,9 @@ hull_outmost <- function(X,
 
     for (p in seq_len(n_partitions)) {
         grp <- shuffled_rows[part_id == p]
-        if (length(grp) == 0L)
+        if (length(grp) == 0L) {
             next
+        }
         if (length(grp) <= 2L) {
             rows <- c(rows, grp)
             next
@@ -525,11 +560,13 @@ hull_outmost <- function(X,
     N <- nrow(X)
     candidate_rows <- as.integer(candidate_rows)
     candidate_rows <- candidate_rows[candidate_rows >= 1L & candidate_rows <= N]
-    if (length(candidate_rows) == 0L)
+    if (length(candidate_rows) == 0L) {
         stop("No hull candidates available for `hull_outmost`.")
+    }
 
-    if (use_unique_candidates)
+    if (use_unique_candidates) {
         candidate_rows <- unique(candidate_rows)
+    }
 
     Xc <- as.matrix(X[candidate_rows, , drop = FALSE])
     if (nrow(Xc) == 1L) {
@@ -568,9 +605,10 @@ hull_outmost <- function(X,
 # X is a matrix of samples
 # ind is a vector of indices selecting the archetypes from X
 .aa_dist_to_nearest_archetype <- function(X, ind, distances = NULL) {
-    if (!is.null(distances))
+    if (!is.null(distances)) {
         return(matrixStats::rowMins(distances[, ind, drop = FALSE]))
-    A <- X[ind, , drop = FALSE]  # archetypes
+    }
+    A <- X[ind, , drop = FALSE] # archetypes
     dists <- .aa_pdist2(A, X)
     matrixStats::colMins(dists)
 }
@@ -598,20 +636,22 @@ hull_outmost <- function(X,
     ind <- .aa_normalize_row_indices(ind, nrow(X), rownames(X))
     nm <- names(ind) %||% paste0("A", seq_along(ind))
 
-    A <- X[ind, , drop = FALSE]  # Archetypes
-    B <- onehot(ind, sparse = sparse, nrow(X))  # Row-stochastic matrix
+    A <- X[ind, , drop = FALSE] # Archetypes
+    B <- onehot(ind, sparse = sparse, nrow(X)) # Row-stochastic matrix
     rownames(A) <- rownames(B) <- nm
     list(A = A, B = B)
 }
 
 .aa_init_S <- function(X, A, eps = 0) {
-    S <- proj_l1(1 / .aa_pdist2(X, A), eps = eps)  # init S by similarity score
+    S <- proj_l1(1 / .aa_pdist2(X, A), eps = eps) # init S by similarity score
     S[is.nan(S)] <- 1 # NaNs = Inf/Inf for the archetypes
     S
 }
 
 dirichlet <- function(X, K, alpha = 1, ...) {
-    stopifnot("`alpha` must be a single positive number" = is_positive(alpha))
+    if (!is_positive(alpha)) {
+        stop("`alpha` must be a single positive number.", call. = FALSE)
+    }
     N <- nrow(X)
     nm <- paste0("A", seq_len(K))
     B <- matrix(stats::rgamma(K * N, shape = alpha), nrow = K, ncol = N)

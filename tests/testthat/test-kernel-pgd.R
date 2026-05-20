@@ -45,11 +45,13 @@ test_that("kernel PGD matches Euclidean PGD for the linear kernel", {
     kernel_order <- row_order(coordinates(kernel))
     pgd_order <- row_order(coordinates(pgd))
     expect_equal(unname(coordinates(kernel)[kernel_order, , drop = FALSE]),
-                 unname(coordinates(pgd)[pgd_order, , drop = FALSE]),
-                 tolerance = 1e-7)
+        unname(coordinates(pgd)[pgd_order, , drop = FALSE]),
+        tolerance = 1e-7
+    )
     expect_equal(unname(kernel[["coefficients"]][kernel_order, , drop = FALSE]),
-                 unname(pgd[["coefficients"]][pgd_order, , drop = FALSE]),
-                 tolerance = 1e-7)
+        unname(pgd[["coefficients"]][pgd_order, , drop = FALSE]),
+        tolerance = 1e-7
+    )
 })
 
 test_that("kernel PGD fits an RBF kernel and returns coordinates", {
@@ -105,7 +107,7 @@ test_that("coordinates.kernel_archetypes computes the input-space proxy on deman
     S <- matrix(c(1, 0, 0, 1, 0.5, 0.5), nrow = 3L, byrow = TRUE)
     rownames(S) <- rownames(X)
     colnames(S) <- rownames(B)
-    fit <- kernel_archetypes(
+    fit <- .aa_new_kernel_archetypes(
         coefficients = B,
         compositions = S,
         gram = diag(3L),
@@ -130,7 +132,7 @@ test_that("coordinates.kernel_archetypes preserves Matrix dispatch for sparse da
     rownames(S) <- rownames(X)
     colnames(S) <- rownames(B)
 
-    fit <- kernel_archetypes(
+    fit <- .aa_new_kernel_archetypes(
         coefficients = B,
         compositions = S,
         gram = diag(3L),
@@ -257,13 +259,17 @@ test_that("kernel PGD validates Gram and kernel inputs", {
 
     G_bad <- G
     G_bad[1, 1] <- NA_real_
-    expect_error(archetypes_kernel_pgd(x = G_bad, K = 2L, kernel = "precomputed"),
-                 "missing or non-finite")
+    expect_error(
+        archetypes_kernel_pgd(x = G_bad, K = 2L, kernel = "precomputed"),
+        "missing or non-finite"
+    )
 
     G_bad <- G
     G_bad[1, 1] <- -10
-    expect_error(archetypes_kernel_pgd(x = G_bad, K = 2L, kernel = "precomputed"),
-                 "positive semidefinite")
+    expect_error(
+        archetypes_kernel_pgd(x = G_bad, K = 2L, kernel = "precomputed"),
+        "positive semidefinite"
+    )
 
     custom <- function(X) tcrossprod(X)
     fit <- suppressWarnings(archetypes_kernel_pgd(

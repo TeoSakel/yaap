@@ -137,7 +137,7 @@ test_that("anames gets and sets kernel archetype labels", {
     G <- diag(3L)
     rownames(G) <- colnames(G) <- colnames(B)
 
-    fit <- kernel_archetypes(
+    fit <- .aa_new_kernel_archetypes(
         coefficients = B,
         compositions = S,
         gram = G,

@@ -84,8 +84,10 @@
 #' plot.kernel_archetypes() with projection = "pca" projects archetype
 #' compositions onto kernel PCA components of the data.
 #'
-#' @returns An object of class \code{\link{kernel_archetypes}}, extending
-#'   \code{archetypes}.
+#' @returns An object of class \code{kernel_archetypes}, extending
+#'   \code{archetypes}. Kernel methods expose Hilbert-space residual norms,
+#'   input-space coordinate proxies when data are stored, and explicitly reject
+#'   out-of-sample \code{predict()} until cross-Gram evaluation is part of the API.
 #'
 #' @seealso [run_aa()] for the common entry point and full parameter documentation.
 #'
@@ -96,13 +98,15 @@
 #' @references
 #' Mørup, M., & Hansen, L. K. (2012).
 #' Archetypal analysis for machine learning and data mining.
-#' *Neurocomputing*, 80, 54-63. \url{https://dx.doi.org/10.1016/j.neucom.2011.06.033}
+#' *Neurocomputing*, 80, 54-63. \doi{10.1016/j.neucom.2011.06.033}
 #'
 #' @export
 archetypes_kernel_pgd <- function(x,
                                   K,
-                                  kernel = c("rbf", "laplace", "polynomial",
-                                             "linear", "precomputed"),
+                                  kernel = c(
+                                      "rbf", "laplace", "polynomial",
+                                      "linear", "precomputed"
+                                  ),
                                   kernel_args = list(),
                                   data = NULL,
                                   init = "furthest_sum",
@@ -120,8 +124,9 @@ archetypes_kernel_pgd <- function(x,
                                   max_iter_optimizer = 10L,
                                   step_shrinkage = 0.5,
                                   max_no_update = 5L) {
-    if (!is.function(kernel))
+    if (!is.function(kernel)) {
         kernel <- match.arg(kernel)
+    }
     .aa_fit_engine(
         call = match.call(),
         x = x,
@@ -160,27 +165,36 @@ archetypes_kernel_pgd <- function(x,
                              max_iter_optimizer = 10L,
                              step_shrinkage = 0.5,
                              max_no_update = 5L) {
-    if (!is.function(kernel))
+    if (!is.function(kernel)) {
         kernel <- match.arg(kernel)
+    }
 
     list(
         check = function(ctx) {
-            if (ctx[["missing"]])
+            if (ctx[["missing"]]) {
                 stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
-            if (!is.null(ctx[["weights"]]))
+            }
+            if (!is.null(ctx[["weights"]])) {
                 stop("`weights` are not supported for `method = 'kernel'`.", call. = FALSE)
-            if (!identical(ctx[["scale"]], FALSE))
+            }
+            if (!identical(ctx[["scale"]], FALSE)) {
                 warning("`scale` is ignored for `method = 'kernel'`.", call. = FALSE)
-            if (!is.list(kernel_args))
+            }
+            if (!is.list(kernel_args)) {
                 stop("`kernel_args` must be a list.", call. = FALSE)
+            }
             .aa_check_projected_gradient_controls(
                 step_size = step_size,
                 max_iter_optimizer = max_iter_optimizer,
                 step_shrinkage = step_shrinkage,
                 max_no_update = max_no_update
             )
-            stopifnot("delta must be single non-negative number" = is_non_negative(delta))
-            stopifnot("pseudo_pgd must be TRUE or FALSE" = is_logical(pseudo_pgd))
+            if (!is_non_negative(delta)) {
+                stop("`delta` must be a single non-negative number.", call. = FALSE)
+            }
+            if (!is_logical(pseudo_pgd)) {
+                stop("`pseudo_pgd` must be TRUE or FALSE.", call. = FALSE)
+            }
             invisible(TRUE)
         },
         preprocess = function(ctx) {
@@ -278,13 +292,13 @@ archetypes_kernel_pgd <- function(x,
                                step_shrinkage,
                                max_no_update) {
     if (pseudo_pgd) {
-        grad_S        <- grad_S_l1
+        grad_S <- grad_S_l1
         grad_kernel_B <- grad_kernel_B_l1
-        project       <- proj_l1
+        project <- proj_l1
     } else {
-        grad_S        <- grad_S_trace
+        grad_S <- grad_S_trace
         grad_kernel_B <- function(B, grad) grad
-        project       <- proj_simplex
+        project <- proj_simplex
     }
 
     update_alpha <- delta > 0
@@ -292,9 +306,9 @@ archetypes_kernel_pgd <- function(x,
     a_hi <- 1 + delta
     clip <- function(a) pmax(pmin(a, a_hi), a_lo)
 
-    init <- aB <- B  # actual archetype coefficients used for loss and gradient computations
+    init <- aB <- B # actual archetype coefficients used for loss and gradient computations
     a <- rowSums(aB)
-    B <- aB / a  # projected archetype coefficients used for updates
+    B <- aB / a # projected archetype coefficients used for updates
     slack_tol <- 1e-6
     if (any(a < a_lo - slack_tol) || any(a > a_hi + slack_tol)) {
         fmt <- "Initialize B marginals are outside the specified delta range [%.3f, %.3f]"
@@ -346,7 +360,7 @@ archetypes_kernel_pgd <- function(x,
         }
 
         grad_aB <- StS %*% aB %*% G - StG
-        grad <- a * grad_kernel_B(B, grad_aB)  # grad_B
+        grad <- a * grad_kernel_B(B, grad_aB) # grad_B
         for (k in seq_len(max_iter_optimizer)) {
             B_new <- project(B - step_B * grad, eps = eps)
             aB_new <- a * B_new
@@ -408,8 +422,9 @@ archetypes_kernel_pgd <- function(x,
             no_update <- no_update + 1L
             step_S <- step_S * step_shrinkage
             step_B <- step_B * step_shrinkage
-            if (update_alpha)
+            if (update_alpha) {
                 step_a <- step_a * step_shrinkage
+            }
 
             if (verbose) {
                 fmt <- paste(
@@ -447,8 +462,9 @@ archetypes_kernel_pgd <- function(x,
 
 # TODO: extend to use kernlab or kerntools methods
 .aa_kernel_prepare <- function(x, kernel, kernel_args, data = NULL) {
-    if (!is.list(kernel_args))
+    if (!is.list(kernel_args)) {
         stop("`kernel_args` must be a list.", call. = FALSE)
+    }
 
     if (identical(kernel, "precomputed")) {
         G <- as.matrix(x)
@@ -461,16 +477,18 @@ archetypes_kernel_pgd <- function(x,
         ))
     }
 
-    if (!is.null(data))
+    if (!is.null(data)) {
         stop("`data` is only used with `kernel = 'precomputed'`.", call. = FALSE)
+    }
     stored_data <- if (is.data.frame(x)) data.matrix(x) else x
     if (is.function(kernel)) {
         G <- do.call(kernel, c(list(stored_data), kernel_args))
         return(list(gram = as.matrix(G), data = stored_data, kernel = kernel, kernel_args = kernel_args))
     }
 
-    if (!is.character(kernel) || length(kernel) != 1L)
+    if (!is.character(kernel) || length(kernel) != 1L) {
         stop("`kernel` must be a single string or a function.", call. = FALSE)
+    }
     kernel <- match.arg(kernel, c("linear", "rbf", "laplace", "polynomial", "precomputed"))
     X <- if (inherits(stored_data, "sparseMatrix") && kernel %in% c("linear", "polynomial")) {
         stored_data
@@ -490,14 +508,16 @@ archetypes_kernel_pgd <- function(x,
     # Catch any mis-specification of kernel arguments that would be ignored by the kernel function
     if (!is.null(gamma) && kernel %in% c("rbf", "laplace")) {
         stop(
-            sprintf("%s kernels use `sigma`; `gamma` is only used for polynomial kernels",
-                    ifelse(kernel == "rbf", "RBF", "Laplace")),
+            sprintf(
+                "%s kernels use `sigma`; `gamma` is only used for polynomial kernels",
+                ifelse(kernel == "rbf", "RBF", "Laplace")
+            ),
             call. = FALSE
         )
     } else if (!is.null(gamma) && kernel != "polynomial") {
         warning(
             "`gamma` is only used for the polynomial kernel; ignoring for other kernels",
-             call. = FALSE
+            call. = FALSE
         )
     } else if (!is.null(sigma) && !(kernel %in% c("rbf", "laplace"))) {
         warning(
@@ -506,8 +526,7 @@ archetypes_kernel_pgd <- function(x,
         )
     }
 
-    switch(
-        kernel,
+    switch(kernel,
         linear = tcrossprod(X),
         rbf = .aa_rbf_kernel(X, sigma = sigma),
         laplace = .aa_laplace_kernel(X, sigma = sigma),
@@ -517,15 +536,17 @@ archetypes_kernel_pgd <- function(x,
 
 .aa_auto_rbf_sigma <- function(D) {
     d_upper <- if (is.matrix(D)) D[upper.tri(D)] else as.vector(D)
-    d_90    <- d_upper[d_upper <= stats::quantile(d_upper, 0.9)]
-    sigma   <- .aa_otsu_threshold(d_90) * 0.75
+    d_90 <- d_upper[d_upper <= stats::quantile(d_upper, 0.9)]
+    sigma <- .aa_otsu_threshold(d_90) * 0.75
     if (!is.finite(sigma) || sigma <= 0) 1 else sigma
 }
 
 .aa_rbf_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X)
     sigma <- sigma %||% .aa_auto_rbf_sigma(D)
-    stopifnot("`sigma` must be a positive finite number" = is_positive(sigma))
+    if (!is_positive(sigma)) {
+        stop("`sigma` must be a positive finite number.", call. = FALSE)
+    }
     G <- exp(-0.5 * (D / sigma)^2)
     # convert to full symmetric matrix at the end to avoid redundant computations
     G <- as.matrix(G)
@@ -536,7 +557,9 @@ archetypes_kernel_pgd <- function(x,
 .aa_laplace_kernel <- function(X, sigma = NULL) {
     D <- stats::dist(X, method = "manhattan")
     sigma <- sigma %||% .aa_auto_rbf_sigma(D)
-    stopifnot("`sigma` must be a positive finite number" = is_positive(sigma))
+    if (!is_positive(sigma)) {
+        stop("`sigma` must be a positive finite number.", call. = FALSE)
+    }
     G <- exp(-D / sigma)
     # convert to full symmetric matrix at the end to avoid redundant computations
     G <- as.matrix(G)
@@ -545,30 +568,47 @@ archetypes_kernel_pgd <- function(x,
 }
 
 .aa_polynomial_kernel <- function(X, gamma, degree, coef0) {
-    stopifnot("`degree` must be a positive finite number" = is_positive(degree))
-    stopifnot("`coef0` must be a finite number" = is_number(coef0))
+    if (!is_positive(degree)) {
+        stop("`degree` must be a positive finite number.", call. = FALSE)
+    }
+    if (!is_number(coef0)) {
+        stop("`coef0` must be a finite number.", call. = FALSE)
+    }
     gamma <- gamma %||% (1 / ncol(X))
-    stopifnot("`gamma` must be a positive finite number" = is_positive(gamma))
+    if (!is_positive(gamma)) {
+        stop("`gamma` must be a positive finite number.", call. = FALSE)
+    }
     (gamma * tcrossprod(X) + coef0)^degree
 }
 
 .aa_check_kernel_inputs <- function(ctx, prep, check_psd = FALSE) {
     G <- prep[["gram"]]
     data <- prep[["data"]]
-    stopifnot("Gram matrix must be square" = nrow(G) == ncol(G))
-    stopifnot("Gram matrix must be numeric" = is.numeric(G))
-    stopifnot("Gram matrix contains missing or non-finite values" =
-                  !any(is.na(G)) && all(is.finite(G)))
-    stopifnot("Gram matrix must be symmetric" = isSymmetric(G, tol = 1e-8))
+    if (nrow(G) != ncol(G)) {
+        stop("Gram matrix must be square.", call. = FALSE)
+    }
+    if (!is.numeric(G)) {
+        stop("Gram matrix must be numeric.", call. = FALSE)
+    }
+    if (any(is.na(G)) || !all(is.finite(G))) {
+        stop("Gram matrix contains missing or non-finite values.", call. = FALSE)
+    }
+    if (!isSymmetric(G, tol = 1e-8)) {
+        stop("Gram matrix must be symmetric.", call. = FALSE)
+    }
     if (check_psd) {
         eigenvalues <- eigen(G, symmetric = TRUE, only.values = TRUE)[["values"]]
         tol_psd <- 1e-8 * max(1, max(abs(eigenvalues)))
-        stopifnot("Gram matrix must be positive semidefinite" =
-                      min(eigenvalues) >= -tol_psd)
+        if (min(eigenvalues) < -tol_psd) {
+            stop("Gram matrix must be positive semidefinite.", call. = FALSE)
+        }
     }
     .aa_check_fit_controls(ctx, n = nrow(G))
-    if (!is.null(data))
-        stopifnot("`data` rows must match Gram matrix dimensions" = nrow(data) == nrow(G))
+    if (!is.null(data)) {
+        if (nrow(data) != nrow(G)) {
+            stop("`data` rows must match Gram matrix dimensions.", call. = FALSE)
+        }
+    }
     invisible(TRUE)
 }
 
@@ -586,12 +626,15 @@ archetypes_kernel_pgd <- function(x,
             fmt <- "ncol(init) = %d does not match number of samples (%d)"
             stop(sprintf(fmt, ncol(B), nrow(G)))
         }
-        stopifnot("init coefficient matrix must be non-negative" = all(B >= 0))
+        if (!all(B >= 0)) {
+            stop("Initial coefficient matrix must be non-negative.", call. = FALSE)
+        }
         a_lo <- max(1 - delta, ifelse(eps > 0, eps, 1e-8))
         a_hi <- 1 + delta
         a <- rowSums(B)
-        stopifnot("init coefficient row sums are outside the allowed delta range" =
-                      all(a >= a_lo - 1e-8 & a <= a_hi + 1e-8))
+        if (!all(a >= a_lo - 1e-8 & a <= a_hi + 1e-8)) {
+            stop("Initial coefficient row sums are outside the allowed delta range.", call. = FALSE)
+        }
         nm <- .aa_init_names(B)
         rownames(B) <- nm
         colnames(B) <- rownames(G)
@@ -621,6 +664,7 @@ archetypes_kernel_pgd <- function(x,
         ))
     }
 
+    # TODO: disallow "row selection" init
     if (is_single_string(init) && init %in% c("random", "furthest_first", "kmeans_pp", "furthest_sum")) {
         method <- match.arg(init, c("random", "furthest_first", "kmeans_pp", "furthest_sum"))
         ind <- do.call(
@@ -631,7 +675,8 @@ archetypes_kernel_pgd <- function(x,
         ind <- .aa_normalize_row_indices(init, nrow(G), rownames(G))
     } else {
         stop("`init` must be a method string, row indices/names, or a coefficient matrix",
-             call. = FALSE)
+            call. = FALSE
+        )
     }
     if (length(ind) != K) {
         fmt <- "length(init) = %d does not match K (%d)"
@@ -659,7 +704,9 @@ archetypes_kernel_pgd <- function(x,
                                     batch_replace = FALSE,
                                     ...) {
     batch_type <- match.arg(batch_type)
-    stopifnot("batch_replace must be TRUE or FALSE" = is_logical(batch_replace))
+    if (!is_logical(batch_replace)) {
+        stop("`batch_replace` must be TRUE or FALSE.", call. = FALSE)
+    }
     batch_size <- .aa_validate_batch_size(
         batch_size,
         n = nrow(G),
@@ -678,8 +725,7 @@ archetypes_kernel_pgd <- function(x,
     candidate_center_dists <- center_dists[candidates]
     G_candidates <- G[candidates, candidates, drop = FALSE]
 
-    ind <- switch(
-        method,
+    ind <- switch(method,
         random = sample(seq_along(candidates), K, replace = FALSE),
         furthest_first = furthest_first(
             G_candidates,
@@ -705,9 +751,13 @@ archetypes_kernel_pgd <- function(x,
                                  batch_type = c("distal", "uniform"),
                                  batch_replace = FALSE,
                                  ...) {
-    stopifnot("`alpha` must be a single positive number" = is_positive(alpha))
+    if (!is_positive(alpha)) {
+        stop("`alpha` must be a single positive number.", call. = FALSE)
+    }
     batch_type <- match.arg(batch_type)
-    stopifnot("batch_replace must be TRUE or FALSE" = is_logical(batch_replace))
+    if (!is_logical(batch_replace)) {
+        stop("`batch_replace` must be TRUE or FALSE.", call. = FALSE)
+    }
     batch_size <- .aa_validate_batch_size(
         batch_size,
         n = nrow(G),
@@ -721,11 +771,9 @@ archetypes_kernel_pgd <- function(x,
         type = batch_type,
         replace = batch_replace
     )
-    B_batch <- matrix(stats::rgamma(K * length(candidates), shape = alpha),
-                      nrow = K, ncol = length(candidates))
-    B_batch <- proj_l1(B_batch, eps = 0)
     B <- matrix(0, nrow = K, ncol = nrow(G))
-    B[, candidates] <- B_batch
+    B[, candidates] <- stats::rgamma(K * length(candidates), shape = alpha)
+    B <- B / rowSums(B)
     rownames(B) <- paste0("A", seq_len(K))
     colnames(B) <- rownames(G)
     B
@@ -765,22 +813,24 @@ archetypes_kernel_pgd <- function(x,
     rownames(loss) <- NULL
 
     archetype_names <- rownames(B) %||% paste0("A", seq_len(nrow(B)))
-    sample_names    <- row_names    %||% paste0("x", seq_len(ncol(B)))
+    sample_names <- row_names %||% paste0("x", seq_len(ncol(B)))
 
     rownames(B) <- colnames(S) <- archetype_names
     colnames(B) <- rownames(S) <- rownames(gram) <- colnames(gram) <- sample_names
-    if (!is.null(init))
+    if (!is.null(init)) {
         rownames(init) <- archetype_names
+    }
 
-    if (!converged)
+    if (!converged) {
         warning(sprintf("Algorithm did not converge after %d iterations", max_iter))
+    }
     if (verbose) {
         fmt <- ifelse(converged, "Converged after %d iterations:", "Final iteration %d:")
         fmt <- paste(fmt, "loss = %.4g, R2 = %.3f")
         message(sprintf(fmt, i, loss[j, "loss"], loss[j, "r2"]))
     }
 
-    kernel_archetypes(
+    .aa_new_kernel_archetypes(
         coefficients = B,
         compositions = S,
         gram = gram,

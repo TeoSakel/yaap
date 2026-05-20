@@ -1,6 +1,6 @@
 ---
 title: "Non-Gaussian and Metric Variants of Archetypal Analysis"
-bibliography: ../references.bib
+bibliography: references.bib
 output:
   rmarkdown::html_vignette:
     toc: true

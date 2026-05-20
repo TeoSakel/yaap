@@ -24,24 +24,28 @@ test_that("Euclidean fitters and run_aa share core toy-data invariants", {
 test_that("PGD and NNLS integrate with hull_outmost initialization", {
     X <- toy_matrix()
     cases <- list(
-        pgd = function() run_aa(
-            X,
-            K = 3L,
-            method = "pgd",
-            init = "hull_outmost",
-            init_args = list(hull_method = "projected", projected_dim = 2L),
-            max_iter = 5L,
-            tol_r2 = 0.9
-        ),
-        nnls = function() run_aa(
-            X,
-            K = 3L,
-            method = "nnls",
-            init = "hull_outmost",
-            init_args = list(hull_method = "partitioned", n_partitions = 5L),
-            max_iter = 3L,
-            tol_r2 = 0.9
-        )
+        pgd = function() {
+            run_aa(
+                X,
+                K = 3L,
+                method = "pgd",
+                init = "hull_outmost",
+                init_args = list(hull_method = "projected", projected_dim = 2L),
+                max_iter = 5L,
+                tol_r2 = 0.9
+            )
+        },
+        nnls = function() {
+            run_aa(
+                X,
+                K = 3L,
+                method = "nnls",
+                init = "hull_outmost",
+                init_args = list(hull_method = "partitioned", n_partitions = 5L),
+                max_iter = 3L,
+                tol_r2 = 0.9
+            )
+        }
     )
 
     for (case in cases) {
@@ -223,8 +227,9 @@ test_that("PGD stalls instead of converging when no updates are accepted", {
                 max_no_update = 2L
             ),
             warning = function(w) {
-                if (grepl("Algorithm did not converge", conditionMessage(w)))
+                if (grepl("Algorithm did not converge", conditionMessage(w))) {
                     invokeRestart("muffleWarning")
+                }
             }
         ),
         "PGD stalled"
@@ -419,8 +424,9 @@ test_that("NNLS max_no_update records rejected candidate before stalling", {
                 init_args = list(refinement_steps = 0L)
             ),
             warning = function(w) {
-                if (grepl("Algorithm did not converge", conditionMessage(w)))
+                if (grepl("Algorithm did not converge", conditionMessage(w))) {
                     invokeRestart("muffleWarning")
+                }
             }
         ),
         "NNLS stalled"
@@ -468,8 +474,9 @@ test_that("NNLS warns when raw coefficients are far from simplex", {
         withCallingHandlers(
             archetypes_nnls(X, K = 3L, max_iter = 1L, bigM = 1),
             warning = function(w) {
-                if (grepl("Algorithm did not converge", conditionMessage(w)))
+                if (grepl("Algorithm did not converge", conditionMessage(w))) {
                     invokeRestart("muffleWarning")
+                }
             }
         ),
         "not close to simplex"
@@ -562,8 +569,9 @@ test_that("archetypes fitters accept sparse input with expected invariants", {
         max_iter = 1L
     ))
 
-    for (fit in list(pgd, nnls))
+    for (fit in list(pgd, nnls)) {
         expect_archetypes_fit(fit, K = 2L, n = nrow(X), p = ncol(X))
+    }
 })
 
 test_that("missing-data PGD defaults on for dense NA input", {
@@ -764,8 +772,9 @@ test_that("robust archetypes fitters keep expected invariants", {
         tol_r2 = 0.95
     ))
 
-    for (fit in list(pgd, nnls))
+    for (fit in list(pgd, nnls)) {
         expect_archetypes_fit(fit, K = 3L, n = nrow(X), p = ncol(X))
+    }
 })
 
 test_that("archetypes fitters accept named coordinate matrix initialization", {
@@ -884,23 +893,26 @@ test_that("run_aa with nrep > 1 returns the best sequential restart", {
 
 test_that("run_aa nrep validation rejects invalid values", {
     X <- toy_matrix()
-    for (nrep in list(0L, -1L, 1.5))
-        expect_error(run_aa(X, K = 3L, nrep = nrep),  "`nrep`")
+    for (nrep in list(0L, -1L, 1.5)) {
+        expect_error(run_aa(X, K = 3L, nrep = nrep), "`nrep`")
+    }
 })
 
 test_that("run_aa nrep works with non-default methods", {
     X <- toy_matrix()
     cases <- list(
         nnls = function() run_aa(X, K = 3L, method = "nnls", max_iter = 5L, nrep = 2L),
-        kernel = function() run_aa(
-            tcrossprod(X),
-            K = 3L,
-            method = "kernel",
-            kernel = "precomputed",
-            data = X,
-            max_iter = 5L,
-            nrep = 2L
-        ),
+        kernel = function() {
+            run_aa(
+                tcrossprod(X),
+                K = 3L,
+                method = "kernel",
+                kernel = "precomputed",
+                data = X,
+                max_iter = 5L,
+                nrep = 2L
+            )
+        },
         paa = function() run_aa(X, K = 3L, method = "paa", max_iter = 5L, nrep = 2L)
     )
 
