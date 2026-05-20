@@ -508,6 +508,24 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     X
 }
 
+.aa_pack_lower_tri <- function(x) {
+    x <- as.matrix(x)
+    if (nrow(x) != ncol(x))
+        stop("`x` must be a square matrix.", call. = FALSE)
+    c(nrow(x), x[lower.tri(x, diag = TRUE)])
+}
+
+.aa_unpack_lower_tri <- function(x) {
+    p <- as.integer(x[[1L]])
+    expected <- p * (p + 1L) / 2L
+    if (!is.finite(p) || p < 0L || length(x) != expected + 1L)
+        stop("Packed lower-triangular matrix has invalid dimensions.", call. = FALSE)
+
+    out <- matrix(0, nrow = p, ncol = p)
+    out[lower.tri(out, diag = TRUE)] <- x[-1L]
+    out
+}
+
 .aa_preprocess_missing <- function(data, sd_threshold, verbose, scale = TRUE) {
     if (is_matrix(scale))
         stop("matrix `scale` is not supported with `missing = TRUE`.", call. = FALSE)
@@ -588,58 +606,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     if (inherits(M, "sparseMatrix"))
         M <- Matrix::drop0(M)
 
-    list(X = X, M = M, undo_scale = .aa_undo_scale)
-}
-
-.aa_undo_scale <- function(mat, X) {
-    stopifnot(ncol(mat) == ncol(X))
-
-    # Remove bigM if present
-    iM <- attr(X, "bigM")
-    x_names <- colnames(X)
-    if (!is.null(iM))
-        mat <- mat[, -iM, drop = FALSE]
-    if (!is.null(iM))
-        x_names <- x_names[-iM]
-    mat <- as.matrix(mat)
-
-    scale_mode <- attr(X, "scale:mode")
-    if (identical(scale_mode, "matrix")) {
-        scale_factor <- attr(X, "scale:factor")
-        scale_factor <- as.matrix(scale_factor)
-        mat <- t(backsolve(t(scale_factor), t(mat)))
-    } else if (identical(scale_mode, "vector")) {
-        mat <- sweep(mat, 2L, attr(X, "scale:factor"), "*")
-    }
-
-    mask <- attr(X, "mask")
-    if  (is.null(mask))
-        mask <- rep(TRUE, ncol(mat))  # no filtering
-
-    x_mean <- attr(X, "restore:center")
-    if (is.null(x_mean)) {
-        x_mean <- rep(0, length(mask))
-        names(x_mean) <- x_names
-    }
-    out <- matrix(x_mean, nrow = nrow(mat), ncol = length(x_mean), byrow = TRUE,
-                  dimnames = list(NULL, names(x_mean)))
-
-    if (identical(scale_mode, "vector")) {
-        x_center <- attr(X, "scaled:center")
-        if (is.null(x_center)) {
-            x_center <- rep(0, length(mask))
-            names(x_center) <- names(x_mean)
-        }
-        if (!is.null(attr(X, "mask"))) {
-            x_center <- x_center[mask]
-        }
-        out[, mask] <- matrix(x_center, nrow = nrow(mat), ncol = ncol(mat),
-                              byrow = TRUE) + mat
-    } else {
-        out[, mask] <- mat
-    }
-
-    out
+    list(X = X, M = M)
 }
 
 .aa_observed_col_stats <- function(X, M) {
@@ -722,7 +689,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
         init <- init[, mask, drop = FALSE]
 
     if (identical(attr(X, "scale:mode"), "matrix"))
-        init <- init %*% as.matrix(attr(X, "scale:factor"))
+        init <- init %*% .aa_unpack_lower_tri(attr(X, "scale:factor"))
     if (identical(attr(X, "scale:mode"), "vector"))
         init <- sweep(init, 2L, attr(X, "scale:factor"), "/")
 

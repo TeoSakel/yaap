@@ -150,7 +150,7 @@
             sweep(X, 2L, scale_factor, "/")
         }
     } else if (identical(scale_mode, "matrix")) {
-        X <- as.matrix(X) %*% as.matrix(map[["scale_factor"]])
+        X <- as.matrix(X) %*% .aa_unpack_lower_tri(map[["scale_factor"]])
     } else {
         X <- if (inherits(X, "sparseMatrix")) X else as.matrix(X)
     }
@@ -170,8 +170,8 @@
 
     scale_mode <- map[["scale_mode"]]
     if (identical(scale_mode, "matrix")) {
-        # we have stored t(chol(scale))
-        mat <- t(backsolve(t(as.matrix(map[["scale_factor"]])), t(mat)))
+        L <- .aa_unpack_lower_tri(map[["scale_factor"]]) # we have stored t(chol(scale))
+        mat <- t(backsolve(t(L), t(mat)))
     } else if (identical(scale_mode, "vector")) {
         scale_factor <- map[["scale_factor"]] %||% rep(1, ncol(mat))
         mat <- sweep(mat, 2L, scale_factor, "*")
