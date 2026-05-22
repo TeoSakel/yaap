@@ -16,9 +16,9 @@ A named numeric vector of non-negative squared residual norms, one
 per sample.
 }
 \description{
-Returns the per-sample squared Hilbert-space residual norm
-\eqn{\|x_i - \hat{x}_i\|_\mathcal{H}^2}, computed directly from the Gram
-matrix without explicitly mapping to feature space.
+Residuals are per-sample squared distances in the implicitly defined feature space.
+The method is provided for completness and to support residual-based diagnostics as
+the natural \code{fitted()} method is not defined for nonlinear kernel archetypes.
 }
 \seealso{
 \code{\link[=residuals.archetypes]{residuals.archetypes()}} for Euclidean residuals on standard fits.

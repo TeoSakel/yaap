@@ -188,7 +188,7 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 
 # Compute squared Euclidean distance of each sample from center
 .aa_dist2 <- function(X, center = FALSE) {
-    x2 <- rowSums(X * X)
+    x2 <- Matrix::rowSums(X * X)
     if (isFALSE(center)) {
         return(x2)
     }
@@ -201,13 +201,32 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
 
 
 # Compute pairwise squared distances between rows of X and Y
-.aa_pdist2 <- function(X, Y) {
+.aa_pdist2 <- function(X, Y = NULL) {
+    if (is.null(Y)) {
+        return(as.matrix(stats::dist(X))^2)
+    }
+
     # both x and y must be in the same dimensional space
     stopifnot(ncol(X) == ncol(Y))
 
     # squared distances from cosine law ||x||^2 + ||y||^2 − 2<x,y>
     D2 <- outer(rowSums(X * X), rowSums(Y * Y), "+") - 2 * tcrossprod(X, Y)
     pmax(D2, 0) # ensure non-negative distances
+}
+
+# Compute pairwise Manhattan distances between rows of X and Y
+# TODO: consider using proxy::dist() for more efficient implementations
+.aa_pdist_manhattan <- function(X, Y = NULL) {
+    if (is.null(Y)) {
+        return(as.matrix(stats::dist(X, method = "manhattan")))
+    }
+
+    stopifnot(ncol(X) == ncol(Y))
+    D <- matrix(0, nrow = nrow(X), ncol = nrow(Y))
+    for (j in seq_len(ncol(X))) {
+        D <- D + abs(outer(as.vector(X[, j]), as.vector(Y[, j]), "-"))
+    }
+    D
 }
 
 # Centered log-ratio transform after row closure, with zero replacement.

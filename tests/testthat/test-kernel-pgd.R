@@ -97,6 +97,87 @@ test_that("kernel PGD fits an RBF kernel and returns coordinates", {
         "Laplace kernels use `sigma`"
     )
 })
+test_that("kernel PGD stores resolved built-in kernel arguments", {
+    X <- toy_matrix()[1:8, , drop = FALSE]
+
+    rbf <- suppressWarnings(archetypes_kernel_pgd(
+        x = X,
+        K = 2L,
+        kernel = "rbf",
+        max_iter = 1L
+    ))
+    expect_true(is_positive(rbf[["kernel_args"]][["sigma"]]))
+
+    poly <- suppressWarnings(archetypes_kernel_pgd(
+        x = X,
+        K = 2L,
+        kernel = "polynomial",
+        max_iter = 1L
+    ))
+    expect_equal(poly[["kernel_args"]][["gamma"]], 1 / ncol(X))
+    expect_equal(poly[["kernel_args"]][["degree"]], 3)
+    expect_equal(poly[["kernel_args"]][["coef0"]], 1)
+})
+
+test_that("predict.kernel_archetypes returns compositions for built-in kernels", {
+    X <- matrix(c(0, 0, 1, 0, 0, 1), nrow = 3L, byrow = TRUE)
+    B <- onehot(c(1L, 2L), sparse = FALSE, nc = nrow(X))
+    fit <- suppressWarnings(archetypes_kernel_pgd(
+        x = X,
+        K = 2L,
+        kernel = "linear",
+        init = B,
+        max_iter = 1L
+    ))
+
+    pred <- predict(fit, X[1:2, , drop = FALSE], type = "compositions")
+
+    expect_matrix_dim(pred, 2L, 2L)
+    expect_row_stochastic(pred)
+    expect_error(predict(fit, X, type = "reconstruction"), "undefined")
+})
+
+test_that("predict.kernel_archetypes treats precomputed newdata as a cross-kernel", {
+    G <- diag(2L)
+    B <- diag(2L)
+    rownames(B) <- c("A1", "A2")
+    colnames(B) <- c("x1", "x2")
+    S <- diag(2L)
+    rownames(S) <- c("x1", "x2")
+    colnames(S) <- c("A1", "A2")
+    fit <- .aa_new_kernel_archetypes(
+        coefficients = B,
+        compositions = S,
+        gram = G,
+        kernel = "precomputed"
+    )
+    C <- matrix(c(1, 0, 0.25, 0.75), nrow = 2L, byrow = TRUE)
+
+    pred <- predict(fit, C, type = "compositions")
+
+    expect_matrix_dim(pred, 2L, 2L)
+    expect_row_stochastic(pred)
+    expect_error(predict(fit, matrix(1, nrow = 2L, ncol = 3L), type = "compositions"), "columns")
+})
+
+test_that("predict.kernel_archetypes uses two-argument custom kernels", {
+    X <- matrix(c(0, 0, 1, 0, 0, 1), nrow = 3L, byrow = TRUE)
+    kernel <- function(X, Y) X %*% t(Y)
+    B <- onehot(c(1L, 2L), sparse = FALSE, nc = nrow(X))
+    fit <- suppressWarnings(archetypes_kernel_pgd(
+        x = X,
+        K = 2L,
+        kernel = kernel,
+        init = B,
+        max_iter = 1L
+    ))
+
+    pred <- predict(fit, X[1L, , drop = FALSE], type = "compositions")
+
+    expect_matrix_dim(pred, 1L, 2L)
+    expect_row_stochastic(pred)
+})
+
 test_that("coordinates.kernel_archetypes computes the input-space proxy on demand", {
     X <- matrix(c(0, 0, 1, 0, 0, 1), nrow = 3L, byrow = TRUE)
     rownames(X) <- c("s1", "s2", "s3")
@@ -261,7 +342,7 @@ test_that("kernel PGD validates Gram and kernel inputs", {
     G_bad[1, 1] <- NA_real_
     expect_error(
         archetypes_kernel_pgd(x = G_bad, K = 2L, kernel = "precomputed"),
-        "missing or non-finite"
+        "finite values"
     )
 
     G_bad <- G
@@ -271,7 +352,7 @@ test_that("kernel PGD validates Gram and kernel inputs", {
         "positive semidefinite"
     )
 
-    custom <- function(X) tcrossprod(X)
+    custom <- function(X, Y) X %*% t(Y)
     expect_error(
         archetypes_kernel_pgd(
             x = X,
@@ -325,9 +406,9 @@ test_that("kernel archetypes methods expose names, residuals, and proxy plots", 
     expect_length(res, nrow(X))
     expect_true(is_all_finite(res))
     expect_error(fitted(fit), "not defined")
-    expect_error(predict(fit, X), "not currently defined")
-    expect_error(predict(fit, X, type = "compositions"), "not currently defined")
-    expect_error(predict(fit, X, type = "reconstruction"), "not currently defined")
+    expect_matrix_dim(predict(fit, X, type = "compositions"), nrow(X), 3L)
+    expect_row_stochastic(predict(fit, X, type = "compositions"))
+    expect_error(predict(fit, X, type = "reconstruction"), "undefined")
 
     grDevices::pdf(tempfile(fileext = ".pdf"))
     expect_silent(plot(fit, what = "loss"))

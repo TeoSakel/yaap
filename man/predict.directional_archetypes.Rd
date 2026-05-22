@@ -35,8 +35,7 @@ a directional reconstruction matrix (N_new x M) when
 \code{type = "reconstruction"}.
 }
 \description{
-Solves for new sample compositions with fixed directional archetype
-coordinates. By default returns directional reconstructions obtained
-from \code{S \%*\% A}, then row-normalized and hemisphere-aligned to \code{newdata}.
-With \code{type = "compositions"}, returns composition weights (\code{S}).
+Projects new directional samples onto the fitted archetype space, like
+\code{\link[=predict.archetypes]{predict.archetypes()}}. Directional reconstructions are returned as unit-length directions;
+\code{type = "compositions"} returns the archetype weights.
 }

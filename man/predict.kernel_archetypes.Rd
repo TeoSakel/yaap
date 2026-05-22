@@ -4,23 +4,40 @@
 \alias{predict.kernel_archetypes}
 \title{Predict method for kernel archetypes}
 \usage{
-\method{predict}{kernel_archetypes}(object, newdata, type = c("reconstruction", "compositions"), ...)
+\method{predict}{kernel_archetypes}(
+  object,
+  newdata,
+  type = c("reconstruction", "compositions"),
+  max_iter = 100L,
+  eps = 1e-08,
+  step_size = 1,
+  max_iter_optimizer = 10L,
+  step_shrinkage = 0.5,
+  ...
+)
 }
 \arguments{
 \item{object}{An object of class \code{kernel_archetypes}.}
 
-\item{newdata}{New data to project (currently unsupported).}
+\item{newdata}{New data to project, or an \verb{N_new x N_train} cross-kernel
+matrix when \code{object} was fit with \code{kernel = "precomputed"}.}
 
-\item{type}{Prediction output type. \code{"reconstruction"} or \code{"compositions"}.}
+\item{type}{Prediction output type. Only \code{"compositions"} is defined.}
+
+\item{max_iter, eps, step_size, max_iter_optimizer, step_shrinkage}{Optimization
+controls for composition fitting.}
 
 \item{...}{Ignored.}
 }
 \value{
-No return value. Always errors with an explanatory message.
+A numeric \verb{N_new x K} row-stochastic composition matrix.
 }
 \description{
-Out-of-sample prediction is not currently defined for \code{kernel_archetypes}.
-The fitted object stores training compositions and optional input-space
-coordinates for visualization, but projecting \code{newdata} requires kernel-
-specific cross-Gram evaluation that is not part of this API.
+Predict compositions for kernel archetypes
+}
+\details{
+Projects new samples onto the fitted kernel archetype simplex.
+\code{type = "compositions"} returns the fitted simplex weights.
+\code{type = "reconstruction"} errors because inverse reconstruction from the
+implicit feature space is undefined for kernel archetypes.
 }

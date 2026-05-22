@@ -11,7 +11,7 @@ archetypes_directional(
   init_args = list(),
   weights = NULL,
   max_iter = 100L,
-  tol = 1e-06,
+  tol = 1e-04,
   tol_r2 = 0.9999,
   eps = 1e-08,
   verbose = FALSE,
@@ -36,7 +36,7 @@ archetypes_directional(
 
 \item{max_iter}{maximum number of outer iterations (default: 100)}
 
-\item{tol}{convergence tolerance based on directional residual loss (default: 1e-6)}
+\item{tol}{convergence tolerance based on directional residual loss (default: 1e-4)}
 
 \item{tol_r2}{convergence tolerance based on directional R\eqn{^2} (default: 0.9999)}
 

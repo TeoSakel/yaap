@@ -82,32 +82,53 @@
 
 #' Predict method for kernel archetypes
 #'
-#' Out-of-sample prediction is not currently defined for `kernel_archetypes`.
-#' The fitted object stores training compositions and optional input-space
-#' coordinates for visualization, but projecting `newdata` requires kernel-
-#' specific cross-Gram evaluation that is not part of this API.
+#' Predict compositions for kernel archetypes
+#'
+#' Projects new samples onto the fitted kernel archetype simplex.
+#' `type = "compositions"` returns the fitted simplex weights.
+#' `type = "reconstruction"` errors because inverse reconstruction from the
+#' implicit feature space is undefined for kernel archetypes.
 #'
 #' @param object An object of class `kernel_archetypes`.
-#' @param newdata New data to project (currently unsupported).
-#' @param type Prediction output type. `"reconstruction"` or `"compositions"`.
+#' @param newdata New data to project, or an `N_new x N_train` cross-kernel
+#'   matrix when `object` was fit with `kernel = "precomputed"`.
+#' @param type Prediction output type. Only `"compositions"` is defined.
+#' @param max_iter,eps,step_size,max_iter_optimizer,step_shrinkage Optimization
+#'   controls for composition fitting.
 #' @param ... Ignored.
 #'
-#' @return No return value. Always errors with an explanatory message.
+#' @return A numeric `N_new x K` row-stochastic composition matrix.
 #'
 #' @exportS3Method
 predict.kernel_archetypes <- function(object,
                                       newdata,
                                       type = c("reconstruction", "compositions"),
+                                      max_iter = 100L,
+                                      eps = 1e-8,
+                                      step_size = 1.0,
+                                      max_iter_optimizer = 10L,
+                                      step_shrinkage = 0.5,
                                       ...) {
     type <- match.arg(type)
-    stop(
-        "predict() is not currently defined for kernel_archetypes; ",
-        "out-of-sample projection requires kernel-specific cross-Gram ",
-        "evaluation. Use `compositions(object)` for training compositions.",
-        call. = FALSE
+    if (identical(type, "reconstruction")) {
+        stop(
+            "`type = \"reconstruction\"` is undefined for kernel_archetypes objects.",
+            call. = FALSE
+        )
+    }
+
+    C <- .aa_kernel_cross_gram(object, newdata)
+    .aa_kernel_predict_S(
+        C = C,
+        G = object[["gram"]],
+        B = coefficients(object),
+        max_iter = max_iter,
+        eps = eps,
+        step_size = step_size,
+        max_iter_optimizer = max_iter_optimizer,
+        step_shrinkage = step_shrinkage
     )
 }
-
 #' @exportS3Method
 fitted.kernel_archetypes <- function(object, ...) {
     stop(
@@ -120,9 +141,9 @@ fitted.kernel_archetypes <- function(object, ...) {
 
 #' Residuals for kernel archetypes objects
 #'
-#' Returns the per-sample squared Hilbert-space residual norm
-#' \eqn{\|x_i - \hat{x}_i\|_\mathcal{H}^2}, computed directly from the Gram
-#' matrix without explicitly mapping to feature space.
+#' Residuals are per-sample squared distances in the implicitly defined feature space.
+#' The method is provided for completness and to support residual-based diagnostics as
+#' the natural `fitted()` method is not defined for nonlinear kernel archetypes.
 #'
 #' @param object An object of class `kernel_archetypes`.
 #' @param ... Ignored.
@@ -162,7 +183,7 @@ print.kernel_archetypes <- function(x, ...) {
     )
     cat(conv_info)
     cat("Final Loss Metrics:\n")
-    print(loss[nrow(loss), ], row.names = FALSE)
+    print(loss[nrow(loss), , drop = FALSE], row.names = FALSE)
     cat("\n")
     invisible(x)
 }

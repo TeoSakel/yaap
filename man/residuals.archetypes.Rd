@@ -10,8 +10,9 @@
 \item{object}{An object of class \code{archetypes}.}
 
 \item{type}{Residual type. \code{"response"} (default) returns \code{data - fitted}.
-\code{"pearson"} returns row-wise weighted residuals,
-\code{sqrt(weights) * (data - fitted)}.}
+\code{"pearson"} returns GLM-style Pearson residuals, dividing response
+residuals by the square root of the family variance function and applying
+stored row weights when present.}
 
 \item{...}{Ignored.}
 }
