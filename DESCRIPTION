@@ -21,10 +21,12 @@ Imports:
     utils,
     vctrs
 Suggests:
+    archetypes,
     bench,
     compositions,
     fda,
     geometry,
+    ggplot2,
     irlba,
     knitr,
     MASS,

@@ -25,23 +25,21 @@ set.seed(42)
 ## What is Archetypal Analysis?
 
 Archetypal analysis (AA) is an unsupervised learning method that describes every
-observation as a *convex mixture*^[weighted sums with non-negative weights
-summing to 1] of a small number of extreme, idealized profiles called
-**archetypes** [@Cutler1994]. Unlike PCA, whose components are abstract
-mathematical directions, or k-means, whose clusters are represented by
-centroids, archetypes are located at the *boundary* of the data representing the
-distinct extremes. This gives AA an appealing balance between the interpretability
-of clustering and the flexibility of matrix factorization. In practice,
-archetypes often correspond to "pure" or "extreme" profiles, making the method
-especially useful in settings where observations are naturally viewed as
-mixtures of biologically, chemically, or behaviorally distinct states.
+observation as a *convex mixture*^[weighted sums with non-negative weights summing to 1]
+of a small number of extreme, idealized profiles called **archetypes** [@Cutler1994].
+Unlike PCA, whose components are abstract mathematical directions, or k-means,
+whose clusters are represented by centroids, archetypes are located at the
+*boundary* of the data representing the distinct extremes. AA combines cluster-style
+interpretability with matrix-factorization flexibility. In practice, archetypes
+often correspond to "pure" or "extreme" profiles. This representation is useful
+when observations are naturally viewed as mixtures of biologically, chemically,
+or behaviorally distinct states.
 
-Formally, given a data matrix $X \in \mathbb{R}^{N \times M}$ (N samples, M
-features), AA finds:
+Formally, given a data matrix $X \in \mathbb{R}^{N \times M}$ (N samples, M features), AA finds:
 
 - **Archetypes** $A \in \mathbb{R}^{K \times M}$ : K extreme profiles, each of
   which is itself a weighted average of actual data points ($A = BX$, with
-  $B \geq 0$, $\mathbf{1}^\top B = \mathbf{1}$),
+  $B \geq 0$, $B\mathbf{1} = \mathbf{1}$),
 - **Compositions** $S \in \mathbb{R}^{N \times K}$ : for each observation, a
   non-negative weight vector summing to 1 ($S \geq 0$,
   $S\mathbf{1} = \mathbf{1}$),
@@ -55,12 +53,12 @@ $$\min_{B,S} \|X - SBX\|_F^2 \quad \text{s.t.} \quad A = BX,\; B,S \geq 0,\;
 The constraint $A = BX$ keeps archetypes *inside* (or on the boundary of) the
 convex hull of the data, making them directly interpretable as extreme
 prototypes. The composition vectors $S$ correspond to points in the archetype
-simplex: a composition of $(1,0,0)$ means a sample is entirely characterised by
+simplex: a composition of $(1,0,0)$ means a sample is entirely characterized by
 archetype 1, while $(1/3,1/3,1/3)$ means it sits equally between all three.
 
 ### Relationship to other methods
 
-|Method              |Main_focus                             |Sample_representation                     |Component_type               |Interpretability      |Flexibility      |
+|Method              |Main Focus                             |Sample Representation                     |Component Type               |Interpretability      |Flexibility      |
 |:-------------------|:--------------------------------------|:-----------------------------------------|:----------------------------|:---------------------|:----------------|
 |PCA / SVD           |Directions of maximal variance         |Linear combination                        |Abstract latent directions   |Often moderate to low |High             |
 |NMF                 |Additive parts-based representation    |Non-negative combination                  |Non-negative latent parts    |Moderate to high      |Moderate to high |
@@ -72,18 +70,18 @@ archetype 1, while $(1/3,1/3,1/3)$ means it sits equally between all three.
 
 ## The yaap package
 
-**yaap** (Yet Another Archetypes Package) provides fast, flexible AA
-for R. This vignette covers the essentials:
+**yaap** (Yet Another Archetypes Package) provides fast, flexible AA for `R`.
+This vignette is organized into four parts:
 
-1. Fitting a model with `run_aa()`, from both a matrix and a formula.
-2. Inspecting the result object of class `archetypes`.
-3. Visualising archetypes and compositions.
-4. Predicting compositions for new data.
-5. Practical considerations: scaling, restarts, convergence, and the `delta` relaxation.
-6. The algorithm and its key arguments.
-7. Robust fitting and missing data.
+1. **Core workflow**: fit models with `run_aa()`, inspect `archetypes` objects,
+   visualize archetypes and compositions, and predict for new data.
+2. **Practical choices**: choose `K`, scale features, use multiple restarts,
+   and check convergence.
+3. **Alternative formulations**: use the `delta` relaxation, robust fitting,
+   and missing-data fitting.
+4. **Algorithm details**: compare NNLS and PGD, and review the main tuning arguments.
 
-```{r library}
+```{r library, warning=FALSE}
 library(yaap)
 library(generics)
 ```
@@ -103,7 +101,7 @@ dim(toy)
 ```{r plot-toy, fig.cap = "The toy dataset: three clusters near the corners of a triangle."}
 plot(toy, asp = 1., frame.plot = FALSE, axes = FALSE,
      main = "Toy Dataset", xlab = "", ylab = "",
-     pch = 19, cex = 0.6, col = "grey50")
+     pch = 19, cex = 0.6, col = "gray50")
 ```
 
 We fit an AA model with $K = 3$ archetypes using `run_aa()`.
@@ -125,65 +123,82 @@ It is a list with the following main components:
 | `coordinates`  | K x M      | Archetype profiles in feature space                     |
 | `coefficients` | K x N      | Weights expressing each archetype as a mix of samples   |
 | `compositions` | N x K      | Barycentric coordinates of each sample                  |
-| `loss`         | (iter) x 4 | Per-iteration RSS, $R^2$, and condition numbers         |
-| `converged`    | scalar     | Whether the optimiser converged                         |
+| `loss`         | (iter) x R | Per-iteration RSS, $R^2$, and method-specific QC        |
+| `converged`    | scalar     | Whether the optimizer converged                         |
 
 ```{r inspect}
-fit$coordinates
-dim(fit$compositions)
+coordinates(fit)
 ```
 
 The fundamental identity $\hat{X} = SA$ is:
 
 ```{r reconstruction, eval=FALSE}
-X_hat <- fit$compositions %*% fit$coordinates
+X_hat <- compositions(fit) %*% coordinates(fit)
 ```
 
 Let us verify this recovers the data well:
 
-```{r identity-check}
+```{r identity-check, fig.cap="Reconstruction of toy dataset. Based on figure from `archetypes` package vignette."}
 X <- as.matrix(toy)
 X_hat <- fitted(fit)
 R <- resid(fit)  # residuals: X - X_hat
-max(rowSums(R * R) / rowSums(X * X))  # max relative reconstruction error
-norm(X - X_hat, "F")^2  # residual sum of squares
+(rss <- norm(R, "F")^2)  # residual sum of squares
+1 - rss / norm(X, "F")^2  # R^2
+
+plot(X, type = "n", asp = 1., frame.plot = FALSE, axes = FALSE,
+     main = "Toy Dataset Reconstruction", xlab = "", ylab = "")
+ix <- rowSums(R > 0.5) > 0  # highlight large residuals
+segments(X[, 1], X[, 2], X_hat[, 1], X_hat[, 2], col = "firebrick", lwd = 0.5)
+points(X    , pch = 20, cex = 0.8, col = "gray50")
+points(X_hat, pch = 1,  cex = 0.7, col = "firebrick")
+legend("topleft", legend = c("Data", "Reconstruction", "Residuals"), bty = "n",
+       col = c("gray50", "firebrick", "firebrick"),
+       pch = c(20, 1, NA),
+       lwd = c(NA, NA, 0.5))
 ```
 
-The `$loss` data frame records four diagnostics at each logged iteration:
+In the reconstruction plot, data points (gray disks) inside the archetype
+convex hull have exact reconstructions (red circles). Points outside the
+hull are projected to its edges (red segments).
 
-| Column | Meaning                                                             |
-|--------|---------------------------------------------------------------------|
-| `loss` | Working objective (typically $\|X - SA\|_F^2$)                      |
-| `r2`   | proportion of variance explained (based on `loss`)                  |
-| `k_S`  | Condition number of $S$ (high $\to$ near-degenerate compositions)   |
-| `k_A`  | Condition number of $A$ (high $\to$ near-collinear archetypes)      |
+The `$loss` data frame records the per-iteration optimization trajectory and
+method-specific diagnostics. These columns help assess convergence and model
+quality.
+
+The exact columns depend on the method, but typical columns include:
+
+- `loss`: working objective (e.g., RSS),
+- `r2`: proportion of variance explained (based on `loss`)
+- `rloss`: running objective for methods that do not always improve the objective
+- `k_S`: condition number of the composition matrix (high $\to$ near-degenerate compositions)
+  for methods that involve solving linear systems with it.
+- `k_A`: condition number of the coordinate (similar logic to `k_S`)
 
 Note that `loss` values may differ from the RSS computed directly above because
-the working objective operates on internally scaled data. See <a href="#algorithm-details">*Algorithm details*</a>
-for a full discussion.
+the working objective operates on internally scaled data.
+See <a href="#algorithm-details">*Algorithm details*</a> for a full discussion.
 
 ### Integration with `broom`
 
-yaap also supports broom-style methods for fitted `archetypes` objects.
-These methods return ordinary tibbles, which makes them convenient for
-downstream inspection, plotting, and reporting.
+`yaap` also supports broom-style methods for fitted `archetypes` objects.
+These methods return ordinary tibbles for downstream inspection, plotting, and
+reporting.
 
 `tidy()` returns model matrices in long form. By default it returns the
 archetype coordinates: one row per archetype-feature pair, with columns
 `archetype`, `term`, and `value`.
 
 ```{r broom-tidy-coordinates}
-head(tidy(fit))
+tidy(fit)
 ```
 
-The same verb can return other fitted matrices. For example,
-`matrix = "compositions"` returns one row per sample-archetype pair; `value`
-is the fitted weight of that archetype in that sample. `matrix = "coefficients"`
-similarly returns the weights that express each archetype as a mixture of
-training samples.
+The same verb can return other fitted matrices. For example, `matrix = "compositions"`
+returns one row per sample-archetype pair; `value` is the fitted weight of that
+archetype in that sample. `matrix = "coefficients"` similarly returns the
+weights that express each archetype as a mixture of training samples.
 
 ```{r broom-tidy-compositions}
-head(tidy(fit, matrix = "compositions"))
+fit |> tidy(matrix = "compositions") |> head()
 ```
 
 `glance()` returns one row of model-level diagnostics, including the
@@ -206,29 +221,28 @@ comp_cols <- paste0(".", anames(fit))
 range(rowSums(as.matrix(aug[, comp_cols])))  # all should be 1
 ```
 
-### Visualising the fit
+### Visualizing the fit
 
 `plot()` method for `archetypes` objects offers several `what` options.
 
 #### Archetype positions in feature space
 
-This method is provided for convenience and is equivalent to plotting the
-original data points and then overlaying the archetypes from the `coordinates` matrix
-with lines connecting them.
+This method plots the original data points, overlays the archetypes from the
+`coordinates` matrix, and connects them with lines.
 
 ```{r plot-coordinates, fig.cap = "Data and estimated archetypes. The triangle connects the three archetypes."}
 plot(fit, what = "coordinates",
      main = "Archetype positions in feature space", xlab = "", ylab = "",
      asp = 1, frame.plot = FALSE, axes = FALSE,
      pch = 17, cex = 1.5, col = "firebrick",
-     args.data.scatter = list(pch = 19, cex = 0.5, col = "grey50"))
+     args.data.scatter = list(pch = 19, cex = 0.5, col = "gray50"))
 ```
 
 As expected, the archetypes lie close to the corners of the point cloud.
 
 Plot functions invisibly return the data used to construct the figure in a
 `ggplot2` friendly format. Use `plot = FALSE` to prepare those data without
-drawing. For example the following code would largely reproduce the previous figure:
+drawing. For example, the following code reproduces the previous figure:
 
 ```{r ggplot-example, eval=FALSE}
 library(ggplot2)
@@ -241,10 +255,10 @@ plot(fit, what = "coordinates", plot = FALSE) |>
 
 ## Working with "real" data: Fisher's iris
 
-Besides tabular data (like `data.frame` or `matrix`), `run_aa()` also accepts a
-**formula** and **data frame** combinations. Using a formula is the most convenient
-when the data contains a response column you wish to exclude: the response is silently
-dropped and all right-hand-side predictors are used as features.
+Besides tabular data (like `data.frame` or `matrix`), `run_aa()` also accepts
+**formula** and **data frame** inputs. Formula input is useful when the data
+contains a response column to exclude: the response is silently dropped and all
+right-hand-side predictors are used as features.
 
 ```{r fit-iris}
 # 'Species' (the response) is discarded; the four measurements are used.
@@ -254,16 +268,16 @@ fit_iris
 
 This is equivalent to calling `run_aa(iris[, 1:4], ...)`
 
-Because the four measurements are on different scales the default
-`scale = TRUE` (column-wise z-scoring) is appropriate.
+Because the four measurements are on different scales, we set `scale = TRUE`
+to apply column-wise z-scoring before fitting.
 
-In the following subsections, we build analyse the fitted model in a typical workflow:
+In the following subsections, we analyze the fitted model in a typical workflow:
 
-- we first locate the archetypes in feature space (PCA projection),
-- then identify them from the observations that define them and
-- characterise what they represent through a feature-profile plot.
-- We then explore how the 150 samples distribute across the archetype simplex, and
-- finally show how the fitted model predicts compositions for new observations.
+- We first locate the archetypes in feature space using a PCA projection.
+- We then identify them from the observations that define them and characterize
+  what they represent through a feature-profile plot.
+- We explore how the 150 samples distribute across the archetype simplex.
+- We finally show how the fitted model predicts compositions for new observations.
 
 ### Archetype positions in feature space
 
@@ -283,9 +297,8 @@ plot(fit_iris, what = "coordinates", projection = "pca", frame.plot = FALSE,
 ### Naming archetypes from their defining observations
 
 Each archetype is a convex mixture of actual data points, described by the
-`coefficients` matrix (K x N). To give more meaningful names to the archetypes,
-we can look at which species contribute most to each archetype and assign
-names accordingly.
+`coefficients` matrix (K x N). To name the archetypes, we summarize which
+species contribute most to each archetype.
 
 ```{r iris-species-archetypes-match}
 B <- coef(fit_iris)  # K x N
@@ -295,9 +308,9 @@ coef_by_species <- aggregate(t(B), by = iris["Species"], FUN = sum)
 knitr::kable(coef_by_species, digits = 3)
 ```
 
-From the table we see that one archetype represents a mixture of "setosa" and
-"versicolor", while the other two are predominantly "setosa" and "virginica"
-respectively. We label the archetypes accordingly.
+The table indicates that one archetype combines "setosa" and "versicolor",
+while the other two are predominantly "setosa" and "virginica", respectively.
+The assigned labels reflect those species contributions.
 
 ```{r iris-rename-archetypes}
 # Concat all species contributing to an archetype
@@ -328,7 +341,7 @@ pal_aa <- pal_aa[anames(fit_iris)]  # reorder to match archetype order
 `what = "profiles"` shows a grouped barplot of the archetype coordinates on
 the original feature scale. All other arguments are passed to `barplot()`.
 
-```{r iris-profiles, fig.cap = "Archetype feature profiles. Each group of bars is one feature; colours distinguish archetypes."}
+```{r iris-profiles, fig.cap = "Archetype feature profiles. Each group of bars is one feature; colors distinguish archetypes."}
 plot(fit_iris, what = "profiles",
      horiz = TRUE,
      names.arg = sub("\\.", "\n", colnames(iris[, 1:4])),
@@ -340,10 +353,9 @@ plot(fit_iris, what = "profiles",
 
 ### Sample compositions
 
-With named archetypes, we can explore how all samples are distributed in
-composition space.
+Named archetypes make the composition space easier to interpret.
 
-```{r iris-simplex, fig.cap = "Ternary plot of iris compositions, coloured by species. Each point is a sample placed by its three archetype weights."}
+```{r iris-simplex, fig.cap = "Ternary plot of iris compositions, colored by species. Each point is a sample placed by its three archetype weights."}
 plot(fit_iris, what = "simplex",
      col = pal_sp[as.character(iris$Species)], pch = 19,
      pca = TRUE, col.pca = "black", robust = FALSE)
@@ -357,29 +369,37 @@ The black curved line is the PCA trajectory projected into the simplex,
 summarizing the dominant continuous transition from setosa-like to
 virginica-like compositions through the hybrid archetype of setosa+versicolor.
 
-We can also see from the ternary plot that even though on average more
-versicolor samples are near the hybrid archetype, the setosa contribution is
-stronger because AA looks for "extreme" observations near the boundary of the
-data hull and there lies one setosa "outlier". This illustrates a general property
-of AA: archetypes anchor at the geometric boundary, so even a single extreme
-observation can pull a vertex toward it. For analyses where outliers are a
-concern, see <a href="#robust-fitting">*Robust fitting*</a>.
+The ternary plot also shows why the hybrid archetype has a stronger setosa
+contribution even though more versicolor samples lie near it on average: AA
+searches for extreme observations near the data hull boundary, where one setosa
+outlier lies. This illustrates a general property of AA: archetypes anchor at
+the geometric boundary, so even a single extreme observation can pull a vertex toward it.
+For analyses where outliers are a concern, see <a href="#robust-fitting">*Robust fitting*</a>.
 
-The composition barplot also nicely shows the transition from virginica-like to
-setosa-like samples, with the hybrid archetype sitting in between.
+When samples are arranged by PC1, the composition barplot shows a transition
+from virginica-like to setosa-like samples, with the hybrid archetype in between.
 
-```{r iris-compositions, fig.cap = "Composition barplot: each bar is one iris sample. Single-colour bars are near-pure specimens; blended bars sit between archetypes."}
+```{r iris-compositions, fig.cap = "Composition barplot: each bar is one iris sample. Single-color bars are near-pure specimens; blended bars sit between archetypes."}
 plot(fit_iris, what = "compositions",
      main = "Archetype compositions across iris samples",
      cluster_rows = "PC1", cluster_cols = FALSE, col = pal_aa
 )
 ```
 
+Other potential orderings of the samples include:
+
+- the angle each sample forms in the PC1-PC2 plane (`cluster_rows = "AOP"`), or
+- the order that `hclust()` arranges them if `cluster_rows = TRUE`
+
+See `plot_archetypes_compositions()` for details.
+
 ### Predicting reconstructions and compositions for new observations
 
-Once a model is fitted, `predict()` reconstructs new samples from the fixed
-archetypes without re-fitting.  Request `type = "compositions"` when you want
-the simplex weights.
+Once a model is fitted, `predict()` maps new observations to the archetype
+convex hull without re-fitting. The resulting projection can be represented in two ways:
+
+- in the original feature space as the training data (default) with `type = "reconstruction"`
+- as barycentric coordinates in the archetype simplex with `type = "compositions"`
 
 ```{r predict}
 new_obs <- matrix(
@@ -391,87 +411,177 @@ new_obs <- matrix(
 print(new_obs)
 
 predict(fit_iris, newdata = new_obs)
-```
 
-The default result is on the original feature scale. To inspect the simplex
-weights, request compositions explicitly:
-
-```{r predict-compositions}
 predict(fit_iris, newdata = new_obs, type = "compositions")
 ```
 
 ## Practical considerations
 
+### Choosing `K`
+
+The main tuning parameter in archetypal analysis is `K`: the number of archetypes.
+A traditional exploratory approach is to fit a sequence of models and inspect a
+scree plot or elbow plot. The elbow is the smallest `K` after which reconstruction
+quality metrics improve only modestly. Typical metrics used for this purpose are:
+
+- **Reconstruction loss** (`loss`): the sum of squared residuals between the
+  original data and the reconstructed data.
+- **Unexplained variance** (`1 - r2`): the proportion of variance in the
+  original data that is not captured by the archetypes.
+
+Alongside elbow plots, `yaap` also provides an **adapted AIC criterion** (`AIC`)
+based on [@Suleman2017] that balances model fit and complexity, which can be
+used to select `K` more systematically. Unlike the other metrics we discussed,
+the adapted AIC is not monotonic in `K`, so we are not looking for an elbow but
+rather for the minimum value, which indicates the best trade-off between fit and parsimony.
+
+Here we fit a "path" of archetypes models for `K = 1, ..., 6` to the toy dataset,
+using the `archetypes_path()` function, which fits multiple models in a single call
+and reuses preprocessing.
+
+```{r k-selection-fit, warning=FALSE}
+fit_path <- archetypes_path(
+    toy,
+    K = 6,
+    init = "random",
+    max_iter = 100,
+    nrep = 5
+)
+```
+
+The resulting `fit_path` object contains the fitted models for all `K`, which
+can be accessed with `[[` using their index or `K` value, for example `fit_path[[3]]`
+(third model) or `fit_path[["K3"]]` (model with `K = 3`).  The path object also
+supports plotting the scree and adapted AIC curves across `K` values with `screeplot()`.
+
+```{r k-selection-plot, results = "hold", fig.width = 9, fig.height = 3.5, out.width = "100%", fig.cap = "RSS, unexplained variance, and adapted AIC across candidate values of K."}
+op <- par(mfrow = c(1, 3), mar = c(4, 4, 2.5, 0.5), bty = "n")
+
+selected_K <- 3
+fit_best <- fit_path[[selected_K]] # here equivalent to fit_path[["K3"]]
+
+screeplot(
+    fit_path,
+    y = "loss",
+    col = "steelblue4",
+    frame.plot = FALSE,
+    ylab = "Reconstruction loss",
+    main = "RSS"
+)
+abline(v = selected_K, lty = 2, col = "firebrick")
+
+screeplot(
+    fit_path,
+    y = function(fit) 1 - utils::tail(fit$loss$r2, 1L),
+    col = "steelblue4",
+    frame.plot = FALSE,
+    ylab = expression(1 - R^2),
+    main = "Unexplained Variance"
+)
+abline(v = selected_K, lty = 2, col = "firebrick")
+
+screeplot(
+    fit_path,
+    col = "steelblue4",
+    frame.plot = FALSE,
+    ylab = "Adapted AIC",
+    main = "Adapted AIC"
+)
+abline(v = selected_K, lty = 2, col = "firebrick")
+
+par(op)
+```
+
+For this dataset, all three diagnostics agree that the optimal number of
+archetypes is `K = 3`, the true number of generating vertices. The RSS and
+unexplained-variance curves show a clear elbow at `K = 3`. The adapted AIC
+has a strong minimum at `K = 3`. In real analyses, these plots are diagnostics
+rather than automatic rules. AA optimization is non-convex, so single-restart
+curves can be noisy and may not decrease monotonically for every larger `K`. Use
+more restarts and domain knowledge when the elbow or adapted AIC is ambiguous.
+
 ### Scaling
 
-| Situation                                 | `scale` value  | Effect          |
-|-------------------------------------------|----------------|-----------------|
+| Situation                               | `scale` value  | Effect          |
+|-----------------------------------------|----------------|-----------------|
 | Default/natural feature metric          | `FALSE`        | Data used as-is |
-| Mixed-unit Gaussian features             | `TRUE`         | z-score columns |
-| Custom feature importance                 | Numeric vector | Divides columns |
+| Mixed-unit Gaussian features            | `TRUE`         | z-score columns |
+| Custom feature importance               | Numeric vector | Divides columns |
 
-The default preserves the feature metric supplied by the data. For Gaussian Euclidean AA,
-the decision of whether to scale is similar to that in PCA: if the features
-are on different scales, it is often advisable to set `scale = TRUE` to give
-them equal weight in the analysis. Otherwise, the optimization process may effectively
-ignore them. Custom scaling by passing a vector of scale factors is also
-supported similar to how `scale()` works in base R (by dividing the columns).
+
+The standard AA assumes Euclidean geometry and Gaussian error structure, so the
+optimization is carried out by minimizing the sum of squared residuals (RSS).
+Scaling can therefore materially affect the results.
+
+By default, `run_aa()` does not transform the input data. The decision of
+whether to scale is similar to that in PCA: if the features are on different
+scales, set `scale = TRUE` to give them equal weight in the analysis.
+Otherwise, those features may have little influence on the fit. Custom scaling
+by passing a vector of scale factors is also supported similar to how `scale()`
+works in base R (by dividing the columns).
 
 The difference between manually normalizing the data and setting `scale = FALSE`
 versus letting `run_aa()` handle the scaling internally is that the archetypes
-are returned on the scale of the input data. So for the shake of interpretability
-and your convenience, you should pass the data in the form you want the archetypes
-to be in.
+are returned on the scale of the input data. For interpretability, pass data on
+the scale you want the resulting archetypes to be in.
 
 Besides `scale`, `run_aa` also has an `sd_threshold = 1e-6` argument to remove
 features with near-zero variance, which can cause numerical instability and
 convergence issues. During reconstruction, the removed features are filled with
 the mean value of the original data.
 
-Finally, when some samples are more reliable/informative than others, weights
-can be passed to `run_aa()` via the `weights` argument to give them more importance
-in the calculation of the loss function.
+When some samples are more reliable or informative than others, pass sample
+weights through the `weights` argument.
 
 ### Multiple restarts
 
-Because the AA objective is non-convex, the solution is sensitive to
-the initial archetypes. To mitigate this, `run_aa()` supports multiple
-independent restarts via the `nrep` argument. Setting `nrep > 1` only
-returns the best solution across all runs, so the output is always a single
-`archetypes` object.
+Because the AA objective is non-convex, the solution is sensitive to the
+initial archetype coordinates. `run_aa()` supports multiple independent restarts
+via the `nrep` argument. Setting `nrep > 1` returns only the best solution
+across all runs, so the output is always a single `archetypes` object.
 
-The default initialization method is `"furthest_sum"`, which selects points
-from the dataset such that the sum of their pairwise distances is maximized.
-Because this places the initial archetypes near the boundary of the data, the
-optimization starts from a reasonable configuration. The following small
-experiment runs AA five times on the toy dataset from independent starting
-configurations and compares the loss at the first and last iteration:
+Multiple restarts are most useful when the initializer can produce different
+starting points across runs. The default initialization method is `"furthest_sum"`.
+Although its starting seed is random, the procedure tends to have low variance
+because it greedily seeks a good initial guess. In contrast, `"random"` produces
+very different starting points, which lets the search explore the space more
+broadly. Below we run both methods five times on the `iris` dataset with `K = 3`
+and compare the initial and final loss across runs.
 
 ```{r furthest-sum-experiment}
 runs <- do.call(rbind, lapply(1:5, function(k) {
-  fit_fs  <- run_aa(toy, K = 3, nrep = 1)
-  fit_uni <- run_aa(toy, K = 3, nrep = 1, init = "random")
-  data.frame(
-    run            = k,
-    fs_loss_start  = fit_fs$loss$loss[1],
-    fs_loss_end    = tail(fit_fs$loss$loss, 1),
-    uni_loss_start = fit_uni$loss$loss[1],
-    uni_loss_end   = tail(fit_uni$loss$loss, 1)
-  )
+    fit_fs  <- run_aa(iris[, 1:4], K = 3, nrep = 1)
+    fit_uni <- run_aa(iris[, 1:4], K = 3, nrep = 1, init = "random")
+    data.frame(
+        run       = k,
+        fs_start  = fit_fs$loss$loss[1],
+        fs_end    = tail(fit_fs$loss$loss, 1),
+        uni_start = fit_uni$loss$loss[1],
+        uni_end   = tail(fit_uni$loss$loss, 1)
+    )
 }))
-knitr::kable(runs, digits = 3)
+
+colnames(runs) <- c("run",
+                    "furthest_sum start", "furthest_sum end",
+                    "random start", "random end")
+knitr::kable(runs, digits = 1)
 ```
 
-`furthest_sum` consistently starts from a lower initial loss while the `random`
-initialization starts are much worse and more variable. However, since this is
-a very simple dataset with very strong signal both methods consistently discover
-archetypes of high quality. For larger and more complex datasets, the initial
-guess is more important. See the **initialization vignette** for a more detailed
-comparison of all available initializers.
+`furthest_sum` starts closer to the final solution, while `random` starts are
+more variable. However, both methods converge in similarly good solutions,
+with the `random` method often even outperforming `furthest_sum` in final loss.
+
+See the **Initialization vignette** for a more detailed discussion and comparison
+of all available initializers.
 
 ### Convergence
 
-Check `fit$converged` and inspect the loss trajectory:
+If a `run_aa()` call does not converge, it emits a warning. The status of the
+fit is stored in the `converged` slot of the output object, and is also printed
+out when the object or its summary are printed.
+
+The full optimization trajectory is available in the `loss` data frame and can
+be plotted with `plot(fit, what = "loss")`.
 
 ```{r check-convergence, fig.cap = "RSS across iterations for the iris model."}
 fit_iris$converged
@@ -480,15 +590,19 @@ plot(fit_iris, what = "loss", frame.plot = FALSE, type = "b",
      main = "Convergence of the iris model")
 ```
 
-If the model has not converged, increase `max_iter` (default 100) or add more
-restarts. If the loss decreases very slowly, then increasing the `max_iter` is
-unlikely to help; consider increasing the `tol` or `tol_r2` parameter instead.
-Note that this will not improve the fit, but it will save you some time and/or
-avoid annoying warning messages by stopping the optimization earlier.
+Typically, loss decreases quickly at first and then plateaus near a local
+minimum. If the model has not converged, increase `max_iter` (default 100)
+or add more restarts. If the loss decreases very slowly, increasing `max_iter`
+is unlikely to help; consider increasing `tol` or `tol_r2` instead. This will
+not improve the fit, but it can reduce runtime and avoid unnecessary
+non-convergence warnings.
 
 ---
 
 ## Variants of Canonical AA and their implementation in yaap
+
+This vignette covers only the Euclidean geometries with Gaussian errors setting.
+For **Non-Gaussian and Metric Variants of Archetypal Analysis** see the corresponding vignette.
 
 ### Relaxing the convex hull constraint with `delta`
 
@@ -500,13 +614,11 @@ extremes are absent and the constrained model cannot recover the true vertices
 and instead anchors to the most extreme observed points.
 
 Setting `delta > 0` relaxes this constraint and allows archetypes to step
-*outside* (or *inside*) the data hull [@Morup2012].  The following example makes this
-concrete with synthetic data drawn from a **truncated equilateral simplex**:
-any composition weight above 0.8 is removed, so no sample is close to any
-true vertex.
+*outside* the data hull [@Morup2012]. The following example makes this concrete
+with synthetic data drawn from a **truncated equilateral simplex**: any composition
+weight above 0.8 is removed, so no sample is close to any true vertex.
 
 ```{r delta-data-fit, warning=FALSE, fig.cap = "Truncated simplex: Larger delta lets archetypes escape the data hull and approach the true positions."}
-set.seed(1)
 K_d <- 3  # number of archetypes (simplex vertices)
 M_d <- 2  # number of features (2D for easy visualization)
 N_init <- 1000  # initial number of samples before truncation
@@ -542,11 +654,10 @@ plot(A_true[ix, 1], A_true[ix, 2],
      frame.plot = FALSE, xlab = "", ylab = "",
      xaxt = "n", yaxt = "n", asp = 1,
      main = "Effect of delta on recovered archetypes")
-points(X_delta, pch = 19, cex = 0.4, col = "grey50")
+points(X_delta, pch = 19, cex = 0.4, col = "gray50")
 for (i in seq_along(res_delta)) {
-  lines(res_delta[[i]]$coordinates[ix, 1],
-        res_delta[[i]]$coordinates[ix, 2],
-        col = cols[i], lwd = 2)
+    A <- coordinates(res_delta[[i]])
+    lines(A[ix, 1], A[ix, 2], col = cols[i], lwd = 2)
 }
 legend("topright",
        legend = c("True simplex", paste0("\u03b4 = ", delta_vals)),
@@ -554,25 +665,26 @@ legend("topright",
 ```
 
 With `delta = 0` the estimated triangle is visibly smaller than the true one and
-its vertices all lie within the data cloud.  Increasing `delta` allows
-archetypes to reach outside the cloud towards the true vertices.  Use `delta`
-with care: very large values allow archetypes to drift far from the data, losing
-their interpretability as extreme prototypes.
+its vertices all lie within the data cloud.  Increasing `delta` allows archetypes
+to reach outside the cloud toward the true vertices.  Use `delta` with care: very
+large values allow archetypes to drift far from the data, losing their interpretability
+as extreme prototypes.
 
 ### Robust fitting
 
-Standard AA minimises squared residuals, making it sensitive to outliers.
+Standard AA minimizes squared residuals, making it sensitive to outliers.
 Setting `robust = TRUE` applies MASS-style `"psi.bisquare"` row reweighting:
 observations with large residuals receive reduced influence at each iteration,
-so outliers cannot monopolise an archetype.
+so outliers cannot monopolize an archetype.
 
 Below we augment the `iris` dataset with five outliers and compare the results
-of standard and robust AA.
+of standard and robust AA. Since the default initialization method (`furthest_sum`)
+is also sensitive to outliers, we set `init = "random"` to minimize their influence.
 
 ```{r robust-data}
 # Append five outlier observations to iris
 N_out <- 5
-displacement <- c(5, 0, 5, 0)  # displace in the first and third features
+displacement <- c(2, 2, 0, 0)  # displace in the first and second features
 
 add_outliers <- function(X, N, displacement) {
   x_mean <- colMeans(X) + displacement # place outliers at a distance from the mean
@@ -585,15 +697,17 @@ X <- iris[, 1:4] |>
     as.matrix() |>
     add_outliers(N = N_out, displacement = displacement)
 
-fit_std <- run_aa(X, K = 3, robust = FALSE, tol = 1e-4)
-fit_rob <- run_aa(X, K = 3, robust = TRUE, tol = 1e-4)
+set.seed(123)  # fix starting positions
+fit_std <- run_aa(X, K = 3, robust = FALSE, tol = 1e-4, init = "random", nrep = 5)
+set.seed(123)  # same starting positions
+fit_rob <- run_aa(X, K = 3, robust = TRUE, tol = 1e-4, init = "random", nrep = 5)
 ```
 
-We observe first that in the standard AA, one archetype is pulled towards the
-outliers, while in the robust AA the outliers are effectively ignored and the
-archetypes remain near the original data structure.
+In standard AA, one archetype is pulled toward the outliers. In robust AA, the
+outliers receive less influence and the archetypes remain near the original data
+structure.
 
-```{r robust-compare, fig.cap = "PCA projection of iris with five added outliers (crosses). Standard AA (red) is distorted towards the outlier cluster; robust AA (blue) closely recovers the reference triangle fitted on the clean data (dashed black)."}
+```{r robust-compare, fig.cap = "PCA projection of iris with five added outliers (crosses). Standard AA (red) is distorted toward the outlier cluster; robust AA (blue) closely recovers the reference triangle fitted on the clean data (dashed black)."}
 # Project all archetypes to PC space of data
 pca <- prcomp(X, scale. = TRUE)
 A_std <- predict(pca, coordinates(fit_std))
@@ -601,9 +715,9 @@ A_rob <- predict(pca, coordinates(fit_rob))
 A_ori <- predict(pca, coordinates(fit_iris))   # reference: fitted on clean iris
 
 # Plot data points
-plot(pca$x[seq_len(nrow(iris)), ],
+plot(pca$x,
      main = "PCA projection of iris data with outliers",
-     col = "grey60", pch = 19, cex = 0.5, frame.plot = FALSE, asp = 1)
+     col = "gray60", pch = 19, cex = 0.5, frame.plot = FALSE, asp = 1)
 # Add outliers
 points(pca$x[nrow(iris) + 1:N_out, ], col = "black", pch = 8)
 
@@ -618,47 +732,12 @@ points(A_rob, col = "steelblue", pch = 17, cex = 1.5)
 # Add legend
 legend("topright",
        legend = c("Data", "Outliers", "Reference AA", "Standard AA", "Robust AA"),
-       col    = c("grey60", "black", "black", "firebrick", "steelblue"),
+       col    = c("gray60", "black", "black", "firebrick", "steelblue"),
        pch    = c(19, 8, NA, 17, 17),
        lty    = c(NA, NA, 2, 1, 1),
        lwd    =  2,
        bty    = "n")
 ```
-
-Comparing the robust triangle to the reference (dashed), the archetypes closely
-recover the positions found on the clean data, confirming that robust AA limits
-the outliers' influence effectively.
-
-```{r robust-compare-compositions, results='hold', fig.width = 9, fig.height=5, out.width = "100%", fig.cap= "Ternary plot of iris compositions with and without robust fitting. Standard AA results are skewed towards the outliers, while robust AA maintains a more balanced representation of the original data structure."}
-# Setup plot params
-op <- par(mfrow = c(1, 2))
-pal_sp["outlier"] <- "gray30"
-x_species <- c(as.character(iris$Species), rep("outlier", N_out))
-
-# Plot Standard AA simplex
-plot(fit_std, what = "simplex", col = pal_sp[x_species], pch = 19)
-title(main = "Standard AA")
-
-# Plot Robust AA simplex
-plot(fit_rob, what = "simplex", col = pal_sp[x_species], pch = 19)
-title(main = "Robust AA")
-
-# Add legend
-par(fig = c(0, 1, 0, 1), new = TRUE)
-legend("center", legend = names(pal_sp), col = pal_sp, pch = 19,
-       bty = "n", xpd = NA)
-
-par(op)
-```
-
-In the robust simplex (right panel) the qualitative structure  of the original
-data is preserved (up to relabeling of the archetypes/rotation of the triangle):
-setosa occupies one pure vertex, virginica sits at the opposite corner, and
-versicolor bridges the gap through the near-setosa extreme — the same three-way
-partition seen in the clean-data iris model. In the standard simplex (left
-panel) one archetype has been pulled toward the outlier cluster; the remaining
-iris samples are spread across a distorted triangle and the clean species
-separation is lost.
 
 The `robust` argument also accepts MASS psi names such as `"psi.huber"` and
 `"psi.hampel"`; pass tuning constants with `robust_args`. See `MASS::rlm()` for
@@ -674,57 +753,28 @@ contribute to the gradient, and the loss is computed over those entries only.
 ```{r missing-data, warning=FALSE}
 X <- as.matrix(iris[, 1:4])
 
-# Introduce ~10 % missingness at random
+# Introduce ~10 % missing at random
+missing_rate <- 0.1
+n_elem <- length(X)  # number of elements
 X_miss <- X
-X_miss[sample(length(X_miss), size = round(0.1 * length(X_miss)))] <- NA
+idx_miss <- sample(n_elem, size = round(missing_rate * n_elem))
+X_miss[idx_miss] <- NA
 
-fit_miss <- run_aa(X_miss, K = 3, nrep = 3)   # missing = TRUE auto-detected
+set.seed(123)
+fit_miss <- run_aa(X_miss, K = 3, nrep = 10, init = "random")  # missing = TRUE auto-detected
 fit_miss
 ```
 
-We see that there is a warning of non-convergence. However, the final $R^2$ is
-good `r round(tail(fit_miss$loss$r2, 1), 3)`, suggesting that the fit is still
-reasonable.
-
-We can reconstruct the missing entries from the fitted model and check how well
-they match the original data.
+The fitted model reconstructs missing entries, which can be compared with the
+original complete data.
 
 ```{r missing-fitted}
 X_hat_miss <- fitted(fit_miss)
 any(is.na(X_hat_miss))   # FALSE = all positions reconstructed
 
 # compare reconstructed vs original values at missing positions
-idx_miss <- is.na(X_miss)
 cor(X_hat_miss[idx_miss], X[idx_miss])
 ```
-
-Next, we examine how the missing values affect the archetype positions in feature space.
-
-```{r missing-compare, fig.width = 6, fig.height=6, fig.cap = "Archetype positions with (red) and without (blue) missing data"}
-A <- rbind(coordinates(fit_miss), coordinates(fit_iris))
-pairs(rbind(X, A),
-      col  = rep(c("gray60", "firebrick", "steelblue"), c(nrow(X), 3, 3)),
-      pch  = rep(c(19, 17), c(nrow(X), nrow(A))),
-      cex  = rep(c(.5, 1.5), c(nrow(X), nrow(A))),
-      main = "Archetype coordinates",
-      upper.panel = NULL)
-legend("topright", inset = c(0.02,.15),
-       legend = c("Data",   "AA with missing data", "AA complete data"),
-       col    = c("grey60", "firebrick", "steelblue"),
-       pch    = c(19, 17, 17),
-       bty    = "n")
-```
-
-The archetypes from the missing-data fit (red) are close to those from the
-complete-data fit (blue) and they do not affect the geometry of the simplex much.
-
-Note that for a single archetype object `plot(fit_miss, what = "coordinates")`
-will produce the same plot as above but without the complete-data archetypes for
-comparison that is why we reconstructed the plot manually here.
-
-This vignette covers only the Euclidean setting. yaap also supports AA on
-**directional** and **compositional** data; these variants are demonstrated in
-the *Non-Euclidean Geometries* vignette.
 
 ---
 
@@ -735,7 +785,7 @@ the *Non-Euclidean Geometries* vignette.
 The CRAN package
 [`archetypes`](https://cran.r-project.org/package=archetypes) implements AA
 via **alternating NNLS** (non-negative least squares): at each step a
-constrained NNLS subproblem is solved via `nnls::nnls()`.  yaap's
+constrained NNLS subproblem is solved via `nnls::nnls()`. `yaap`'s
 `method = "nnls"` implements this alternating NNLS approach.
 
 The default `method = "pgd"` uses **projected gradient descent** instead.
@@ -746,9 +796,6 @@ Unlike NNLS, which solves a constrained subproblem at each step, PGD works
 entirely with matrix multiplications, avoiding the overhead of an inner solver.
 The following benchmark on the toy dataset with 10 restarts illustrates this
 difference:
-
-The benchmark suppresses solver warnings because it only records runtime and
-final loss.
 
 ```{r benchmark, warning=FALSE}
 toy_mat    <- as.matrix(toy)
@@ -792,20 +839,19 @@ bench <- data.frame(
 knitr::kable(bench, digits = 2)
 ```
 
-Also, because PGD works directly on the gradient, it can be easily adapted
-to handle extra terms like the slack terms used in the `delta` relaxation
-and missing residuals in the `missing = TRUE` objective. Both methods
-can handle robust psi reweighting, as well as weighting schemes passed via the
-`scale` and `weights` arguments.
+Because PGD works directly on the gradient, it also supports extensions such as
+the slack terms used in the `delta` relaxation and missing residuals in the
+`missing = TRUE` objective. Both methods can handle robust psi reweighting, as
+well as weighting schemes passed via the `scale` and `weights` arguments.
 
 ### PGD Algorithm
 
 The algorithm is described in detail [@Morup2012] and is implemented in the
-`archetypes_pgd()` function. The main idea is to solve multiple convex sub-problems
-where each time a single variable is optimized while keeping the others fixed.
+`archetypes_pgd()` function. The solver computes partial derivatives of the loss
+with respect to each variable, then iteratively updates them in a descent direction.
 The main steps are:
 
-1. **Initialisation**: selects K well-separated data
+1. **Initialization**: selects K well-separated data
    points, giving good initial coverage of the data hull.
 2. **S-step**: for fixed archetypes $A$, update compositions $S$
 3. **B-step**: for fixed $S$, update the archetype generators $B$
@@ -819,10 +865,9 @@ backtracking](https://en.wikipedia.org/wiki/Backtracking_line_search). The step
 size starts at `step_size` and is multiplied by `step_shrinkage` after each
 rejected proposal; if no improvement is found after `max_iter_optimizer`
 reductions, the step is skipped entirely. When `pseudo_pgd = TRUE` (default),
-the gradient is modified before each step so that it only redistributes weight
-among archetypes rather than changing their total, keeping the proposed update
-close to the simplex surface.
-
+the gradient is modified before each step to remove the radial direction (that
+changes the magnitude of the variables), keeping the proposed update close to
+the simplex surface.
 
 If no update is accepted after `max_no_update` backtracking steps, the algorithm
 halts with a warning of non-convergence.
@@ -832,10 +877,10 @@ halts with a warning of non-convergence.
 | Argument              | Default | Description                                           |
 |-----------------------|---------|-------------------------------------------------------|
 | `max_iter`            | 100     | Maximum outer iterations                              |
-| `tol`                 | 1e-6    | Relative RSS change stopping criterion                |
+| `tol`                 | 1e-4    | Relative RSS change stopping criterion                |
 | `tol_r2`              | 0.9999  | R² early-stop threshold                               |
 | `nrep`                | 1       | Independent random restarts (best returned)           |
-| `scale`               | `TRUE`  | Column z-scoring before fitting                       |
+| `scale`               | `FALSE` | No column scaling by default                          |
 | `delta`               | 0       | Convex-hull relaxation (see <a href="#relaxing-the-convex-hull-constraint-with-delta">§ *delta*</a>)  |
 | `pseudo_pgd`          | `TRUE`  | Remove radial component of gradient before step       |
 | `step_size`           | 1.0     | Initial step size for the line search                 |
@@ -864,7 +909,8 @@ The condition numbers `k_S` and `k_A` are diagnostics of numerical stability and
 are especially relevant for the case of `method = "nnls"` because it involves
 solving linear systems with these matrices. High `k_S` or `k_A` values signal
 numerical issues and are worth investigating with additional restarts or a
-larger `delta`.  Most users will not need to worry about these.
+larger `delta`. These diagnostics usually require attention only when
+convergence is unstable.
 
 ---
 
@@ -878,8 +924,9 @@ Some important practical considerations and limitations of AA:
   so the algorithm is not guaranteed to find the global minimum.
 - **Initialization sensitivity**: Because of the presence of local minima,
   the choice of initial archetypes can influence the final solution.
-- **Number of archetypes**: is the most important tuning parameter and its
-  choice is subjective and can affect the interpretability and quality of the fit.
+- **Number of archetypes**: The number of archetypes is the most important
+  tuning parameter, and its choice is subjective and can affect the
+  interpretability and quality of the fit.
 - **Sensitivity to Convex Hull**: Standard AA can be sensitive to outliers or
   misspecification when the true extremes lie outside the observed convex hull.
 - **Euclidean assumption**: The standard AA formulation assumes a Euclidean
@@ -888,17 +935,17 @@ Some important practical considerations and limitations of AA:
 Several methods have been proposed to mitigate these issues and this package
 implements some of them. The most common strategies are:
 
-- **Multiple restarts and initialisation**: To combat non-convexity and
-  initialization sensitivity, it is common to run AA with multiple independent
-  restarts (`nrep`) and select the best solution. Sophisticated initialization
-  strategies (see **"Archetype Initialization** vignette) can also avoid poor
-  local minima and improve both solution quality and convergence speed.
+- **Multiple restarts and initialization**: To combat non-convexity and initialization
+  sensitivity, it is common to run AA with multiple independent restarts (`nrep`) and
+  select the best solution. Sophisticated initialization strategies (see the
+  **"Choosing an Initialization Method for Archetypal Analysis"** vignette) can also
+  avoid poor local minima and improve both solution quality and convergence speed.
 
 - **Choosing the number of archetypes**: The number of archetypes `K` is the
   most important tuning parameter. The choice can be guided by domain knowledge,
   cross-validation, or information criteria, but it remains a subjective decision
   that affects the interpretability and quality of the fit. This package provides
-  tools to help with this choice; see **"Tuning Archetype Analysis"** vignette.
+  tools to help with this choice through `archetypes_path()` and `screeplot()`.
 
 - **Robust fitting**: Because archetypes are constrained to be convex combinations
   of the data, an outlier can attract an entire archetype to itself, leading to a
@@ -913,10 +960,10 @@ implements some of them. The most common strategies are:
   allows archetypes to step outside the data hull and better capture true extremes
   when the data is truncated.
 
-- **Non-Euclidean geometries**: The standard AA formulation assumes a Euclidean
-  geometry (Frobenius norm), which may not be appropriate for all data types.
-  Extensions of AA to other geometries and data types are presented in the
-  **"Non-Euclidean Geometries"** vignette.
+- **Non-Gaussian and metric variants**: The standard AA formulation assumes a
+  Euclidean geometry (Frobenius norm), which may not be appropriate for all data
+  types. Extensions of AA to other geometries and data types are presented in
+  the **"Non-Gaussian and Metric Variants of Archetypal Analysis"** vignette.
 
 ### Summary
 
