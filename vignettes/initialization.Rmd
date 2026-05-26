@@ -56,7 +56,7 @@ standard Euclidean formulation as
 
 $$\mathcal{L}(X, SA) = \|X - S A\|_F^2.$$
 
-As with all the matrix decomposition problems, the objective is non-convex in
+As with many matrix decomposition problems, the objective is non-convex in
 both $S$ and $A$, and gradient descent can terminate at a **local minimum**. As
 a result, the quality of the final solution depends substantially on the starting
 point.
@@ -68,17 +68,34 @@ and the `init` argument.
 ## Methods at a Glance
 
 The table below summarizes the seven methods by their strategy, whether they
-involve random sampling, their relative speed, and any mandatory extra arguments.
+involve random sampling, their relative speed, how strongly they depend on the
+observed sampling density, how strongly they impose geometric assumptions, and
+any mandatory extra arguments.
 
-| Method                 | Strategy                                                                           | Stochastic?      | Speed  | Mandatory extras |
-| ---------------------- | ---------------------------------------------------------------------------------- | ---------------- | ------ | :--------------: |
-| `"random"`             | Sample $K$ rows uniformly at random                                                | Yes              | Fast   | —                |
-| `"dirichlet"`          | Construct each archetype as a random convex combination of rows                    | Yes              | Fast   | —                |
-| `"kmeans_pp"`          | Sample proportional to squared distance to the nearest current archetype           | Yes              | Medium | —                |
-| `"aa_pp"`              | Sample using residual reconstruction error from the current hull                   | Yes              | Slow   | —                |
-| `"furthest_first"`     | Select the point furthest from all current archetypes                              | Seed only        | Medium | —                |
-| `"furthest_sum"`       | Select the point that maximizes the *sum* of distances to all current archetypes   | Seed only        | Medium | —                |
-| `"hull_outmost"`       | Select frequently outlying convex-hull candidates                                  | Partitioned only | Medium | `hull_method`    |
+| Method                 | Strategy                                                                           | Stochastic?      | Speed  | Density sensitivity | Geometry sensitivity | Mandatory extras |
+| ---------------------- | ---------------------------------------------------------------------------------- | ---------------- | ------ | ------------------- | -------------------- | :--------------: |
+| `"random"`             | Sample $K$ rows uniformly at random                                                | Yes              | Fast   | High                | Low                  | —                |
+| `"dirichlet"`          | Construct each archetype as a random convex combination of rows                    | Yes              | Fast   | High                | Low                  | —                |
+| `"kmeans_pp"`          | Sample proportional to squared distance to the nearest current archetype           | Yes              | Medium | Medium              | Medium               | —                |
+| `"aa_pp"`              | Sample using residual reconstruction error from the current hull                   | Yes              | Slow   | Medium              | Medium               | —                |
+| `"furthest_first"`     | Select the point furthest from all current archetypes                              | Seed only        | Medium | Low-medium          | High                 | —                |
+| `"furthest_sum"`       | Select the point that maximizes the *sum* of distances to all current archetypes   | Seed only        | Medium | Low                 | High                 | —                |
+| `"hull_outmost"`       | Select frequently outlying convex-hull candidates                                  | Partitioned only | Medium | Low                 | High                 | `hull_method`    |
+
+Density and geometry are counterbalancing sensitivities. Uniform methods such
+as `random` and diffuse `dirichlet` starts are strongly affected by where the
+data are numerous: a sparsely sampled corner may need many restarts before it
+is selected. Their advantage is that independent restarts genuinely explore
+different parts of the empirical distribution, which can help avoid repeatedly
+converging to the same local minimum when many fits are affordable.
+
+More biased boundary-seeking methods such as `furthest_sum` are less affected
+by interior density because, once a corner is represented by at least one
+observed point, the greedy distance criterion can still discover it. The cost of
+that bias is geometric sensitivity and lower restart diversity: repeated starts
+often return the same, or nearly the same, boundary configuration. These methods
+therefore make sense when the assumed geometry is credible or when running many
+full AA optimizations is too expensive.
 
 Large-data approximations are controlled orthogonally with `batch_size`,
 `batch_type`, and `batch_replace`. By default, `batch_type = "distal"` samples
@@ -321,11 +338,8 @@ for (method in names(method_labels)) {
     counts <- rep(0, nrow(X))
     for (run in 1:N_runs) {
         if (method == "hull_outmost") {
-            init_obj <- aa_init(
-                X, K = K,
-                method = method,
-                hull_method = "partitioned"
-            )
+            init_obj <- aa_init(X, K = K, method = method,
+                                hull_method = "partitioned")
         } else {
             init_obj <- aa_init(X, K = K, method = method)
         }
@@ -367,20 +381,19 @@ this strategy will eventually explore every region, but any single run may miss
 the corners.
 
 On the other extreme, methods like `furthest_first`, `furthest_sum`, and
-`hull_outmost` are exploring more aggressively the
-boundary of the data geometry. We see that most of them converge to the same set
-of candidate points and never pick any point in the middle of the cloud.
-`furthest_first` is the only one that shows some variation in the selected
-points, but it still has a strong corner preference. For a simple convex shape
-that bias is often useful: the corners are exactly where good archetypes should
-start.
+`hull_outmost` are exploring more aggressively the boundary of the data
+geometry. We see that most of them converge to the same set of candidate points
+and never pick any point in the middle of the cloud. `furthest_first` is the
+only one that shows some variation in the selected points, but it still has a
+strong corner preference. For a simple convex shape that bias is often useful:
+the corners are exactly where good archetypes should start.
 
-Finally, in the middle between the two extremes, are clustering-inspired methods
-like: `kmeans_pp` and `aa_pp`. These methods adapt ideas developed
-to initialize clustering algorithms to the AA setting. They are more probabilistic
-in nature and thus represent softer versions of their boundary searching counterparts.
-They also rarely select any point in the center of the cloud but they are exploring
-more diffusely the boundary regions and are not actively looking for the extrema.
+Clustering-inspired methods such as `kmeans_pp` and `aa_pp` sit between these
+two extremes. These methods adapt ideas developed to initialize clustering
+algorithms to the AA setting. They are more probabilistic in nature and thus
+represent softer versions of their boundary-searching counterparts. They also
+rarely select any point in the center of the cloud, but they explore boundary
+regions more diffusely and do not explicitly maximize extremeness.
 
 More details about the methodology employed by each method can be found in the
 [Method Reference](#method-reference) section at the end of this vignette.
@@ -445,9 +458,9 @@ initialization budget is no longer being used to approximate the boundary.
 
 `furthest_sum` behaves differently. It keeps adding points on the outside of the
 cloud and, as $K$ increases, the selected polygon becomes a finer approximation
-to the true convex hull boundary. In fact, `furthest_sum` generated points
-are "guaranteed to lie in the minimal convex set of the unselected data points"
-[Theorem 2 in [@Morup2012]]
+to the true convex hull boundary. In fact, points generated by `furthest_sum`
+have a useful geometric property: they lie in the minimal convex set of the
+unselected data points [Theorem 2 in [@Morup2012]].
 
 ## When Initialization Matters
 
@@ -479,7 +492,8 @@ for (method in focused_methods) {
     loss_values <- c(loss_values, fits[[method]]$loss$loss)
 }
 loss_ylim <- range(loss_values)
-op <- par(mfrow = c(2, 3), mar = c(2.2, 2.5, 3, 0.5), bty = "n")
+op <- par(mfrow = c(2, 3), bty = "n")
+par(mar = c(0.8, 0.6, 3, 0.5))
 for (method in focused_methods) {
     fit <- fits[[method]]
     plot(fit,
@@ -499,6 +513,7 @@ for (method in focused_methods) {
         lty = 2
     )
 }
+par(mar = c(2.8, 4.2, 3, 0.5))
 for (method in focused_methods) {
     plot(fits[[method]],
         what = "loss",
@@ -569,8 +584,10 @@ par(op)
 First inspect the Euclidean initializations. The biased methods are doing what
 they were designed to do: they seek far-away points. On these shapes, that can
 over-emphasize the outside and leave the center or inner structure
-under-represented. `random` does not fix the geometry, but it is less committed
-to the outside by construction.
+under-represented. `random`, on the other hand, follows the observed sampling
+density rather than the outer geometry. On these uniformly sampled shapes, that
+keeps it from concentrating only on the outside, but it also means performance
+would change if important regions were sampled sparsely.
 
 For these cases, the better answer is often to change the space in which AA is
 fit. A kernel method lets nearby points influence each other according to a
@@ -655,19 +672,34 @@ the outside look more important than the rest of the structure.
 ## Conclusions and Recommendations
 
 There is no universal best initializer. The right choice depends on how much
-you know about the geometry.
+you know about the geometry, whether useful regions are sampled evenly, and how
+many full optimization restarts you can afford.
 
-| Situation                             | Recommended `init`                                                          |
-| ------------------------------------- | ----------------------------------------------------------------------------|
-| Simple convex-ish data                | `"furthest_sum"`, `"kmeans_pp"`                                             |
-| Unknown structure, enough restarts    | `"random"` with a larger `nrep`                                             |
-| Unknown structure, few restarts       | `"aa_pp"`                                                                   |
-| Very large dataset, speed critical    | `"furthest_sum"` with `batch_size` or `"hull_outmost"` partitioned          |
-| Reproducing legacy results            | `"furthest_sum"` (PCHA), `"random"` [archetypes], `"dirichlet"` directional |
+| Situation                                      | Recommended `init`                                                          |
+| ---------------------------------------------- | ----------------------------------------------------------------------------|
+| Simple convex-ish data                         | `"furthest_sum"`, `"kmeans_pp"`                                             |
+| Uneven sampling density, corners represented   | `"furthest_sum"`, `"furthest_first"`, `"hull_outmost"`                      |
+| Unknown structure, enough restarts             | `"random"` or `"kmeans_pp"` with a larger `nrep`                            |
+| Unknown structure, few restarts                | `"aa_pp"`                                                                   |
+| Very large dataset, speed critical             | `"furthest_sum"` with `batch_size` or `"hull_outmost"` partitioned          |
+| Reproducing legacy results                     | `"furthest_sum"` (PCHA), `"random"` [archetypes], `"dirichlet"` directional |
 
-When the geometry is simple, a boundary or coverage bias can be helpful. When
-the geometry is unknown, `random` with enough restarts is often the safest
-baseline because it makes the fewest assumptions.
+Choose along two main axes: how much you trust the geometry, and how much
+restart diversity you can afford. Strongly biased initializers such as
+`furthest_sum` and `hull_outmost` are useful when the convex geometry is trusted
+or full optimization runs are expensive, but repeated starts often return the
+same boundary configuration. `random` is the opposite extreme: it makes the
+fewest geometric assumptions and explores different basins across restarts, but
+it follows the empirical sampling density, so sparse corners may require a
+larger `nrep`.
+
+`kmeans_pp` and `aa_pp` are the practical middle ground. They keep stochastic
+variation across restarts while biasing the draw toward points that improve
+coverage or reconstruction. Use them when you want a better first guess than
+`random` without committing as strongly to one boundary-seeking geometry. If an
+extreme corner is absent from the sample entirely, no row-selecting initializer
+can recover it without changing the model, the data collection, or the candidate
+set.
 
 If the geometry is visibly nonlinear, changing the model is usually more
 important than fine-tuning the Euclidean initializer. Use
@@ -697,8 +729,9 @@ less affected because it samples from residuals tied directly to the AA objectiv
 The cost of this objective-aware sampling is runtime. Among the built-in
 initializers, `"aa_pp"` is usually the slowest because after the first two
 points it solves a small AA projection problem at each step, essentially a
-greedy AA analysis. In return, each added point is guaranteed not to increase
-the reconstruction cost, and reduces it whenever it expands the current hull.
+greedy AA analysis. In return, each added point is expected not to increase
+the reconstruction cost, and the expected cost decreases whenever the new
+point expands the current hull.
 
 Initializer names are not supported identically by every model family. The
 Euclidean solvers (`method = "pgd"` and `"nnls"`) call `aa_init()` on the
@@ -738,12 +771,11 @@ init <- aa_init(X, K = K, method = "random")
 ```
 
 Uniform sampling is the simplest possible initialization and requires no
-distance computations. Its expected quality depends entirely on the data
-geometry. By design it explores the whole geometry with equal probability,
-so it makes few assumptions about where useful archetypes should lie. When
-combined with many random restarts via the `nrep` argument in `run_aa()`, even
-simple uniform initialization can find good solutions as pointed out in
-[@Krohne2019].
+distance computations. By design it explores the whole geometry with equal
+probability, so it makes few assumptions about where useful archetypes should
+lie. When combined with many random restarts via the `nrep` argument in
+`run_aa()`, even simple uniform initialization can find good solutions as
+pointed out in [@Krohne2019].
 
 ### `dirichlet`
 
@@ -837,14 +869,10 @@ the hull. Lowering $\alpha$ (right) makes weights sparse, which pushes the
 random mixtures toward specific data points and toward the behavior of
 `"random"`.
 
-`dirichlet` is used as the default option for the directional method because
-directional data are represented through coefficients, so random convex
-combinations are a natural starting point.
-
 ### Furthest First (`"furthest_first"`)
 
-Selects the first archetype uniformly at random (biased toward points far from
-the mean), then iteratively adds the single point that is *farthest* from the
+Selects the first archetype at random, with bias toward points far from
+the mean, and then iteratively adds the single point that is *furthest* from the
 already-selected set (the nearest-archetype distance to the set is maximized).
 
 ```{r furthest-first-ex, eval = FALSE}
@@ -861,9 +889,9 @@ tuned to the AA reconstruction objective.
 
 ### k-means++ (`"kmeans_pp"`)
 
-Selects the first archetype as in FurthestFirst, then samples each subsequent
-archetype with probability proportional to the *squared* distance to the nearest
-already-selected archetype.
+Selects the first archetype at random, with bias toward points far from the mean,
+and then samples each subsequent archetype with probability proportional to the
+*squared* distance to the nearest already-selected archetype.
 
 ```{r kmeans-pp-ex, eval = FALSE}
 X <- as.matrix(toy)
@@ -871,18 +899,19 @@ K <- 3
 init <- aa_init(X, K = K, method = "kmeans_pp")
 ```
 
-The k-means++ sampling rule approximates AA++ (see below) by replacing the
-convex-hull distance with the nearest-archetype distance [@Mair2023]. This makes
-it substantially faster than exact AA++ while remaining competitive. It is a
-good default when runtime is a concern but uniform sampling feels too
-unpredictable.
+The k-means++ sampling rule is a softer version of *Furthest First*. Instead of
+always picking the single farthest point, it gives more chances to points that
+are far from the already-selected archetypes. It can also be thought of as an
+approximation of *AA++* which uses the squared distance to the nearest archetype
+as a proxy for the distance to the convex hull of the already-selected archetypes
+(distance to corners instead of distance to faces).
 
 ### Furthest Sum (`"furthest_sum"`)
 
-Selects archetypes by maximizing the *sum* of distances to all current
-archetypes rather than the minimum [@Morup2012]. An optional refinement phase
-cycles through the selected set and replaces each archetype with a better
-candidate, controlled by `refinement_steps` (default 10).
+Selects archetypes by maximizing the *sum* of distances to all current archetypes [@Morup2012].
+An optional refinement phase, controlled by `refinement_steps` (default 10), cycles through
+the selected set and replaces each archetype with a better candidate to remove the
+effect of the initial random selection.
 
 ```{r furthest-sum-ex, eval = FALSE}
 X <- as.matrix(toy)
@@ -898,17 +927,14 @@ init <- aa_init(X, K = K, method = "furthest_sum", refinement_steps = 0)
 ```
 
 FurthestSum is the historical default initialization for AA [@Morup2012] and
-remains the default when `init = NULL` is passed to `run_aa()`. It places
-archetypes near the boundary of the data cloud and is computationally efficient.
-See the [Initialization caveats](#initialization-caveats) below for an important
-caveat about its interaction with standardization.
+remains the default when `init = NULL` is passed to `run_aa()`.
 
 ### Batched Coreset-Style Initialization
 
 Supplying `batch_size` restricts initialization to a candidate batch before
 selecting archetypes. With the default `batch_type = "distal"`, candidates are
 sampled with probability proportional to each point's squared distance from the
-data mean. This is the coreset idea of @Mair2019: reduce the effective problem
+data mean. This is the coreset idea of [@Mair2019]: reduce the effective problem
 size while preserving the extremal structure that boundary-seeking methods such
 as `furthest_sum` rely on.
 
@@ -943,25 +969,22 @@ init <- aa_init(X, K = K, method = "aa_pp")
 
 Because the sampling probability is tied to the AA objective itself rather than
 to a surrogate (such as nearest-archetype distance), AA++ has a formal guarantee:
-each new archetype decreases the expected objective function (Proposition 3.2 of
-@Mair2023). In broad empirical evaluations across many datasets, AA++
-"almost always outperforms all baselines" [@Mair2023]. When $K = 2$, the convex
-hull is a line segment and AA++ reduces to k-means++.
+each new archetype decreases the expected objective function^[Proposition 3.2 of
+[@Mair2023]].
 
-The main cost is one NNLS projection per archetype after the second, so
-initializing $K$ archetypes requires $K - 2$ small optimization problems.
-Despite this, initialization is still much cheaper than running $K$ full AA
-iterations [@Mair2023].
+Compared to the other initialization methods, AA++ is more computationally
+intensive because it requires solving $K-2$ NNLS problems (the first two
+archetypes are selected via `kmeans_pp`) in order to compute the sampling
+probabilities for each subsequent archetype.
+To mitigate this cost, AA++ can be used with `batch_size` to give a Monte Carlo
+approximation of the exact method. See the next section for details.
 
 ### Batched AA++
 
 AA++ can also use `batch_size`, giving a variant of the Monte Carlo AA++
 approximation. Instead of projecting the full dataset at each step, it draws a
 candidate batch, projects only those rows, and samples the next archetype from
-their residuals. This is not identical to the `"aa_pp_mc"` scheme: candidate
-batches follow `batch_type` and `batch_replace`, and the same batching interface
-is used for the early AA++ selections. The `batch_size` parameter trades
-approximation accuracy for speed and must satisfy `batch_size >= K`.
+their residuals.
 
 ```{r aa-pp-mc-ex, eval = FALSE}
 X <- as.matrix(toy)
@@ -978,17 +1001,18 @@ init <- aa_init(X,
 )
 ```
 
-When `batch_size == nrow(X)` the method reduces to exact AA++. When
-`batch_size << nrow(X)` only a small fraction of the data is evaluated at each
-step, making batched AA++ useful for large datasets where exact AA++ becomes
-memory-bound. Use `batch_type = "uniform"` for the least biased approximation,
-or keep the default `batch_type = "distal"` if you want the candidate batches
-to emphasize likely boundary points.
+The `batch_size` parameter trades approximation accuracy for speed and must
+satisfy `batch_size >= K`. When `batch_size == nrow(X)` the method reduces to
+exact AA++. When `batch_size << nrow(X)` only a small fraction of the data is
+evaluated at each step, making batched AA++ useful for large datasets where
+exact AA++ becomes memory-bound. Use `batch_type = "uniform"` for the least
+biased approximation, or keep the default `batch_type = "distal"` if you want
+the candidate batches to emphasize likely boundary points.
 
 ### Hull-outmost (`"hull_outmost"`)
 
 Builds a pool of candidate hull vertices, then ranks them by an outmost-vote
-criterion: each candidate votes for the candidate farthest from it, and the $K$
+criterion: each candidate votes for the vertex farthest from it, and the $K$
 most-voted candidates are selected as archetypes. The `hull_method` argument
 (required) controls how the candidate pool is constructed:
 
