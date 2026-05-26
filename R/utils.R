@@ -769,12 +769,11 @@ is_non_empty_string <- function(x) is_single_string(x) && nzchar(x)
     init
 }
 
-# Check that archetype names are valid and return them;
-# if missing, generate default names A1, A2, ..., AK
+# Check that archetype names are valid and return them.
 .aa_init_names <- function(A) {
     nm <- rownames(A)
     if (is.null(nm)) {
-        return(paste0("A", seq_len(nrow(A))))
+        return(NULL)
     }
 
     if (any(is.na(nm))) {

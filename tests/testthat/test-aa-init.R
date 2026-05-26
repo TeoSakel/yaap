@@ -156,14 +156,14 @@ test_that("aa_pp accepts batch_size as its mini-batch approximation", {
     expect_equal(init[["A"]], init[["B"]] %*% X, tolerance = 1e-8)
 })
 
-test_that("aa_init uses stable archetype names instead of selected data row names", {
+test_that("aa_init leaves built-in archetype names unset", {
     X <- scale(toy_matrix())
     rownames(X) <- paste0("sample_", seq_len(nrow(X)))
 
     init <- aa_init(X, K = 3L, method = "random")
 
-    expect_equal(rownames(init[["A"]]), c("A1", "A2", "A3"))
-    expect_equal(rownames(init[["B"]]), c("A1", "A2", "A3"))
+    expect_null(rownames(init[["A"]]))
+    expect_null(rownames(init[["B"]]))
 
     named <- .aa_ind_to_init(X, stats::setNames(c(2L, 4L), c("left", "right")), sparse = FALSE)
 

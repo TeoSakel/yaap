@@ -203,7 +203,13 @@
     A_feature <- .aa_drop_bigM_column(fit[["A"]], attr(X, "bigM"))
     A <- fit[["A"]]
     A0 <- fit[["A0"]]
-    archetype_names <- if (!is.null(A0)) rownames(A0) else rownames(A)
+    init_arg <- ctx[["init"]]
+    archetype_names <- NULL
+    if (is_tabular(init_arg)) {
+        archetype_names <- rownames(init_arg)
+    } else if (is.function(init_arg)) {
+        archetype_names <- if (!is.null(A0)) rownames(A0) else rownames(A)
+    }
     A <- .aa_feature_map_inverse(feature_map, A_feature)
     if (!is.null(A0)) {
         A0 <- .aa_feature_map_inverse(feature_map, .aa_drop_bigM_column(A0, attr(X, "bigM")))
@@ -211,9 +217,6 @@
 
     family <- prep[["family"]] %||% ctx[["family"]] %||% "gaussian"
 
-    if (is.null(archetype_names)) {
-        archetype_names <- paste0("A", seq_len(nrow(A)))
-    }
     rownames(A) <- rownames(fit[["B"]]) <- colnames(fit[["S"]]) <- archetype_names
     rownames(A_feature) <- archetype_names
     if (!is.null(A0)) {

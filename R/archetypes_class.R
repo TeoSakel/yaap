@@ -66,6 +66,16 @@ archetypes <- function(A = NULL,
         }
     }
 
+    archetype_names <- rownames(coefficients) %||% paste0("A", seq_len(K))
+    rownames(coefficients) <- archetype_names
+    colnames(compositions) <- archetype_names
+    if (!is.null(A)) {
+        rownames(A) <- archetype_names
+    }
+    if (!is.null(init)) {
+        rownames(init) <- archetype_names
+    }
+
     if (!is_all_non_negative(slack)) {
         stop("All `slack` values must be non-negative.", call. = FALSE)
     }

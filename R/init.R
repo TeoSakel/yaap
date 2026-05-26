@@ -635,7 +635,7 @@ hull_outmost <- function(X,
 .aa_ind_to_init <- function(X, ind, sparse) {
     # make sure ind is positive indices selecting rows
     ind <- .aa_normalize_row_indices(ind, nrow(X), rownames(X))
-    nm <- names(ind) %||% paste0("A", seq_along(ind))
+    nm <- names(ind)
 
     A <- X[ind, , drop = FALSE] # Archetypes
     B <- onehot(ind, sparse = sparse, nrow(X)) # Row-stochastic matrix
@@ -654,10 +654,8 @@ dirichlet <- function(X, K, alpha = 1, ...) {
         stop("`alpha` must be a single positive number.", call. = FALSE)
     }
     N <- nrow(X)
-    nm <- paste0("A", seq_len(K))
     B <- matrix(stats::rgamma(K * N, shape = alpha), nrow = K, ncol = N)
     B <- proj_l1(B, eps = 0)
     A <- B %*% X
-    rownames(A) <- rownames(B) <- nm
     list(A = A, B = B)
 }

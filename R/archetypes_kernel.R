@@ -786,7 +786,6 @@ archetypes_kernel_pgd <- function(x,
                 args = c(list(G = G, K = K, method = method), init_args)
             )
             B <- onehot(ind, sparse = FALSE, nc = nrow(G))
-            rownames(B) <- paste0("A", seq_len(K))
             return(finalize_B(B))
         }
 
@@ -884,7 +883,6 @@ archetypes_kernel_pgd <- function(x,
     B <- matrix(0, nrow = K, ncol = nrow(G))
     B[, candidates] <- stats::rgamma(K * length(candidates), shape = alpha)
     B <- B / rowSums(B)
-    rownames(B) <- paste0("A", seq_len(K))
     colnames(B) <- rownames(G)
     B
 }
@@ -922,7 +920,7 @@ archetypes_kernel_pgd <- function(x,
     loss <- as.data.frame(loss)[seq_len(j), , drop = FALSE]
     rownames(loss) <- NULL
 
-    archetype_names <- rownames(B) %||% paste0("A", seq_len(nrow(B)))
+    archetype_names <- rownames(B)
     sample_names <- row_names %||% paste0("x", seq_len(ncol(B)))
 
     rownames(B) <- colnames(S) <- archetype_names

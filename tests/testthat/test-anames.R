@@ -100,6 +100,60 @@ test_that("archetypes constructor canonicalizes archetype order", {
     expect_equal(unname(fitted(fit)), unname(S %*% A))
 })
 
+test_that("archetypes constructor assigns generated names after canonical ordering", {
+    X <- matrix(
+        c(
+            0, 0,
+            1, 0,
+            0, 1
+        ),
+        ncol = 2L,
+        byrow = TRUE,
+        dimnames = list(paste0("s", 1:3), c("x", "y"))
+    )
+    A <- matrix(
+        c(
+            1, 0,
+            0, 1,
+            0, 0
+        ),
+        ncol = 2L,
+        byrow = TRUE,
+        dimnames = list(c("right", "top", "origin"), colnames(X))
+    )
+    B <- matrix(
+        c(
+            0, 1, 0,
+            0, 0, 1,
+            1, 0, 0
+        ),
+        nrow = 3L,
+        byrow = TRUE,
+        dimnames = list(NULL, rownames(X))
+    )
+    S <- diag(3L)
+    rownames(S) <- rownames(X)
+    colnames(S) <- c("right", "top", "origin")
+    init <- A
+    rownames(init) <- c("init_right", "init_top", "init_origin")
+
+    fit <- archetypes(
+        A = A,
+        coefficients = B,
+        compositions = S,
+        init = init,
+        data = X,
+        feature_map = .aa_identity_feature_map(A)
+    )
+
+    expect_equal(anames(fit), paste0("A", 1:3))
+    expect_equal(unname(coordinates(fit)), matrix(c(0, 0, 0, 1, 1, 0), ncol = 2L, byrow = TRUE))
+    expect_equal(rownames(fit[["A"]]), anames(fit))
+    expect_equal(rownames(fit[["coefficients"]]), anames(fit))
+    expect_equal(colnames(fit[["compositions"]]), anames(fit))
+    expect_equal(rownames(fit[["init"]]), anames(fit))
+})
+
 test_that("archetypes constructor canonicalizes without coordinates", {
     B <- matrix(
         c(
