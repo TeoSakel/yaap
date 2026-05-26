@@ -529,7 +529,7 @@ screeplot.archetypes_path <- function(x, y = NULL, plot = TRUE, ...) {
         }
         utils::tail(loss[[metric]], 1L)
     }
-    if (!is_number(value)) {
+    if (!(is.numeric(value) && length(value) == 1L && (is.finite(value) || is.na(value)))) {
         stop("`y` function must return a single numeric value.", call. = FALSE)
     }
     as.numeric(value)

@@ -43,3 +43,19 @@ test_that("pgd delta relaxes coefficient row sums within bounds", {
     expect_true(any(abs(rowsums[[2]] - 1) > 1e-4) ||
         any(abs(rowsums[[3]] - 1) > 1e-4))
 })
+
+test_that("archetypes constructor accepts coefficient row sums at slack boundary", {
+    coefficients <- diag(rep(1 + 0.35 + sqrt(.Machine$double.eps) / 2, 3L))
+    compositions <- diag(3L)
+    A <- matrix(0, nrow = 3L, ncol = 2L)
+
+    expect_s3_class(
+        archetypes(
+            A = A,
+            coefficients = coefficients,
+            compositions = compositions,
+            slack = 0.35
+        ),
+        "archetypes"
+    )
+})

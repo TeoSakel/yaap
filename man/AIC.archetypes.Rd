@@ -24,6 +24,8 @@ criterion proposed by Suleman (2017), using the reconstruction error
 and an efficiency-adjusted complexity penalty.
 The value is intended for comparing Euclidean Gaussian archetype fits on
 the same data, especially across different numbers of archetypes \code{K}.
+For \code{K = 1}, the efficiency adjustment is undefined and \code{AIC()} returns
+\code{NA_real_}.
 }
 \references{
 A. Suleman, "Validation of archetypal analysis"

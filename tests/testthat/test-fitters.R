@@ -629,7 +629,7 @@ test_that("missing-data PGD handles K edge cases directly", {
     )
     expect_equal(unname(coordinates(fit_mean)[1L, ]), unname(colMeans(X, na.rm = TRUE)))
     expect_equal(nrow(fit_mean[["loss"]]), 1L)
-    expect_true(is_number(AIC(fit_mean)))
+    expect_true(is.na(AIC(fit_mean)))
 
     fit_identity <- archetypes_pgd(
         X,

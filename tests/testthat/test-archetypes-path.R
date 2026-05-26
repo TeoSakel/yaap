@@ -124,6 +124,7 @@ test_that("screeplot.archetypes_path scores final metrics", {
     expect_named(default, c("K", "metric", "value", "loss", "r2", "n_iter", "converged"))
     expect_equal(default[["metric"]], rep("AIC", 2L))
     expect_equal(default[["K"]], 1:2)
+    expect_true(is.na(default[["value"]][[1L]]))
 
     loss <- screeplot(path, y = "loss", plot = FALSE)
     expect_equal(loss[["metric"]], rep("loss", 2L))
