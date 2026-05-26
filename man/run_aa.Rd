@@ -24,7 +24,7 @@ run_aa(x, ...)
   robust_args = list(),
   sd_threshold = 1e-06,
   max_iter = 100L,
-  tol = 1e-06,
+  tol = 1e-04,
   tol_r2 = 0.9999,
   eps = NULL,
   verbose = FALSE,
@@ -81,13 +81,13 @@ Dirichlet distribution. Default for \code{"directional"}.}
 \item{\code{"aa_pp"}}{AA++ initialization (Mair & Sjölund 2023). Pass
 \code{batch_size} in \code{init_args} to use a Monte Carlo-inspired variant.}
 \item{\code{"hull_outmost"}}{hull-candidate outmost-vote ranking.}
-}
+}}
+
+\item{init_args}{list of additional arguments for the initialization function.
 Any initializer can receive \code{batch_size}, \code{batch_type}, and
 \code{batch_replace} through \code{init_args}; \code{batch_type = "distal"} implements
 coreset-style candidate sampling (Mair & Brefeld 2019).
 See \code{vignette("initialization", package = "yaap")} for a comparison.}
-
-\item{init_args}{list of additional arguments for the initialization function.}
 
 \item{weights}{optional numeric vector of sample weights (default: \code{NULL}).
 Internally scaled to mean 1 and square-rooted before use.}
@@ -112,7 +112,7 @@ columns are dropped before fitting (default: 1e-6).}
 
 \item{max_iter}{maximum number of outer iterations (default: 100).}
 
-\item{tol}{convergence tolerance on the residual sum of squares (default: 1e-6).}
+\item{tol}{convergence tolerance on the residual sum of squares (default: 1e-4).}
 
 \item{tol_r2}{convergence tolerance on R\eqn{^2} (default: 0.9999).}
 
@@ -154,8 +154,8 @@ For \code{method = "kernel"}, matrix-valued \code{init} is a \verb{K x N} coeffi
 matrix over training samples, not a coordinate matrix. See
 \code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}} for the full kernel initialization contract.
 
-Robust fitting does not support the "MM" method described in \code{\link[MASS:rlm]{MASS::rlm()}}
-because it is not applicable to AA.
+Robust fitting is not supported for methods "directional" and "paa".
+Also compared to \code{\link[MASS:rlm]{MASS::rlm()}} the "MM" mode is not supported in AA.
 
 \code{run_aa.fd()} fits archetypal analysis to the coefficient matrix of an
 \code{fda::fd} object. The feature scaling is set to the basis inner-product

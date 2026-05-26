@@ -132,21 +132,20 @@ archetypes <- function(A = NULL,
 
 #' Coefficients for archetypes objects
 #'
-#' Returns the `coefficients` component of an `archetypes` object,
-#' i.e., the weights that express each archetype as a convex (or
-#' linear, if constraint is relaxed) combination of samples.
+#' Returns the weights that express each archetype as a combination of samples.
 #'
 #' @param object An object of class `archetypes`.
 #' @param ... Ignored.
 #'
 #' @return
-#' A numeric matrix (K x N) where each row contains the weights
-#' over samples used to form one archetype.
+#' A numeric matrix (K x N) where each row contains the sample weights used to
+#' form the corresponding archetype.
 #'
 #' @seealso [fitted.archetypes()], [predict.archetypes()], [residuals.archetypes()]
 #'
 #' @examples
-#' # coefficients(fit)
+#' fit <- run_aa(iris[, 1:4], K = 3)
+#' coefficients(fit)
 #'
 #' @exportS3Method
 coefficients.archetypes <- function(object, ...) {
@@ -156,18 +155,25 @@ coefficients.archetypes <- function(object, ...) {
 
 #' Access archetype coordinates and compositions
 #'
-#' `coordinates()` returns archetype coordinates in the same representation as
-#' the original input data. Matrix-backed fits return a numeric matrix;
-#' functional-data fits return an `fda::fd` object reconstructed from the stored
-#' fit data. Kernel fits return an input-space proxy computed from the
-#' fitted generator weights and stored data, or NULL when data are unavailable.
-#' `compositions()` returns the training-set simplex weights.
+#' `coordinates()` returns archetype coordinates in the same dimensions as the original input data.
+#' `compositions()` returns the weights that express each sample as a combination of archetypes.
 #'
 #' @param object An archetype analysis result.
 #' @param ... Ignored.
 #'
-#' @return `coordinates()` returns archetype coordinates. `compositions()`
-#' returns an N x K numeric matrix of composition weights.
+#' @return
+#' `coordinates()` returns a numeric matrix with K rows of archetype coordinates.
+#' `compositions()` returns an N x K numeric matrix of composition weights.
+#'
+#' @details
+#'
+#' For kernel fits `coordinates()` return an input-space proxy computed from
+#' the fitted generator weights and stored data, since the real coordinates
+#' live in the space where the kernel inner product is defined.
+#'
+#' For non-Gaussian families , coordinates live in parameter space (logit for
+#' binomial, log for Poisson, etc.) and may not be directly comparable to the
+#' original data.
 #'
 #' @rdname archetype_accessors
 #' @export
@@ -276,8 +282,7 @@ anames.archetypes <- function(x) {
 #' @param ... Ignored.
 #'
 #' @return
-#' Fitted values. Usually a numeric matrix (N x M); fd-backed fits return an
-#' `fda::fd` object.
+#' Fitted values in the same representation as the original data.
 #'
 #' @seealso [residuals.archetypes()], [predict.archetypes()], [coefficients.archetypes()]
 #'
@@ -304,8 +309,9 @@ fitted.archetypes <- function(object, ...) {
 #'
 #' @param object An object of class `archetypes`.
 #' @param type Residual type. `"response"` (default) returns `data - fitted`.
-#'   `"pearson"` returns row-wise weighted residuals,
-#'   `sqrt(weights) * (data - fitted)`.
+#'   `"pearson"` returns GLM-style Pearson residuals, dividing response
+#'   residuals by the square root of the family variance function and applying
+#'   stored row weights when present.
 #' @param ... Ignored.
 #'
 #' @return
@@ -332,25 +338,44 @@ residuals.archetypes <- function(object,
 
     stopifnot(all(dim(X) == dim(X_hat)))
     out <- X - X_hat
-    weights <- object[["weights"]]
-
-    if (identical(type, "response") || is.null(weights)) {
+    if (identical(type, "response")) {
         return(out)
     }
+
+    # Pearson residuals
+    variance <- .aa_family_variance(object, X_hat)
+    out <- out / sqrt(variance)
+    weights <- object[["weights"]] %||% 1
     sqrt(weights) * out
+}
+
+.aa_family_variance <- function(object, fitted) {
+    family <- object[["family"]] %||% "gaussian"
+    X <- object[["data"]]
+    eps <- sqrt(.Machine$double.eps)
+
+    variance <- switch(family,
+        gaussian    = 1,
+        poisson     = fitted,
+        bernoulli   = fitted * (1 - fitted),
+        multinomial = fitted * (1 - fitted / rowSums(X))
+    )
+
+    if (is.null(variance)) {
+        stop(
+            sprintf("Pearson residuals are not defined for family '%s'.", family),
+            call. = FALSE
+        )
+    }
+
+    pmax(variance, eps)
 }
 
 #' Predict compositions or reconstructions for new data from an archetypes model
 #'
-#' Projects new samples onto the archetype space by solving for composition
-#' weights with fixed archetype coordinates. By default the method returns
-#' reconstructions (`X_hat`). With `type = "compositions"`, it returns
-#' composition weights (`S`).
-#'
-#' For non-Gaussian families (`bernoulli`, `poisson`, `multinomial`),
-#' coordinates live in parameter space. In particular, multinomial
-#' reconstructions preserve existing package behavior by scaling each row of
-#' `S %*% A` by the corresponding row total of `newdata`.
+#' Projects new samples onto the archetype space by solving for composition.
+#' The representation is either in the original coordinates (`type = "reconstruction"`)
+#' or as barycentric coordinates (`type = "compositions"`) on the archetype simplex.
 #'
 #' @param object An object of class `archetypes`.
 #' @param newdata New data to fit. Must contain the features (columns) used to
@@ -365,6 +390,12 @@ residuals.archetypes <- function(object,
 #' If `type = "compositions"`, a numeric matrix (N_new x K) with non-negative
 #' row-stochastic composition weights. If `type = "reconstruction"`, a
 #' reconstruction matrix (N_new x M) in the input feature space.
+#'
+#' @details
+#' For non-Gaussian families, the reconstructions live in parameter space.
+#' In particular, "bernoulli" family returns probabilities and "poisson"
+#' family returns positive rates. For multinomial family, the reconstructions
+#' are normalized to sum to the row totals of `newdata`.
 #'
 #' @seealso
 #' [fit_simplex()], [residuals.archetypes()], [fitted.archetypes()].
@@ -443,7 +474,7 @@ print.archetypes <- function(x, ...) {
     )
     cat(conv_info)
     cat("Final Loss Metrics:\n")
-    print(loss[nrow(loss), ], row.names = FALSE)
+    print(loss[nrow(loss), , drop = FALSE], row.names = FALSE)
     cat("\n")
     invisible(x)
 }
@@ -505,36 +536,35 @@ print.summary.archetypes <- function(x, ...) {
     }
     invisible(x)
 }
+
 #' Plot method for archetypes objects
 #'
 #' Draws diagnostic and geometric plots for a fitted archetypal analysis model.
-#' The `what` argument controls which part of the fit is visualized:
-#'
-#' * `"composition"` and `"compositions"` draw a stacked barplot of
-#'   `x$compositions`, with bars representing observations and colors
-#'   representing archetypes. Rows and columns are clustered by default.
-#' * `"ternary"` and `"simplex"` plot the rows of `x$compositions` as points in
-#'   simplex coordinates.
-#' * `"loss"` plots the objective value stored in `x$loss$loss` across
-#'   optimization iterations.
-#' * `"profiles"` plots the fitted archetypes in their natural representation.
-#' * `"coordinates"` plots archetype coordinates, optionally over the original
-#'   observations when data are available.
 #'
 #' @param x An object of class `archetypes`
-#' @param what Character string naming the plot to draw. Supported values are
-#'   `"composition"`, `"compositions"`, `"ternary"`, `"simplex"`, `"loss"`,
-#'   `"profiles"`, and `"coordinates"`. `"composision"` and `"composisions"` are
-#'   accepted as aliases for `"compositions"`.
-#' @param subset Optional sample subset for plots that display observations:
-#'   `"composition"`, `"compositions"`, `"ternary"`, `"simplex"`, and
-#'   `"coordinates"`. May be numeric row indices, sample names, or a logical
-#'   vector. Subsetting is applied before clustering or projection.
-#' @param plot Logical. Should the plot be drawn? If `FALSE`, only the prepared
-#'   plotting data is returned invisibly.
+#' @param what Character string naming the plot to draw. Supported values are:
+#'   \describe{
+#'   \item{`"composition"`, `"composision"`}{Draw a stacked barplot of
+#'   fitted samples compositions, with bars representing observations and colors
+#'   representing archetypes. Rows and columns are clustered by default.}
+#'   \item{`"ternary"`, `"simplex"`}{Compositions are plotted as points in the
+#'   2D simplex, with corners representing archetypes. For K > 3, multiple 2D
+#'   projections are drawn. This plot requires package `compositions`.}
+#'   \item{`"loss"`}{Plot the evolution of the objective value across optimization iterations.}
+#'   \item{`"profiles"`}{Plot a barplot of the fitted archetypes.
+#'   Each set of bars represents a dimension and archetypes are separated by color.}
+#'   \item{`"coordinates"`}{Scatterplot of archetype coordinates, optionally over the
+#'   original observations when data are available.}
+#'   }
+#' @param subset Optional sample subset for plots that display observations.
+#'   May be numeric row indices, sample names, or a logical vector.
+#'   Subsetting is applied before clustering or projecting.
+#' @param plot Logical. Should the plot be drawn? If `FALSE`, the prepared
+#'   plotting data is returned without drawing.
 #' @param ... Additional graphical parameters passed to the selected plotting helper.
 #'
-#' @return Invisibly returns the prepared data used by the selected plot.
+#' @return The prepared data used by the selected plot, returned invisibly
+#'   when `plot = TRUE`.
 #'
 #' @importFrom graphics lines pairs plot points
 #' @exportS3Method
@@ -571,7 +601,11 @@ plot.archetypes <- function(x,
             graphics::title(main = dots[["main"]])
         }
         # target package ggtern uses wide format no "pca"
-        return(invisible(as.data.frame(S)))
+        out <- as.data.frame(S)
+        if (isTRUE(plot)) {
+            return(invisible(out))
+        }
+        return(out)
     }
 
     if (what == "loss") {
@@ -619,25 +653,20 @@ plot.archetypes <- function(x,
 #'
 #' Computes the AIC-like validity criterion for an `archetypes` object.
 #'
-#' This is not the classical likelihood-based Akaike Information Criterion
-#' \eqn{-2 \log L + 2k}. Instead, it implements the adapted archetypal-analysis
-#' criterion proposed by Suleman (2017), using the reconstruction variance
-#' \eqn{\|X - \hat X\|_F^2 / (N M)} and an efficiency-adjusted complexity
-#' penalty based on the full parameter count
-#' \eqn{K_\mu + K_\beta + 1 = N(K - 1) + K(N - 1) + 1}. The value is intended
-#' for comparing Euclidean Gaussian archetype fits on the same data, especially
-#' across different numbers of archetypes.
-#' Following the assumptions in Suleman (2017), the criterion is undefined when
-#' the number of samples is not larger than the number of features. If the
-#' covariance matrix of `X` is singular otherwise, the efficiency term is
-#' computed with a Moore-Penrose pseudo-inverse and a warning is emitted.
-#'
 #' @param object An object of class `archetypes`.
 #' @param ... Ignored.
 #' @return Numeric scalar with the adapted AIC-like criterion.
 #'
+#' @details
+#' This is not the classical likelihood-based Akaike Information Criterion
+#' \eqn{-2 \log L + 2k}. Instead, it implements the adapted archetypal-analysis
+#' criterion proposed by Suleman (2017), using the reconstruction error
+#' and an efficiency-adjusted complexity penalty.
+#' The value is intended for comparing Euclidean Gaussian archetype fits on
+#' the same data, especially across different numbers of archetypes `K`.
+#'
 #' @references
-#' A. Suleman, "Validation of archetypal analysis,"
+#' A. Suleman, "Validation of archetypal analysis"
 #' 2017 IEEE International Conference on Fuzzy Systems (FUZZ-IEEE),
 #' Naples, Italy, 2017, pp. 1-6, \doi{10.1109/FUZZ-IEEE.2017.8015385}
 #'

@@ -1,8 +1,8 @@
 #' Archetypes Analysis using Projected Gradient Descent
 #'
 #' Fits an archetypal analysis (AA) model by minimising the reconstruction error
-#' \eqn{\|X - SA\|_F^2}, where \eqn{S} is the composition matrix and \eqn{A} is
-#' the archetype coordinates via projected gradient descent (PGD).
+#' \eqn{\|X - SBX\|_F^2}, where \eqn{S} is the composition matrix and \eqn{A = BX}
+#' is the archetype coordinates via projected gradient descent (PGD).
 #'
 #' @param x data matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes
@@ -23,7 +23,7 @@
 #' @param sd_threshold threshold for feature standard deviation to filter
 #'   low-variance features (default: 1e-6)
 #' @param max_iter maximum number of iterations (default: 100)
-#' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
+#' @param tol convergence tolerance based on residual sum of squares (default: 1e-4)
 #' @param tol_r2 convergence tolerance based on R^2 (default: 0.9999)
 #' @param eps small positive number to ensure numerical stability
 #'   (default: 0 for sparse input 1e-8 for dense)
@@ -40,10 +40,10 @@
 #'   line-search update before PGD stops as stalled (default: 5)
 #'
 #' @details
-#' ## Model family
+#' ## Variants of the Gaussian AA formulation
 #'
-#' Three arguments change *which* objective is optimised and therefore the
-#' statistical family of the fitted model:
+#' Three arguments change *which* version of AA is perfomed by altering the objective
+#' of relaxing the constraints.
 #'
 #' * **`delta`** relaxes the convexity constraint on the archetypes.  With the
 #'   default `delta = 0`, every archetype is a convex combination of observed
@@ -53,7 +53,7 @@
 #'   useful when the true extremes are absent from the data due to truncation or
 #'   censoring.  Use with care: large values remove the interpretability
 #'   guarantee that archetypes are representable as extreme prototypes, and the
-#'   uniqueness result of Theorem 1 in Mørup & Hansen (2012) no longer holds.
+#'   uniqueness guarantees no longer hold.
 #'
 #' * **`robust`** switches the loss from ordinary squared error to an
 #'   iteratively re-weighted version based on MASS-style psi row weights.
@@ -63,15 +63,14 @@
 #'   supported because MM estimation is not directly applicable to the AA
 #'   objective. Robust fitting is incompatible with `missing = TRUE`.
 #'
-#' * **`missing`** activates the missing-data objective described in Section 3.5
-#'   of Mørup & Hansen (2012).  When `TRUE`, only observed entries contribute to
-#'   the loss and the archetype profiles are normalised entry-wise so that each
-#'   archetype is a weighted average of the *observed* values of the data points
-#'   that define it.  For dense matrices, `NA` marks missing entries; for sparse
-#'   \code{sparseMatrix} inputs, structural zeros are treated as missing.  The
-#'   default is `any(is.na(x))`, so missing-data mode is activated automatically
-#'   when the input contains `NA`s.  For kernel and probabilistic variants of AA
-#'   see \code{vignette("non-gaussian-aa", package = "yaap")}.
+#' * **`missing`** limits loss contributions to only observed entries and
+#'   the archetype profiles are normalised entry-wise so that each archetype is a
+#'   weighted average of the *observed* values of the data points that define it.
+#'   For dense matrices, `NA` marks missing entries; for sparse `sparseMatrix`
+#'   inputs, structural zeros are treated as missing. The default is `any(is.na(x))`,
+#'   so missing-data mode is activated automatically when the input contains `NA`s.
+#'
+#' For non-Gaussian variants of AA, see \code{vignette("non-gaussian-aa", package = "yaap")}
 #'
 #' ## Algorithm mechanics and tuning
 #'
@@ -82,11 +81,10 @@
 #'
 #' When `pseudo_pgd = TRUE` (the default), the gradients are projected onto the
 #' tangent space of the \eqn{\ell_1} unit sphere before the simplex projection
-#' step.  This is the "pseudo-PGD" variant of Mørup & Hansen (2012), which
-#' removes the radial gradient component and thereby prevents the step from
-#' increasing the \eqn{\ell_1} norm before projection.  In practice it leads to
-#' larger effective steps and faster convergence; set `pseudo_pgd = FALSE` to
-#' use the plain projected gradient if needed.
+#' step so as to allow larger steps without violating the constraints. This is
+#' the "pseudo-PGD" variant of Mørup & Hansen (2012). `pseudo_pgd = FALSE` uses
+#' use the plain gradient of the objective function with respect to each variable.
+#' In either case, after each step the variables are projected back onto the simplex.
 #'
 #' `step_size` sets the initial step size for both \eqn{S} and \eqn{B} updates
 #' (and for \eqn{\alpha} when `delta > 0`).  If no step in the inner line
@@ -98,21 +96,24 @@
 #' scale for a particular dataset.
 #'
 #' Convergence is declared when the relative decrease in RSS between successive
-#' accepted updates falls below `tol` (default 1e-6) *or* \eqn{R^2} exceeds
+#' accepted updates falls below `tol` (default 1e-4) *or* \eqn{R^2} exceeds
 #' `tol_r2` (default 0.9999).
 #'
 #' ## Preprocessing
 #'
 #' Before fitting, features with standard deviation below `sd_threshold`
 #' (default 1e-6) are dropped to avoid ill-conditioning; their values are
-#' restored as column means in the output.  The `scale` argument controls the
-#' feature metric: `FALSE` (default) leaves columns on their original scale, `TRUE`
-#' applies column-wise z-scoring, a positive numeric vector divides
-#' each column by the supplied factor, and a symmetric positive-definite matrix
-#' defines a full quadratic feature metric — see
-#' \code{vignette("non-gaussian-aa", package = "yaap")} for the metric-AA use
-#' case.  Sample-level `weights` re-weight rows in the loss but do not affect
-#' the preprocessing step.
+#' restored as column means in the output.
+#'
+#' The `scale` argument is best understood as choosing the feature metric used
+#' to judge reconstruction errors. It changes which directions in feature
+#' space are treated as close or far, so it can emphasize, de-emphasize, or
+#' correlate features without changing the sample-level convexity constraints.
+#' This is useful for curves, spectra, correlated measurements, or any setting
+#' where ordinary Euclidean distance is not the desired geometry. Use
+#' `weights`, not `scale`, when the goal is to make some samples count more
+#' than others. See \code{vignette("non-gaussian-aa", package = "yaap")}
+#' for examples.
 #'
 #' @returns An object of class \code{archetypes}
 #'
@@ -136,7 +137,7 @@ archetypes_pgd <- function(x,
                            robust_args = list(),
                            sd_threshold = 1e-6,
                            max_iter = 100L,
-                           tol = 1e-6,
+                           tol = 1e-4,
                            tol_r2 = 0.9999,
                            eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                            verbose = FALSE,

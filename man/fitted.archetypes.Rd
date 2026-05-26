@@ -12,8 +12,7 @@
 \item{...}{Ignored.}
 }
 \value{
-Fitted values. Usually a numeric matrix (N x M); fd-backed fits return an
-\code{fda::fd} object.
+Fitted values in the same representation as the original data.
 }
 \description{
 Computes the projection of the data on the convex hull

@@ -14,7 +14,7 @@ plot_archetypes_loss(loss, plot = TRUE, ...)
 \item{...}{Additional graphical parameters passed to \code{\link[graphics:plot]{graphics::plot()}}.}
 }
 \value{
-Invisibly returns a data frame with columns \code{iteration} (integer,
+Returns a data frame with columns \code{iteration} (integer,
 0-based) and \code{loss} (numeric).
 }
 \description{

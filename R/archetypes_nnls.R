@@ -1,8 +1,8 @@
 #' Archetypal Analysis using Non-Negative Least Squares
 #'
-#' Fits archetypal analysis (AA) by alternating between a non-negative
-#' least-squares (NNLS) step for convex-mixtures ($S$, $B$) and an ordinary
-#' least-squares (OLS) step for archetype coordinates.
+#' Performs archetypal analysis by iteratively solving the linear systems
+#' definining each of the 3 components (`coordinates`, `compositions`, `coefficients`)
+#' using non-negative least-squares (NNLS) to enforce the simplex constraints.
 #'
 #' @param x data matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes
@@ -11,19 +11,16 @@
 #' @param weights optional vector of sample weights (default: NULL)
 #' @param scale scaling or metric embedding used before fitting; see
 #'   [archetypes_pgd()] for details (default: FALSE).
-#' @param robust robust row reweighting selector. Use `FALSE` for ordinary
-#'   squared error, `TRUE` for `"psi.bisquare"`, a MASS psi function name,
-#'   or a custom psi function. See [MASS::rlm()] for psi details; `method =
-#'   "MM"` is not supported because it is not applicable to AA.
+#' @param robust robust row reweighting selector. See [run_aa()] for available options
+#'   (default: FALSE).
 #' @param robust_args list of tuning arguments passed to the robust psi function.
 #' @param sd_threshold threshold for feature standard deviation to filter
 #'   low-variance features (default: 1e-6).
 #' @param max_iter maximum number of iterations (default: 100)
-#' @param tol convergence tolerance based on residual sum of squares (default: 1e-6)
+#' @param tol convergence tolerance based on residual sum of squares (default: 1e-4)
 #' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
 #' @param max_kappa maximum condition-number warning threshold for NNLS
-#'   diagnostics (default: 1000). Use `Inf` to disable condition-number
-#'   warnings.
+#'   diagnostics (default: 1000). Use `Inf` to disable condition-number warnings.
 #' @param eps small positive number to ensure numerical stability
 #'   (default: 0 for sparse input 1e-8 for dense)
 #' @param verbose whether to print progress messages (default: FALSE)
@@ -35,27 +32,27 @@
 #' @details
 #' ## NNLS solver
 #'
-#' Standard AA alternates between updating the composition matrix S (holding
-#' archetypes fixed) and the archetype coordinates A (holding compositions fixed).
-#' The NNLS solver reformulates each S-update as a non-negative least-squares
-#' problem with a simplex-constraint row appended (the "big-M" trick), making it
-#' well-suited for settings where NNLS is more numerically stable than projected
-#' gradient descent, such as sparse inputs. The archetype composition matrix B
-#' is also updated via NNLS.
+#' Standard AA formulation involves 3 linear systems \eqn{X = SA = S(BX)}, where
+#' \eqn{S} is the `compositions` matrix, \eqn{A} is the `coordinates` matrix and
+#' \eqn{B} is the `coefficients` matrix. `archetypes_nnls()` solves each of these
+#' sequentially, via least-squares minimization, keeping the other two matrices
+#' fixed. For the matrices, \eqn{S} and \eqn{B}, that are subject to simplex constraints
+#' (non-negativity and row-sum-to-one), the NNLS solver is used and the sum-to-one constraint
+#' is enforced by adding a penalty term `bigM` into the systems involving these matrices.
 #'
-#' The returned `loss` history stores `loss` as the best objective seen so
-#' far and `rloss` as the current iterate objective. The `rloss`, `k_S`, and
-#' `k_A` columns are NNLS diagnostics and are not used for model selection.
+#' When `bigM = NULL` (default) its value is set automatically based on heuristics.
+#' If it fails to enforce the simplex constraint, warning messages will ask you
+#' to increase it. If the solver is slow or numerically unstable try decreasing it.
 #'
-#' ## OLS and big-M
+#' Because the solution involves solving linear systems, the condition numbers
+#' of the `compositions` and `coordinates` matrices are tracked as diagnostics
+#' (`k_S` and `k_A` respectively). If either of them exceeds `max_kappa`, a warning
+#' is issued.
 #'
-#' The A-update solves `min_A ||X - SA||_F^2` as an unconstrained least-squares
-#' problem via QR factorisation.
-#'
-#' `bigM` is the weight of the row appended to enforce the simplex (sum-to-one) constraint.
-#' When `NULL` (default) it is set automatically based heuristics. If it fails
-#' to enforce the simplex constraint, warning messages will ask you to increase it.
-#' if the solver is slow or numerically unstable try decreasing it.
+#' The returned `loss` history stores `loss` (residual sum-of-squares) as
+#' the best objective seen so far and `rloss` as the current iterate objective.
+#' The `rloss`, `k_S`, and `k_A` columns are NNLS diagnostics and are not used
+#' for model selection.
 #'
 #' @returns An object of class \code{archetypes}.
 #'
@@ -80,7 +77,7 @@ archetypes_nnls <- function(x,
                             robust_args = list(),
                             sd_threshold = 1e-6,
                             max_iter = 100L,
-                            tol = 1e-6,
+                            tol = 1e-4,
                             tol_r2 = 0.9999,
                             max_kappa = 1000,
                             eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),

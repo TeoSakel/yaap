@@ -31,21 +31,32 @@ consistency. Defaults to \code{x$data}.}
 A numeric scalar.
 }
 \description{
-Consistency Between Archetypal Analysis Fits
+Measures how similar two archetypal analysis fits are by comparing their
+memberships, archetype definitions, or archetype locations.
 }
 \details{
-For \code{what = "compositions"} or \code{what = "coefficients"}, consistency is
-computed as normalized mutual information (NMI) between the two row-stochastic
-weight matrices. For matrices \code{X} and \code{Y}, the joint distribution is
-\code{Pxy = crossprod(X, Y) / nrow(X)}. Mutual information is computed from \code{Pxy}
-and its row and column marginals, and normalized as
-\code{2 * MI(X, Y) / (MI(X, X) + MI(Y, Y))}.
+Consistency is useful when checking whether an AA solution is stable across
+random starts, resampled data, or nearby model choices. A high score means the
+two fits describe the data in a similar way, even if archetype labels have
+changed. Compare \code{compositions} to ask whether samples are assigned to the
+same archetypal mixtures, \code{coefficients} to ask whether archetypes are built
+from the same samples, and \code{coordinates} to ask whether the archetype
+locations are close in the input space.
 
-For \code{what = "coordinates"}, consistency is defined when \code{K_x <= K_y}.
-Archetypes in \code{x} are greedily matched to their nearest unmatched archetype
-in \code{y} by squared Euclidean distance, and the score is
-\code{1 - mean(d2) / mean(matrixStats::colVars(data))}. When \code{K_x > K_y}, the
-score is \code{NA}.
+For \code{what = "compositions"} or \code{what = "coefficients"}, the two components
+are treated as row-stochastic membership matrices and compared with
+normalized mutual information (NMI). For matrices \code{X} and \code{Y}, the joint
+distribution is \code{Pxy = crossprod(X, Y) / nrow(X)}. Mutual information is
+computed from \code{Pxy} and its row and column marginals, then normalized as
+\code{2 * MI(X, Y) / (MI(X, X) + MI(Y, Y))}. This makes the score insensitive to
+permutations of the archetype labels.
+
+For \code{what = "coordinates"}, archetypes in \code{x} are greedily matched to the
+nearest unmatched archetypes in \code{y}, then a R2-like score is computed by
+scaling the mean matched distances by the overall variation in \code{data}. This
+option is useful for checking whether two fits place archetypes in similar
+regions of the input space. It returns \code{NA} when \code{x} has more archetypes than
+\code{y}, because not every archetype in \code{x} can be matched.
 }
 \references{
 J. L. Hinrich, S. E. Bardenfleth, R. E. Røge, N. W. Churchill, K. H.

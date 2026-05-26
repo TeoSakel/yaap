@@ -25,7 +25,7 @@
 #' path[["K2"]]
 #'
 #' @export
-archetypes_path <- function(x, ...) {
+archetypes_path <- function(x, K, ...) {
     UseMethod("archetypes_path")
 }
 
@@ -76,9 +76,8 @@ archetypes_path.formula <- function(formula,
     out
 }
 
-#' @rdname archetypes_path
-#' @method archetypes_path fd
-#' @export
+#' @exportS3Method
+#' @noRd
 archetypes_path.fd <- function(x, K, ...) {
     data <- x
     .aa_require_namespace_for("fda", "functional-data archetypes paths")
@@ -130,7 +129,7 @@ archetypes_path.default <- function(x,
                                     robust_args = list(),
                                     sd_threshold = 1e-6,
                                     max_iter = 100L,
-                                    tol = 1e-6,
+                                    tol = 1e-4,
                                     tol_r2 = 0.9999,
                                     eps = NULL,
                                     verbose = FALSE,
@@ -185,7 +184,7 @@ archetypes_path.default <- function(x,
                                         robust_args = list(),
                                         sd_threshold = 1e-6,
                                         max_iter = 100L,
-                                        tol = 1e-6,
+                                        tol = 1e-4,
                                         tol_r2 = 0.9999,
                                         eps = NULL,
                                         verbose = FALSE,
@@ -263,7 +262,7 @@ archetypes_path.default <- function(x,
                                 robust_args = list(),
                                 sd_threshold = 1e-6,
                                 max_iter = 100L,
-                                tol = 1e-6,
+                                tol = 1e-4,
                                 tol_r2 = 0.9999,
                                 eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                                 verbose = FALSE,
@@ -530,7 +529,7 @@ screeplot.archetypes_path <- function(x, y = NULL, plot = TRUE, ...) {
         }
         utils::tail(loss[[metric]], 1L)
     }
-    if (!(is_number(value) || (identical(length(value), 1L) && is.numeric(value) && is.na(value)))) {
+    if (!is_number(value)) {
         stop("`y` function must return a single numeric value.", call. = FALSE)
     }
     as.numeric(value)

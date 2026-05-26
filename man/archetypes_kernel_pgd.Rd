@@ -89,10 +89,6 @@ input-space coordinate proxies when data are stored, and out-of-sample
 Fits archetypal analysis from pairwise kernel similarities.
 }
 \details{
-Use this solver when a nonlinear similarity such as an RBF, Laplace, or
-polynomial kernel is more appropriate than ordinary Euclidean distances, or
-when you already have a precomputed Gram matrix. For standard AA on the
-original feature matrix, use \code{\link[=archetypes_pgd]{archetypes_pgd()}} instead.
 \subsection{Kernels and the Gram matrix}{
 
 A kernel function \eqn{k(x_i, x_j)} measures pairwise similarity between

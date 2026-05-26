@@ -21,14 +21,19 @@ compositions(object, ...)
 \item{...}{Ignored.}
 }
 \value{
-\code{coordinates()} returns archetype coordinates. \code{compositions()}
-returns an N x K numeric matrix of composition weights.
+\code{coordinates()} returns a numeric matrix with K rows of archetype coordinates.
+\code{compositions()} returns an N x K numeric matrix of composition weights.
 }
 \description{
-\code{coordinates()} returns archetype coordinates in the same representation as
-the original input data. Matrix-backed fits return a numeric matrix;
-functional-data fits return an \code{fda::fd} object reconstructed from the stored
-fit data. Kernel fits return an input-space proxy computed from the
-fitted generator weights and stored data, or NULL when data are unavailable.
-\code{compositions()} returns the training-set simplex weights.
+\code{coordinates()} returns archetype coordinates in the same dimensions as the original input data.
+\code{compositions()} returns the weights that express each sample as a combination of archetypes.
+}
+\details{
+For kernel fits \code{coordinates()} return an input-space proxy computed from
+the fitted generator weights and stored data, since the real coordinates
+live in the space where the kernel inner product is defined.
+
+For non-Gaussian families , coordinates live in parameter space (logit for
+binomial, log for Poisson, etc.) and may not be directly comparable to the
+original data.
 }

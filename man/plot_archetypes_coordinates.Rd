@@ -39,7 +39,7 @@ window arguments such as \code{main}, \code{xlab}, \code{ylab}, \code{xlim}, \co
 are also honored when drawing the plot.}
 }
 \value{
-Invisibly returns a data frame in long format with one row per
+Returns a data frame in long format with one row per
 point. Columns are the coordinate dimensions, \code{name} (character label),
 and \code{archetype} (logical). Data rows come first, archetype rows last.
 }

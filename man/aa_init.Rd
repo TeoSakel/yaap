@@ -70,12 +70,12 @@ matrix \code{B}. User-defined initialization functions passed directly to
 
 The following initialization methods are available:
 \itemize{
-\item \code{"random"}: selects uniformly at random \code{K} archetypes from \code{X}.
+\item \code{"random"}: selects uniformly at random \code{K} rows of \code{X} as archetypes.
 \item \code{"dirichlet"}: draws each archetype as a random convex combination of all
 data points by sampling \code{B} row-wise from a Dirichlet(alpha, ..., alpha)
 distribution (Gamma(alpha, 1) weights normalized to unit sum). \code{alpha = 1}
-(default) gives a uniform distribution over the simplex; \code{alpha < 1}
-concentrates mass near simplex vertices, yielding sparser rows; \code{alpha > 1}
+(default) gives a uniform distribution over all data points; \code{alpha < 1}
+concentrates mass near \code{K} data points, yielding sparser rows; \code{alpha > 1}
 concentrates mass toward the centroid. Accepts optional \code{alpha} argument
 via \code{...}.
 \item \code{"furthest_first"}: selects the first archetype randomly and then greedily
@@ -86,7 +86,7 @@ of greedily picking the furthest point every time.
 \item \code{"furthest_sum"}: selects the first archetype randomly and then greedily
 selects the next archetypes that maximizes the sum of distances of all
 points from the current set of archetypes (see Mørup & Hansen 2012).
-\item \code{"aa_pp"}: AA++ is a probabilistic initialization method similar to \verb{kmeans++}
+\item \code{"aa_pp"}: AA++ is a probabilistic initialization method similar to \code{kmeans_pp}
 but instead using the distances to the current set of archetypes it uses
 distances to their convex hull (see Mair & Sjölund 2023).
 \item \code{"hull_outmost"}: computes hull candidates using one of the

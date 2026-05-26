@@ -11,7 +11,7 @@ archetypes_paa(
   init = "furthest_sum",
   init_args = list(),
   max_iter = 100L,
-  tol = 1e-06,
+  tol = 1e-04,
   tol_r2 = 0.9999,
   eps = 1e-08,
   verbose = FALSE,
@@ -35,7 +35,7 @@ archetypes_paa(
 
 \item{max_iter}{maximum number of outer iterations (default: 100)}
 
-\item{tol}{convergence tolerance based on objective loss (default: 1e-6)}
+\item{tol}{convergence tolerance based on objective loss (default: 1e-4)}
 
 \item{tol_r2}{convergence tolerance based on R\eqn{^2} (default: 0.9999)}
 
@@ -67,7 +67,7 @@ PAA models each observation as drawn from an exponential-family distribution
 whose natural parameter is a convex combination of K archetypal profiles.
 Before optimisation begins, each data point is mapped to a fixed profile by
 computing its per-sample MLE parameter under the chosen family (e.g. the raw
-values for \code{"gaussian"}, normalised row totals for \code{"multinomial"}). The
+values for \code{"gaussian"}, high probability for \code{"bernoulli"}, etc.). The
 archetypes are then found as convex combinations of these fixed profiles.
 Built-in families and their data requirements:
 

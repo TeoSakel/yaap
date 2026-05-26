@@ -164,7 +164,7 @@ run_aa.formula <- function(formula,
 #' @param sd_threshold threshold for feature standard deviation below which
 #'   columns are dropped before fitting (default: 1e-6).
 #' @param max_iter maximum number of outer iterations (default: 100).
-#' @param tol convergence tolerance on the residual sum of squares (default: 1e-6).
+#' @param tol convergence tolerance on the residual sum of squares (default: 1e-4).
 #' @param tol_r2 convergence tolerance on R\eqn{^2} (default: 0.9999).
 #' @param eps small positive number for numerical stability
 #'   (default: 0 for sparse input, 1e-8 for dense).
@@ -200,7 +200,7 @@ run_aa.default <- function(x,
                            robust_args = list(),
                            sd_threshold = 1e-6,
                            max_iter = 100L,
-                           tol = 1e-6,
+                           tol = 1e-4,
                            tol_r2 = 0.9999,
                            eps = NULL,
                            verbose = FALSE,
@@ -316,7 +316,7 @@ run_aa.fd <- function(x, K, ...) {
                                  robust_args = list(),
                                  sd_threshold = 1e-6,
                                  max_iter = 100L,
-                                 tol = 1e-6,
+                                 tol = 1e-4,
                                  tol_r2 = 0.9999,
                                  eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                                  verbose = FALSE,
@@ -407,7 +407,7 @@ run_aa.fd <- function(x, K, ...) {
                            robust_args = list(),
                            sd_threshold = 1e-6,
                            max_iter = 100L,
-                           tol = 1e-6,
+                           tol = 1e-4,
                            tol_r2 = 0.9999,
                            eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-8),
                            verbose = FALSE,

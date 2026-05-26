@@ -1,7 +1,7 @@
 #' Directional Archetypal Analysis
 #'
-#' Fits directional archetypal analysis (DAA) via projected gradient descent,
-#' modelling observations by their orientation rather than Euclidean magnitude.
+#' Fits directional archetypal analysis, where data and archetypes are defined as directions
+#' (axes passing through the origin) rather than points in Euclidean space.
 #'
 #' @param x dense numeric data matrix (rows = samples, columns = dimensions).
 #' @param K number of archetypes.
@@ -9,7 +9,7 @@
 #' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional non-negative sample weights (default: NULL)
 #' @param max_iter maximum number of outer iterations (default: 100)
-#' @param tol convergence tolerance based on directional residual loss (default: 1e-6)
+#' @param tol convergence tolerance based on directional residual loss (default: 1e-4)
 #' @param tol_r2 convergence tolerance based on directional R\eqn{^2} (default: 0.9999)
 #' @param eps small positive number for numerical stability (default: 1e-8)
 #' @param verbose whether to print progress messages (default: FALSE)
@@ -27,12 +27,12 @@
 #' @details
 #' ## Directional AA
 #'
-#' Standard AA minimises squared Euclidean reconstruction error, which conflates
-#' direction and magnitude. Directional AA row-normalises the input so archetypes
-#' are convex combinations of unit vectors, and evaluates reconstructions via a
-#' Watson-style angular loss that is polarity-invariant: a sample and its antipodal
-#' reflection contribute equally. This makes the method suitable for data where only
-#' orientation matters, such as neuroimaging source vectors or unit-sphere embeddings.
+#' Standard AA compares points by Euclidean distance, so long vectors can dominate
+#' short ones even when they point in the same direction. Directional AA instead
+#' compares observations on the sphere using a Watson loss: the spherical analogue
+#' of a Gaussian loss when opposite points are treated as the same direction. The
+#' fitted model minimizes the corresponding negative log-likelihood proxy, so a
+#' sample and its antipodal reflection contribute equally.
 #'
 #' ## Hemisphere alignment
 #'
@@ -43,7 +43,10 @@
 #' `hemisphere = "pca"` (default) projects each row onto the first principal
 #' component and flips rows with a negative dot product, so all generators lie
 #' on the same side. `hemisphere = "none"` leaves signs unchanged; use this
-#' when the data are already hemispherically consistent.
+#' when rows are already sign-aligned, when signs should be preserved, or when
+#' alignment has been handled upstream. With unaligned data, antipodal rows may
+#' cancel in the convex archetype construction even though the Watson loss treats
+#' them as equivalent.
 #'
 #' ## Precision weighting
 #'
@@ -88,7 +91,7 @@ archetypes_directional <- function(x,
                                    init_args = list(),
                                    weights = NULL,
                                    max_iter = 100L,
-                                   tol = 1e-6,
+                                   tol = 1e-4,
                                    tol_r2 = 0.9999,
                                    eps = 1e-8,
                                    verbose = FALSE,
@@ -98,6 +101,7 @@ archetypes_directional <- function(x,
                                    max_iter_optimizer = 10L,
                                    step_shrinkage = 0.5,
                                    max_no_update = 5L) {
+    # TODO: add von Mises-Fisher loss option via "family"
     .aa_fit_engine(
         call = match.call(),
         x = x,

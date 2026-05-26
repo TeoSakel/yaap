@@ -25,7 +25,7 @@ plot_archetypes_profiles(
 for matrix coordinates, or \code{\link[graphics:plot]{graphics::plot()}} for \code{fd} coordinates.}
 }
 \value{
-Invisibly returns a data frame in long format with columns
+Returns a data frame in long format with columns
 \code{archetype}, \code{feature}, and \code{value}. Returns \code{NULL} invisibly for \code{fd}
 coordinates.
 }

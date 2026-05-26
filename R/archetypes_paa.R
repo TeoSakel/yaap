@@ -11,7 +11,7 @@
 #' @param init initialization method; see [run_aa()] for available options.
 #' @param init_args list of additional arguments for the initialization function.
 #' @param max_iter maximum number of outer iterations (default: 100)
-#' @param tol convergence tolerance based on objective loss (default: 1e-6)
+#' @param tol convergence tolerance based on objective loss (default: 1e-4)
 #' @param tol_r2 convergence tolerance based on R\eqn{^2} (default: 0.9999)
 #' @param eps small positive number for numerical stability (default: 1e-8)
 #' @param verbose whether to print progress messages (default: FALSE)
@@ -28,7 +28,7 @@
 #' whose natural parameter is a convex combination of K archetypal profiles.
 #' Before optimisation begins, each data point is mapped to a fixed profile by
 #' computing its per-sample MLE parameter under the chosen family (e.g. the raw
-#' values for `"gaussian"`, normalised row totals for `"multinomial"`). The
+#' values for `"gaussian"`, high probability for `"bernoulli"`, etc.). The
 #' archetypes are then found as convex combinations of these fixed profiles.
 #' Built-in families and their data requirements:
 #'
@@ -63,7 +63,7 @@ archetypes_paa <- function(x,
                            init = "furthest_sum",
                            init_args = list(),
                            max_iter = 100L,
-                           tol = 1e-6,
+                           tol = 1e-4,
                            tol_r2 = 0.9999,
                            eps = 1e-8,
                            verbose = FALSE,
@@ -384,7 +384,7 @@ archetypes_paa <- function(x,
 .aa_paa_predict_S <- function(object,
                               newdata,
                               max_iter = 100L,
-                              tol = 1e-6,
+                              tol = 1e-4,
                               eps = 1e-8,
                               step_size = 1.0,
                               max_iter_optimizer = 10L,

@@ -1,8 +1,7 @@
 #' Project rows of matrix onto the probability simplex
 #'
-#' @description These functions project each row of a numeric matrix onto the
-#' probability simplex or the L1-norm ball respectively by implementing Condat's
-#' algorithm.
+#' These functions project each row of a numeric matrix onto the
+#' probability simplex or the L1-norm ball.
 #'
 #' @param mat A numeric matrix where each row will be projected.
 #' @param eps A small positive number to ensure numerical stability (default: 1e-8).
@@ -19,6 +18,9 @@
 #' @details
 #' The values of the input matrix are first clipped at `eps` to be non-negative
 #' and then projected onto the simplex or L1-norm ball.
+#'
+#' The `proj_simplex()` function implements the efficient algorithm of Condat (2016).
+#' The `proj_l1()` function simply normalizes each row to sum to 1 after clipping.
 #'
 #' @references
 #' Condat, L. (2016). Fast projection onto the simplex and the L_1 ball.
@@ -82,7 +84,7 @@ proj_l1 <- function(mat, eps = 0) {
 #'
 #' @details
 #' The function solves the constrained least-squares problem that minimizes
-#' `||X - S*A||_2` such that `S >= 0` and `rowSums(S) = 1`.
+#' `norm(X - S %*% A, "F")` such that `all(S >= 0)` and `rowSums(S) = 1`.
 #'
 #' The method `"nnls"` fits `S` via non-negative least squares using the `nnls`
 #' package. The results are then projected onto the simplex to ensure

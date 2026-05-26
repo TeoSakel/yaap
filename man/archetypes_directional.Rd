@@ -67,18 +67,18 @@ fitted values and residuals, composition prediction for new directional
 data, and report \code{AIC()} as unsupported for Watson-loss fits.
 }
 \description{
-Fits directional archetypal analysis (DAA) via projected gradient descent,
-modelling observations by their orientation rather than Euclidean magnitude.
+Fits directional archetypal analysis, where data and archetypes are defined as directions
+(axes passing through the origin) rather than points in Euclidean space.
 }
 \details{
 \subsection{Directional AA}{
 
-Standard AA minimises squared Euclidean reconstruction error, which conflates
-direction and magnitude. Directional AA row-normalises the input so archetypes
-are convex combinations of unit vectors, and evaluates reconstructions via a
-Watson-style angular loss that is polarity-invariant: a sample and its antipodal
-reflection contribute equally. This makes the method suitable for data where only
-orientation matters, such as neuroimaging source vectors or unit-sphere embeddings.
+Standard AA compares points by Euclidean distance, so long vectors can dominate
+short ones even when they point in the same direction. Directional AA instead
+compares observations on the sphere using a Watson loss: the spherical analogue
+of a Gaussian loss when opposite points are treated as the same direction. The
+fitted model minimizes the corresponding negative log-likelihood proxy, so a
+sample and its antipodal reflection contribute equally.
 }
 
 \subsection{Hemisphere alignment}{
@@ -90,7 +90,10 @@ near the equator.
 \code{hemisphere = "pca"} (default) projects each row onto the first principal
 component and flips rows with a negative dot product, so all generators lie
 on the same side. \code{hemisphere = "none"} leaves signs unchanged; use this
-when the data are already hemispherically consistent.
+when rows are already sign-aligned, when signs should be preserved, or when
+alignment has been handled upstream. With unaligned data, antipodal rows may
+cancel in the convex archetype construction even though the Watson loss treats
+them as equivalent.
 }
 
 \subsection{Precision weighting}{

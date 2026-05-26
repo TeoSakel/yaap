@@ -60,6 +60,12 @@ test_that("common fitter defaults are synchronized", {
 
     expect_identical(pgd_formals[["sd_threshold"]], nnls_formals[["sd_threshold"]])
     expect_identical(pgd_formals[["max_iter"]], nnls_formals[["max_iter"]])
+    expect_identical(pgd_formals[["tol"]], 1e-4)
+    expect_identical(nnls_formals[["tol"]], pgd_formals[["tol"]])
+    expect_identical(formals(run_aa.default)[["tol"]], pgd_formals[["tol"]])
+    expect_identical(formals(archetypes_kernel_pgd)[["tol"]], pgd_formals[["tol"]])
+    expect_identical(formals(archetypes_directional)[["tol"]], pgd_formals[["tol"]])
+    expect_identical(formals(archetypes_paa)[["tol"]], pgd_formals[["tol"]])
     expect_identical(formals(run_aa.default)[["sd_threshold"]], nnls_formals[["sd_threshold"]])
     expect_identical(formals(run_aa.default)[["max_iter"]], nnls_formals[["max_iter"]])
 })
@@ -420,7 +426,7 @@ test_that("NNLS max_no_update records rejected candidate before stalling", {
                 X,
                 K = 3L,
                 max_iter = 20L,
-                bigM = 5,
+                bigM = 50,
                 max_no_update = 1L,
                 tol = 1e-12,
                 tol_r2 = 1,

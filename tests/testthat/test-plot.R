@@ -157,11 +157,15 @@ test_that("plot_archetypes_compositions supports PC1 and AOP ordering", {
 test_that("plot helpers support plot = FALSE", {
     fit <- manual_fit()
 
-    comp <- plot_archetypes_compositions(fit[["compositions"]], plot = FALSE)
+    comp_visible <- withVisible(plot_archetypes_compositions(fit[["compositions"]], plot = FALSE))
+    expect_true(comp_visible[["visible"]])
+    comp <- comp_visible[["value"]]
     expect_named(comp, c("sample", "archetype", "weight"))
     expect_equal(comp[["weight"]], as.vector(fit[["compositions"]]))
 
-    loss <- plot_archetypes_loss(fit[["loss"]], plot = FALSE)
+    loss_visible <- withVisible(plot_archetypes_loss(fit[["loss"]], plot = FALSE))
+    expect_true(loss_visible[["visible"]])
+    loss <- loss_visible[["value"]]
     expect_equal(loss[["loss"]], fit[["loss"]][["loss"]])
 
     profiles <- plot_archetypes_profiles(
@@ -172,17 +176,25 @@ test_that("plot helpers support plot = FALSE", {
     expect_named(profiles, c("archetype", "feature", "value"))
     expect_equal(profiles[["value"]], as.vector(coordinates(fit)))
 
-    coords <- plot_archetypes_coordinates(
+    coords_visible <- withVisible(plot_archetypes_coordinates(
         coordinates(fit),
         data = fit[["data"]],
         archetype_names = anames(fit),
         plot = FALSE
-    )
+    ))
+    expect_true(coords_visible[["visible"]])
+    coords <- coords_visible[["value"]]
     expect_named(coords, c("x", "y", "name", "archetype"))
     expect_equal(unname(as.matrix(coords[!coords[["archetype"]], c("x", "y")])), unname(fit[["data"]]))
     expect_equal(unname(as.matrix(coords[coords[["archetype"]], c("x", "y")])), unname(coordinates(fit)))
 
-    expect_named(plot(fit, "coordinates", plot = FALSE), c("x", "y", "name", "archetype"))
+    visible <- withVisible(plot(fit, "coordinates", plot = FALSE))
+    expect_true(visible[["visible"]])
+    expect_named(visible[["value"]], c("x", "y", "name", "archetype"))
+
+    drawn <- withVisible(plot(fit, "coordinates"))
+    expect_false(drawn[["visible"]])
+    expect_named(drawn[["value"]], c("x", "y", "name", "archetype"))
 })
 
 test_that("plot_archetypes_coordinates handles coordinates-only and argument routing", {

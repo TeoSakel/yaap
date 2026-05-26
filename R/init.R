@@ -1,6 +1,6 @@
 #' Archetypal Analysis Initialization Functions
 #'
-#' @description Various initialization methods for Archetypal Analysis (see Details).
+#' Various initialization methods for Archetypal Analysis (see Details).
 #'
 #' @param X a numeric matrix (rows = samples, columns = dimensions)
 #' @param K number of archetypes to be initialized
@@ -36,12 +36,12 @@
 #'
 #' The following initialization methods are available:
 #'
-#' - `"random"`: selects uniformly at random `K` archetypes from `X`.
+#' - `"random"`: selects uniformly at random `K` rows of `X` as archetypes.
 #' - `"dirichlet"`: draws each archetype as a random convex combination of all
 #'   data points by sampling `B` row-wise from a Dirichlet(alpha, ..., alpha)
 #'   distribution (Gamma(alpha, 1) weights normalized to unit sum). `alpha = 1`
-#'   (default) gives a uniform distribution over the simplex; `alpha < 1`
-#'   concentrates mass near simplex vertices, yielding sparser rows; `alpha > 1`
+#'   (default) gives a uniform distribution over all data points; `alpha < 1`
+#'   concentrates mass near `K` data points, yielding sparser rows; `alpha > 1`
 #'   concentrates mass toward the centroid. Accepts optional `alpha` argument
 #'   via `...`.
 #' - `"furthest_first"`: selects the first archetype randomly and then greedily
@@ -52,7 +52,7 @@
 #' - `"furthest_sum"`: selects the first archetype randomly and then greedily
 #'   selects the next archetypes that maximizes the sum of distances of all
 #'   points from the current set of archetypes (see Mørup & Hansen 2012).
-#' - `"aa_pp"`: AA++ is a probabilistic initialization method similar to `kmeans++`
+#' - `"aa_pp"`: AA++ is a probabilistic initialization method similar to `kmeans_pp`
 #'   but instead using the distances to the current set of archetypes it uses
 #'   distances to their convex hull (see Mair & Sjölund 2023).
 #' - `"hull_outmost"`: computes hull candidates using one of the
@@ -281,6 +281,7 @@ furthest_first <- function(X, K, distances = NULL, center_dists = NULL, ...) {
     b[1L] <- .aa_sample(dists, size = 1L, replace = TRUE)
 
     # 2) compute next K-1 archetypes by selecting the furthest from current set
+    # TODO: add a refinement loop similar to furthest_sum
     for (k in seq_len(K - 1L)) {
         dists <- .aa_dist_to_nearest_archetype(X, b[1:k], distances = distances)
         b[k + 1L] <- which.max(dists)

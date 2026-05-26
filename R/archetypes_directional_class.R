@@ -88,10 +88,9 @@ residuals.directional_archetypes <- function(object, ...) {
 
 #' Predict compositions or reconstructions for directional archetypes
 #'
-#' Solves for new sample compositions with fixed directional archetype
-#' coordinates. By default returns directional reconstructions obtained
-#' from `S %*% A`, then row-normalized and hemisphere-aligned to `newdata`.
-#' With `type = "compositions"`, returns composition weights (`S`).
+#' Projects new directional samples onto the fitted archetype space, like
+#' [predict.archetypes()]. Directional reconstructions are returned as unit-length directions;
+#' `type = "compositions"` returns the archetype weights.
 #'
 #' @param object An object of class `directional_archetypes`.
 #' @param newdata New directional data matrix.

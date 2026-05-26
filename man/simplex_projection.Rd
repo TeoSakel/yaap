@@ -20,12 +20,14 @@ A row-stochastic matrix.
 }
 \description{
 These functions project each row of a numeric matrix onto the
-probability simplex or the L1-norm ball respectively by implementing Condat's
-algorithm.
+probability simplex or the L1-norm ball.
 }
 \details{
 The values of the input matrix are first clipped at \code{eps} to be non-negative
 and then projected onto the simplex or L1-norm ball.
+
+The \code{proj_simplex()} function implements the efficient algorithm of Condat (2016).
+The \code{proj_l1()} function simply normalizes each row to sum to 1 after clipping.
 }
 \examples{
 mat <- matrix(runif(12), nrow = 4)

@@ -20,19 +20,13 @@ Computes the AIC-like validity criterion for an \code{archetypes} object.
 \details{
 This is not the classical likelihood-based Akaike Information Criterion
 \eqn{-2 \log L + 2k}. Instead, it implements the adapted archetypal-analysis
-criterion proposed by Suleman (2017), using the reconstruction variance
-\eqn{\|X - \hat X\|_F^2 / (N M)} and an efficiency-adjusted complexity
-penalty based on the full parameter count
-\eqn{K_\mu + K_\beta + 1 = N(K - 1) + K(N - 1) + 1}. The value is intended
-for comparing Euclidean Gaussian archetype fits on the same data, especially
-across different numbers of archetypes.
-Following the assumptions in Suleman (2017), the criterion is undefined when
-the number of samples is not larger than the number of features. If the
-covariance matrix of \code{X} is singular otherwise, the efficiency term is
-computed with a Moore-Penrose pseudo-inverse and a warning is emitted.
+criterion proposed by Suleman (2017), using the reconstruction error
+and an efficiency-adjusted complexity penalty.
+The value is intended for comparing Euclidean Gaussian archetype fits on
+the same data, especially across different numbers of archetypes \code{K}.
 }
 \references{
-A. Suleman, "Validation of archetypal analysis,"
+A. Suleman, "Validation of archetypal analysis"
 2017 IEEE International Conference on Fuzzy Systems (FUZZ-IEEE),
 Naples, Italy, 2017, pp. 1-6, \doi{10.1109/FUZZ-IEEE.2017.8015385}
 }

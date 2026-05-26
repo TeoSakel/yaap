@@ -1,22 +1,35 @@
 #' Consistency Between Archetypal Analysis Fits
 #'
+#' Measures how similar two archetypal analysis fits are by comparing their
+#' memberships, archetype definitions, or archetype locations.
+#'
 #' @param x An object.
 #' @param y A fitted archetypes object to compare with `x`.
 #' @param ... Arguments passed to methods.
 #'
 #' @details
-#' For `what = "compositions"` or `what = "coefficients"`, consistency is
-#' computed as normalized mutual information (NMI) between the two row-stochastic
-#' weight matrices. For matrices `X` and `Y`, the joint distribution is
-#' `Pxy = crossprod(X, Y) / nrow(X)`. Mutual information is computed from `Pxy`
-#' and its row and column marginals, and normalized as
-#' `2 * MI(X, Y) / (MI(X, X) + MI(Y, Y))`.
+#' Consistency is useful when checking whether an AA solution is stable across
+#' random starts, resampled data, or nearby model choices. A high score means the
+#' two fits describe the data in a similar way, even if archetype labels have
+#' changed. Compare `compositions` to ask whether samples are assigned to the
+#' same archetypal mixtures, `coefficients` to ask whether archetypes are built
+#' from the same samples, and `coordinates` to ask whether the archetype
+#' locations are close in the input space.
 #'
-#' For `what = "coordinates"`, consistency is defined when `K_x <= K_y`.
-#' Archetypes in `x` are greedily matched to their nearest unmatched archetype
-#' in `y` by squared Euclidean distance, and the score is
-#' `1 - mean(d2) / mean(matrixStats::colVars(data))`. When `K_x > K_y`, the
-#' score is `NA`.
+#' For `what = "compositions"` or `what = "coefficients"`, the two components
+#' are treated as row-stochastic membership matrices and compared with
+#' normalized mutual information (NMI). For matrices `X` and `Y`, the joint
+#' distribution is `Pxy = crossprod(X, Y) / nrow(X)`. Mutual information is
+#' computed from `Pxy` and its row and column marginals, then normalized as
+#' `2 * MI(X, Y) / (MI(X, X) + MI(Y, Y))`. This makes the score insensitive to
+#' permutations of the archetype labels.
+#'
+#' For `what = "coordinates"`, archetypes in `x` are greedily matched to the
+#' nearest unmatched archetypes in `y`, then a R2-like score is computed by
+#' scaling the mean matched distances by the overall variation in `data`. This
+#' option is useful for checking whether two fits place archetypes in similar
+#' regions of the input space. It returns `NA` when `x` has more archetypes than
+#' `y`, because not every archetype in `x` can be matched.
 #'
 #' @references
 #' J. L. Hinrich, S. E. Bardenfleth, R. E. Røge, N. W. Churchill, K. H.

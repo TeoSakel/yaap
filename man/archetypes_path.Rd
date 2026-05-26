@@ -3,15 +3,12 @@
 \name{archetypes_path}
 \alias{archetypes_path}
 \alias{archetypes_path.formula}
-\alias{archetypes_path.fd}
 \alias{archetypes_path.default}
 \title{Fit an Archetypes Path Across K}
 \usage{
-archetypes_path(x, ...)
+archetypes_path(x, K, ...)
 
 \method{archetypes_path}{formula}(formula, data = NULL, K, ..., subset, na.action)
-
-\method{archetypes_path}{fd}(x, K, ...)
 
 \method{archetypes_path}{default}(
   x,
@@ -26,7 +23,7 @@ archetypes_path(x, ...)
   robust_args = list(),
   sd_threshold = 1e-06,
   max_iter = 100L,
-  tol = 1e-06,
+  tol = 1e-04,
   tol_r2 = 0.9999,
   eps = NULL,
   verbose = FALSE,
@@ -38,15 +35,15 @@ archetypes_path(x, ...)
 \arguments{
 \item{x}{numeric matrix, data frame, formula, or supported specialized input.}
 
+\item{K}{candidate numbers of archetypes. A single value expands to \code{1:K};
+a vector is sorted and deduplicated.}
+
 \item{...}{additional arguments passed to \code{\link[=run_aa]{run_aa()}}.}
 
 \item{formula}{formula selecting variables from \code{data}. The response, when
 present, is ignored.}
 
 \item{data}{optional data frame supplying variables for formula input.}
-
-\item{K}{candidate numbers of archetypes. A single value expands to \code{1:K};
-a vector is sorted and deduplicated.}
 
 \item{subset}{optional expression selecting rows before fitting formula input.}
 
@@ -77,13 +74,13 @@ Dirichlet distribution. Default for \code{"directional"}.}
 \item{\code{"aa_pp"}}{AA++ initialization (Mair & Sjölund 2023). Pass
 \code{batch_size} in \code{init_args} to use a Monte Carlo-inspired variant.}
 \item{\code{"hull_outmost"}}{hull-candidate outmost-vote ranking.}
-}
+}}
+
+\item{init_args}{list of additional arguments for the initialization function.
 Any initializer can receive \code{batch_size}, \code{batch_type}, and
 \code{batch_replace} through \code{init_args}; \code{batch_type = "distal"} implements
 coreset-style candidate sampling (Mair & Brefeld 2019).
 See \code{vignette("initialization", package = "yaap")} for a comparison.}
-
-\item{init_args}{list of additional arguments for the initialization function.}
 
 \item{weights}{optional numeric vector of sample weights (default: \code{NULL}).
 Internally scaled to mean 1 and square-rooted before use.}
@@ -108,7 +105,7 @@ columns are dropped before fitting (default: 1e-6).}
 
 \item{max_iter}{maximum number of outer iterations (default: 100).}
 
-\item{tol}{convergence tolerance on the residual sum of squares (default: 1e-6).}
+\item{tol}{convergence tolerance on the residual sum of squares (default: 1e-4).}
 
 \item{tol_r2}{convergence tolerance on R\eqn{^2} (default: 0.9999).}
 

@@ -12,16 +12,15 @@
 \item{...}{Ignored.}
 }
 \value{
-A numeric matrix (K x N) where each row contains the weights
-over samples used to form one archetype.
+A numeric matrix (K x N) where each row contains the sample weights used to
+form the corresponding archetype.
 }
 \description{
-Returns the \code{coefficients} component of an \code{archetypes} object,
-i.e., the weights that express each archetype as a convex (or
-linear, if constraint is relaxed) combination of samples.
+Returns the weights that express each archetype as a combination of samples.
 }
 \examples{
-# coefficients(fit)
+fit <- run_aa(iris[, 1:4], K = 3)
+coefficients(fit)
 
 }
 \seealso{

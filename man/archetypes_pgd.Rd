@@ -15,7 +15,7 @@ archetypes_pgd(
   robust_args = list(),
   sd_threshold = 1e-06,
   max_iter = 100L,
-  tol = 1e-06,
+  tol = 1e-04,
   tol_r2 = 0.9999,
   eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
@@ -57,7 +57,7 @@ low-variance features (default: 1e-6)}
 
 \item{max_iter}{maximum number of iterations (default: 100)}
 
-\item{tol}{convergence tolerance based on residual sum of squares (default: 1e-6)}
+\item{tol}{convergence tolerance based on residual sum of squares (default: 1e-4)}
 
 \item{tol_r2}{convergence tolerance based on R^2 (default: 0.9999)}
 
@@ -88,14 +88,14 @@ An object of class \code{archetypes}
 }
 \description{
 Fits an archetypal analysis (AA) model by minimising the reconstruction error
-\eqn{\|X - SA\|_F^2}, where \eqn{S} is the composition matrix and \eqn{A} is
-the archetype coordinates via projected gradient descent (PGD).
+\eqn{\|X - SBX\|_F^2}, where \eqn{S} is the composition matrix and \eqn{A = BX}
+is the archetype coordinates via projected gradient descent (PGD).
 }
 \details{
-\subsection{Model family}{
+\subsection{Variants of the Gaussian AA formulation}{
 
-Three arguments change \emph{which} objective is optimised and therefore the
-statistical family of the fitted model:
+Three arguments change \emph{which} version of AA is perfomed by altering the objective
+of relaxing the constraints.
 \itemize{
 \item \strong{\code{delta}} relaxes the convexity constraint on the archetypes.  With the
 default \code{delta = 0}, every archetype is a convex combination of observed
@@ -105,7 +105,7 @@ up to a factor \eqn{1 + \delta} and inside by up to \eqn{1 - \delta} —
 useful when the true extremes are absent from the data due to truncation or
 censoring.  Use with care: large values remove the interpretability
 guarantee that archetypes are representable as extreme prototypes, and the
-uniqueness result of Theorem 1 in Mørup & Hansen (2012) no longer holds.
+uniqueness guarantees no longer hold.
 \item \strong{\code{robust}} switches the loss from ordinary squared error to an
 iteratively re-weighted version based on MASS-style psi row weights.
 Use \code{TRUE} for \code{"psi.bisquare"}, or pass \code{"psi.huber"}, \code{"psi.hampel"},
@@ -113,16 +113,15 @@ or a custom psi function with tuning values in \code{robust_args}. See
 \code{\link[MASS:rlm]{MASS::rlm()}} for psi details. \code{method = "MM"} from \code{MASS::rlm()} is not
 supported because MM estimation is not directly applicable to the AA
 objective. Robust fitting is incompatible with \code{missing = TRUE}.
-\item \strong{\code{missing}} activates the missing-data objective described in Section 3.5
-of Mørup & Hansen (2012).  When \code{TRUE}, only observed entries contribute to
-the loss and the archetype profiles are normalised entry-wise so that each
-archetype is a weighted average of the \emph{observed} values of the data points
-that define it.  For dense matrices, \code{NA} marks missing entries; for sparse
-\code{sparseMatrix} inputs, structural zeros are treated as missing.  The
-default is \code{any(is.na(x))}, so missing-data mode is activated automatically
-when the input contains \code{NA}s.  For kernel and probabilistic variants of AA
-see \code{vignette("non-gaussian-aa", package = "yaap")}.
+\item \strong{\code{missing}} limits loss contributions to only observed entries and
+the archetype profiles are normalised entry-wise so that each archetype is a
+weighted average of the \emph{observed} values of the data points that define it.
+For dense matrices, \code{NA} marks missing entries; for sparse \code{sparseMatrix}
+inputs, structural zeros are treated as missing. The default is \code{any(is.na(x))},
+so missing-data mode is activated automatically when the input contains \code{NA}s.
 }
+
+For non-Gaussian variants of AA, see \code{vignette("non-gaussian-aa", package = "yaap")}
 }
 
 \subsection{Algorithm mechanics and tuning}{
@@ -134,11 +133,10 @@ The outer loop repeats for at most \code{max_iter} iterations (default 100).
 
 When \code{pseudo_pgd = TRUE} (the default), the gradients are projected onto the
 tangent space of the \eqn{\ell_1} unit sphere before the simplex projection
-step.  This is the "pseudo-PGD" variant of Mørup & Hansen (2012), which
-removes the radial gradient component and thereby prevents the step from
-increasing the \eqn{\ell_1} norm before projection.  In practice it leads to
-larger effective steps and faster convergence; set \code{pseudo_pgd = FALSE} to
-use the plain projected gradient if needed.
+step so as to allow larger steps without violating the constraints. This is
+the "pseudo-PGD" variant of Mørup & Hansen (2012). \code{pseudo_pgd = FALSE} uses
+use the plain gradient of the objective function with respect to each variable.
+In either case, after each step the variables are projected back onto the simplex.
 
 \code{step_size} sets the initial step size for both \eqn{S} and \eqn{B} updates
 (and for \eqn{\alpha} when \code{delta > 0}).  If no step in the inner line
@@ -150,7 +148,7 @@ no need to change \code{step_size} unless the default is far from the optimal
 scale for a particular dataset.
 
 Convergence is declared when the relative decrease in RSS between successive
-accepted updates falls below \code{tol} (default 1e-6) \emph{or} \eqn{R^2} exceeds
+accepted updates falls below \code{tol} (default 1e-4) \emph{or} \eqn{R^2} exceeds
 \code{tol_r2} (default 0.9999).
 }
 
@@ -158,14 +156,17 @@ accepted updates falls below \code{tol} (default 1e-6) \emph{or} \eqn{R^2} excee
 
 Before fitting, features with standard deviation below \code{sd_threshold}
 (default 1e-6) are dropped to avoid ill-conditioning; their values are
-restored as column means in the output.  The \code{scale} argument controls the
-feature metric: \code{FALSE} (default) leaves columns on their original scale, \code{TRUE}
-applies column-wise z-scoring, a positive numeric vector divides
-each column by the supplied factor, and a symmetric positive-definite matrix
-defines a full quadratic feature metric — see
-\code{vignette("non-gaussian-aa", package = "yaap")} for the metric-AA use
-case.  Sample-level \code{weights} re-weight rows in the loss but do not affect
-the preprocessing step.
+restored as column means in the output.
+
+The \code{scale} argument is best understood as choosing the feature metric used
+to judge reconstruction errors. It changes which directions in feature
+space are treated as close or far, so it can emphasize, de-emphasize, or
+correlate features without changing the sample-level convexity constraints.
+This is useful for curves, spectra, correlated measurements, or any setting
+where ordinary Euclidean distance is not the desired geometry. Use
+\code{weights}, not \code{scale}, when the goal is to make some samples count more
+than others. See \code{vignette("non-gaussian-aa", package = "yaap")}
+for examples.
 }
 }
 \examples{

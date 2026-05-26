@@ -100,6 +100,16 @@ test_that("print.archetypes reports compact fitting method labels", {
     expect_match(paa_output, "PAA Archetypal Analysis \\(bernoulli family\\)")
 })
 
+test_that("print.archetypes reports the numeric final loss", {
+    fit <- manual_fit()
+    output <- paste(capture.output(print(fit)), collapse = "\n")
+    final_loss <- tail(fit[["loss"]][["loss"]], 1L)
+
+    expect_match(output, "Final Loss Metrics:")
+    expect_match(output, format(final_loss), fixed = TRUE)
+    expect_false(grepl("RSS = \\.", output))
+})
+
 test_that("summary.archetypes reports fit details, loss, and coordinates", {
     X <- toy_matrix()[1:20, , drop = FALSE]
 
@@ -180,12 +190,48 @@ test_that("summary.kernel_archetypes omits coordinates", {
     expect_true(any(grepl("Coordinates:", capture.output(print(smry)), fixed = TRUE)))
 })
 
-test_that("pearson residuals apply stored sample weights", {
+test_that("pearson residuals use GLM variance functions and stored sample weights", {
     fit <- manual_fit()
     w <- c(1, 4, 1, 0)
     fit[["weights"]] <- w
     res <- residuals(fit, type = "response")
     expect_equal(residuals(fit, type = "pearson"), sqrt(w) * res)
+
+    bernoulli <- archetypes(
+        A = matrix(c(0.2, 0.8, 0.7, 0.3), nrow = 2L, byrow = TRUE),
+        coefficients = matrix(c(1, 0, 0, 1), nrow = 2L, byrow = TRUE),
+        compositions = matrix(c(1, 0, 0, 1), nrow = 2L, byrow = TRUE),
+        data = matrix(c(0, 1, 1, 0), nrow = 2L, byrow = TRUE),
+        family = "bernoulli"
+    )
+    mu <- fitted(bernoulli)
+    expect_equal(
+        residuals(bernoulli, type = "pearson"),
+        residuals(bernoulli, type = "response") / sqrt(mu * (1 - mu))
+    )
+
+    poisson <- bernoulli
+    poisson[["family"]] <- "poisson"
+    poisson[["data"]] <- matrix(c(0, 2, 3, 1), nrow = 2L, byrow = TRUE)
+    expect_equal(
+        residuals(poisson, type = "pearson"),
+        residuals(poisson, type = "response") / sqrt(fitted(poisson))
+    )
+
+    multinomial <- archetypes(
+        A = matrix(c(0.25, 0.75, 0.6, 0.4), nrow = 2L, byrow = TRUE),
+        coefficients = matrix(c(1, 0, 0, 1), nrow = 2L, byrow = TRUE),
+        compositions = matrix(c(1, 0, 0, 1), nrow = 2L, byrow = TRUE),
+        data = matrix(c(2, 2, 7, 3), nrow = 2L, byrow = TRUE),
+        family = "multinomial"
+    )
+    mu <- fitted(multinomial)
+    n <- rowSums(multinomial[["data"]])
+    p <- mu / n
+    expect_equal(
+        residuals(multinomial, type = "pearson"),
+        residuals(multinomial, type = "response") / sqrt(n * p * (1 - p))
+    )
 })
 
 test_that("adapted AIC returns NA outside covariance assumptions", {

@@ -25,16 +25,15 @@ row-stochastic composition weights. If \code{type = "reconstruction"}, a
 reconstruction matrix (N_new x M) in the input feature space.
 }
 \description{
-Projects new samples onto the archetype space by solving for composition
-weights with fixed archetype coordinates. By default the method returns
-reconstructions (\code{X_hat}). With \code{type = "compositions"}, it returns
-composition weights (\code{S}).
+Projects new samples onto the archetype space by solving for composition.
+The representation is either in the original coordinates (\code{type = "reconstruction"})
+or as barycentric coordinates (\code{type = "compositions"}) on the archetype simplex.
 }
 \details{
-For non-Gaussian families (\code{bernoulli}, \code{poisson}, \code{multinomial}),
-coordinates live in parameter space. In particular, multinomial
-reconstructions preserve existing package behavior by scaling each row of
-\code{S \%*\% A} by the corresponding row total of \code{newdata}.
+For non-Gaussian families, the reconstructions live in parameter space.
+In particular, "bernoulli" family returns probabilities and "poisson"
+family returns positive rates. For multinomial family, the reconstructions
+are normalized to sum to the row totals of \code{newdata}.
 }
 \seealso{
 \code{\link[=fit_simplex]{fit_simplex()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}}, \code{\link[=fitted.archetypes]{fitted.archetypes()}}.

@@ -15,39 +15,34 @@
 \arguments{
 \item{x}{An object of class \code{archetypes}}
 
-\item{what}{Character string naming the plot to draw. Supported values are
-\code{"composition"}, \code{"compositions"}, \code{"ternary"}, \code{"simplex"}, \code{"loss"},
-\code{"profiles"}, and \code{"coordinates"}. \code{"composision"} and \code{"composisions"} are
-accepted as aliases for \code{"compositions"}.}
+\item{what}{Character string naming the plot to draw. Supported values are:
+\describe{
+\item{\code{"composition"}, \code{"composision"}}{Draw a stacked barplot of
+fitted samples compositions, with bars representing observations and colors
+representing archetypes. Rows and columns are clustered by default.}
+\item{\code{"ternary"}, \code{"simplex"}}{Compositions are plotted as points in the
+2D simplex, with corners representing archetypes. For K > 3, multiple 2D
+projections are drawn. This plot requires package \code{compositions}.}
+\item{\code{"loss"}}{Plot the evolution of the objective value across optimization iterations.}
+\item{\code{"profiles"}}{Plot a barplot of the fitted archetypes.
+Each set of bars represents a dimension and archetypes are separated by color.}
+\item{\code{"coordinates"}}{Scatterplot of archetype coordinates, optionally over the
+original observations when data are available.}
+}}
 
-\item{subset}{Optional sample subset for plots that display observations:
-\code{"composition"}, \code{"compositions"}, \code{"ternary"}, \code{"simplex"}, and
-\code{"coordinates"}. May be numeric row indices, sample names, or a logical
-vector. Subsetting is applied before clustering or projection.}
+\item{subset}{Optional sample subset for plots that display observations.
+May be numeric row indices, sample names, or a logical vector.
+Subsetting is applied before clustering or projecting.}
 
-\item{plot}{Logical. Should the plot be drawn? If \code{FALSE}, only the prepared
-plotting data is returned invisibly.}
+\item{plot}{Logical. Should the plot be drawn? If \code{FALSE}, the prepared
+plotting data is returned without drawing.}
 
 \item{...}{Additional graphical parameters passed to the selected plotting helper.}
 }
 \value{
-Invisibly returns the prepared data used by the selected plot.
+The prepared data used by the selected plot, returned invisibly
+when \code{plot = TRUE}.
 }
 \description{
 Draws diagnostic and geometric plots for a fitted archetypal analysis model.
-The \code{what} argument controls which part of the fit is visualized:
-}
-\details{
-\itemize{
-\item \code{"composition"} and \code{"compositions"} draw a stacked barplot of
-\code{x$compositions}, with bars representing observations and colors
-representing archetypes. Rows and columns are clustered by default.
-\item \code{"ternary"} and \code{"simplex"} plot the rows of \code{x$compositions} as points in
-simplex coordinates.
-\item \code{"loss"} plots the objective value stored in \code{x$loss$loss} across
-optimization iterations.
-\item \code{"profiles"} plots the fitted archetypes in their natural representation.
-\item \code{"coordinates"} plots archetype coordinates, optionally over the original
-observations when data are available.
-}
 }

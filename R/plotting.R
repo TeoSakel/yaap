@@ -28,7 +28,7 @@
 #' @param border Border color for the stacked bar segments.
 #' @param ... Additional graphical parameters passed to [graphics::barplot()].
 #'
-#' @return Invisibly returns a data frame in long format with one row per
+#' @return Returns a data frame in long format with one row per
 #'   sample/archetype pair. Columns are `sample` (factor ordered by the applied
 #'   clustering), `archetype` (factor ordered by the applied clustering), and
 #'   `weight` (numeric).
@@ -130,7 +130,10 @@ plot_archetypes_compositions <- function(compositions,
     )
     out[["sample"]] <- factor(out[["sample"]], levels = rownames(S_plot))
     out[["archetype"]] <- factor(out[["archetype"]], levels = colnames(S_plot))
-    invisible(out)
+    if (isTRUE(plot)) {
+        return(invisible(out))
+    }
+    out
 }
 
 #' Loss Plot For Archetypes
@@ -139,7 +142,7 @@ plot_archetypes_compositions <- function(compositions,
 #' @param plot Logical. Should the plot be drawn?
 #' @param ... Additional graphical parameters passed to [graphics::plot()].
 #'
-#' @return Invisibly returns a data frame with columns `iteration` (integer,
+#' @return Returns a data frame with columns `iteration` (integer,
 #'   0-based) and `loss` (numeric).
 #'
 #' @export
@@ -159,7 +162,11 @@ plot_archetypes_loss <- function(loss, plot = TRUE, ...) {
     if (isTRUE(plot)) {
         do.call(graphics::plot, plot_args)
     }
-    invisible(data.frame(iteration = iterations, loss = values))
+    out <- data.frame(iteration = iterations, loss = values)
+    if (isTRUE(plot)) {
+        return(invisible(out))
+    }
+    out
 }
 
 #' Profile Plot For Archetypes
@@ -171,7 +178,7 @@ plot_archetypes_loss <- function(loss, plot = TRUE, ...) {
 #' @param ... Additional graphical parameters passed to [graphics::barplot()]
 #'   for matrix coordinates, or [graphics::plot()] for `fd` coordinates.
 #'
-#' @return Invisibly returns a data frame in long format with columns
+#' @return Returns a data frame in long format with columns
 #'   `archetype`, `feature`, and `value`. Returns `NULL` invisibly for `fd`
 #'   coordinates.
 #'
@@ -229,7 +236,10 @@ plot_archetypes_profiles <- function(coordinates,
         value = as.vector(A),
         stringsAsFactors = FALSE
     )
-    invisible(out)
+    if (isTRUE(plot)) {
+        return(invisible(out))
+    }
+    out
 }
 
 #' Coordinate Plot For Archetypes
@@ -253,7 +263,7 @@ plot_archetypes_profiles <- function(coordinates,
 #'   window arguments such as `main`, `xlab`, `ylab`, `xlim`, `ylim`, and `asp`
 #'   are also honored when drawing the plot.
 #'
-#' @return Invisibly returns a data frame in long format with one row per
+#' @return Returns a data frame in long format with one row per
 #'   point. Columns are the coordinate dimensions, `name` (character label),
 #'   and `archetype` (logical). Data rows come first, archetype rows last.
 #'
@@ -354,19 +364,22 @@ plot_archetypes_coordinates <- function(coordinates,
         archetype = TRUE,
         stringsAsFactors = FALSE
     )
-    df_arch <- cbind(as.data.frame(A), df_arch)
+    out <- cbind(as.data.frame(A), df_arch)
 
-    if (is.null(X)) {
-        return(invisible(df_arch))
+    if (!is.null(X)) {
+        df_X <- data.frame(
+            name = rownames(X) %||% seq_len(nrow(X)),
+            archetype = FALSE,
+            stringsAsFactors = FALSE
+        )
+        df_X <- cbind(as.data.frame(X), df_X)
+        out <- rbind(df_X, out)
     }
 
-    df_X <- data.frame(
-        name = rownames(X) %||% seq_len(nrow(X)),
-        archetype = FALSE,
-        stringsAsFactors = FALSE
-    )
-    df_X <- cbind(as.data.frame(X), df_X)
-    invisible(rbind(df_X, df_arch))
+    if (isTRUE(plot)) {
+        return(invisible(out))
+    }
+    out
 }
 
 .aa_composition_dist <- function(data, distance) {

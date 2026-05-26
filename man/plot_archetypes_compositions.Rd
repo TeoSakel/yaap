@@ -54,7 +54,7 @@ qualitative HCL palette.}
 \item{...}{Additional graphical parameters passed to \code{\link[graphics:barplot]{graphics::barplot()}}.}
 }
 \value{
-Invisibly returns a data frame in long format with one row per
+Returns a data frame in long format with one row per
 sample/archetype pair. Columns are \code{sample} (factor ordered by the applied
 clustering), \code{archetype} (factor ordered by the applied clustering), and
 \code{weight} (numeric).
