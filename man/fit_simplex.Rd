@@ -10,7 +10,8 @@ fit_simplex(
   method = c("nnls", "QP"),
   eps = 0,
   project = proj_l1,
-  lambda = 1e-08
+  lambda = 1e-08,
+  bigM = NULL
 )
 }
 \arguments{
@@ -20,7 +21,7 @@ fit_simplex(
 
 \item{method}{Character string specifying the fitting method:
 \itemize{
-\item \code{"nnls"}: Non-negative least squares with subsequent projection onto simplex.
+\item \code{"nnls"}: Non-negative least squares with a soft sum-to-one constraint.
 \item \code{"QP"}: Quadratic programming approach to directly fit onto simplex.
 }}
 
@@ -29,6 +30,10 @@ fit_simplex(
 \item{project}{Function used to project the \code{nnls} fit onto the simplex  (default: \code{proj_l1}).}
 
 \item{lambda}{Numeric scalar used for numerical stability in \code{QP} solver (default: 1e-8).}
+
+\item{bigM}{Large constant used by \code{method = "nnls"} to softly enforce
+the simplex sum constraint. When \code{NULL}, selected by the same heuristic
+used by the NNLS fitter.}
 }
 \value{
 Numeric row-stochastic matrix (N x K) of fitted compositions.
@@ -42,8 +47,11 @@ The function solves the constrained least-squares problem that minimizes
 \code{norm(X - S \%*\% A, "F")} such that \code{all(S >= 0)} and \code{rowSums(S) = 1}.
 
 The method \code{"nnls"} fits \code{S} via non-negative least squares using the \code{nnls}
-package. The results are then projected onto the simplex to ensure
-row-stochasticity via the \code{project} method (by default \code{\link{proj_l1}}).
+package after augmenting \code{A} and \code{X} with a large \code{bigM} column to softly
+enforce the sum-to-one constraint. If the raw NNLS row sums differ from
+one by more than 0.01, \code{bigM} is doubled up to three times. The result is then
+projected onto the simplex via the \code{project} method (by default
+\code{\link{proj_l1}}).
 
 The method \code{"QP"} solves the full constrained least squares problem via
 quadratic programming using the \code{quadprog} package, enforcing both non-negativity

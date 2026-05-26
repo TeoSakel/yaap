@@ -77,18 +77,24 @@ proj_l1 <- function(mat, eps = 0) {
 #' @param X Numeric matrix (N x M) of new data points to fit.
 #' @param eps Numeric scalar used for numerical stability; ensures non-negativity of fit.
 #' @param method Character string specifying the fitting method:
-#'   - `"nnls"`: Non-negative least squares with subsequent projection onto simplex.
+#'   - `"nnls"`: Non-negative least squares with a soft sum-to-one constraint.
 #'   - `"QP"`: Quadratic programming approach to directly fit onto simplex.
 #' @param project Function used to project the `nnls` fit onto the simplex  (default: `proj_l1`).
 #' @param lambda Numeric scalar used for numerical stability in `QP` solver (default: 1e-8).
+#' @param bigM Large constant used by `method = "nnls"` to softly enforce
+#'   the simplex sum constraint. When `NULL`, selected by the same heuristic
+#'   used by the NNLS fitter.
 #'
 #' @details
 #' The function solves the constrained least-squares problem that minimizes
 #' `norm(X - S %*% A, "F")` such that `all(S >= 0)` and `rowSums(S) = 1`.
 #'
 #' The method `"nnls"` fits `S` via non-negative least squares using the `nnls`
-#' package. The results are then projected onto the simplex to ensure
-#' row-stochasticity via the `project` method (by default \code{\link{proj_l1}}).
+#' package after augmenting `A` and `X` with a large `bigM` column to softly
+#' enforce the sum-to-one constraint. If the raw NNLS row sums differ from
+#' one by more than 0.01, `bigM` is doubled up to three times. The result is then
+#' projected onto the simplex via the `project` method (by default
+#' \code{\link{proj_l1}}).
 #'
 #' The method `"QP"` solves the full constrained least squares problem via
 #' quadratic programming using the `quadprog` package, enforcing both non-negativity
@@ -101,7 +107,7 @@ proj_l1 <- function(mat, eps = 0) {
 #' @return Numeric row-stochastic matrix (N x K) of fitted compositions.
 #'
 #' @export
-fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_l1, lambda = 1e-8) {
+fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_l1, lambda = 1e-8, bigM = NULL) {
     # Prepare Inputs
     X <- if (is.vector(X)) matrix(X, nrow = 1L) else as.matrix(X)
     A <- as.matrix(A)
@@ -113,6 +119,9 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     if (!is_non_negative(lambda)) {
         stop("`lambda` must be non-negative.", call. = FALSE)
     }
+    if (!is.null(bigM) && !is_positive(bigM)) {
+        stop("`bigM` must be NULL or a positive number.", call. = FALSE)
+    }
     if (ncol(A) != ncol(X)) {
         stop("`A` and `X` must have the same number of columns.", call. = FALSE)
     }
@@ -120,14 +129,52 @@ fit_simplex <- function(A, X, method = c("nnls", "QP"), eps = 0, project = proj_
     # Main
     method <- match.arg(method)
     S <- switch(method,
-        nnls = project(.aa_solve_nnls(X, t(A)), eps = eps), # TODO: add bigM?
-        QP   = .aa_fit_qp(A, X, eps, proj_l1, lambda)
+        nnls = .aa_fit_simplex_nnls(A, X, eps = eps, project = project, bigM = bigM),
+        QP   = .aa_fit_qp(A, X, eps, project, lambda)
     )
 
     # Prepare output
     colnames(S) <- rownames(A)
     rownames(S) <- rownames(X)
     S
+}
+
+.aa_fit_simplex_nnls <- function(A,
+                                 X,
+                                 eps = 0,
+                                 project = proj_l1,
+                                 bigM = NULL,
+                                 max_doublings = 3L,
+                                 slack = 0.01) {
+    bigM <- bigM %||% .aa_auto_bigM(A)
+    S <- NULL
+
+    converged <- FALSE
+    row_sums <- NULL
+
+    for (i in seq_len(max_doublings + 1L)) {
+        A_aug <- cbind(bigM = bigM, A)
+        X_aug <- cbind(bigM = bigM, X)
+        S <- .aa_solve_nnls(X_aug, t(A_aug))
+        row_sums <- rowSums(S)
+        converged <- all(abs(row_sums - 1) <= slack)
+        if (converged) {
+            break
+        }
+        bigM <- 2 * bigM
+    }
+
+    if (!converged) {
+        max_error <- max(abs(row_sums - 1))
+        fmt <- paste(
+            "fit_simplex(method = 'nnls') did not satisfy the raw simplex constraint",
+            "after %d bigM doublings; maximum absolute row-sum error was %.3g",
+            "with final bigM %.3g."
+        )
+        warning(sprintf(fmt, max_doublings, max_error, bigM), call. = FALSE)
+    }
+
+    project(S, eps = eps)
 }
 
 .aa_fit_qp <- function(A,
