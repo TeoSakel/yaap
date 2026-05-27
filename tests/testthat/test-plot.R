@@ -1,7 +1,6 @@
 test_that("plot.archetypes smoke tests supported plot modes", {
     fit <- manual_fit()
-    pdf(NULL)
-    on.exit(dev.off(), add = TRUE)
+    local_test_pdf()
 
     expect_named(plot(fit, "loss"), c("iteration", "loss"))
     expect_named(plot(fit, "compositions"), c("sample", "archetype", "weight"))
@@ -21,8 +20,7 @@ test_that("plot methods leave coordinate-helper arguments in dots", {
 
 test_that("plot.archetypes profiles uses fixed height but accepts other barplot args", {
     fit <- manual_fit()
-    pdf(NULL)
-    on.exit(dev.off(), add = TRUE)
+    local_test_pdf()
 
     bad_height <- matrix(1, nrow = 2L, ncol = 2L)
     out <- plot(
@@ -40,8 +38,7 @@ test_that("plot.archetypes profiles uses fixed height but accepts other barplot 
 
 test_that("plot_archetypes_compositions supports matrix-like inputs and clustering", {
     fit <- manual_fit()
-    pdf(NULL)
-    on.exit(dev.off(), add = TRUE)
+    local_test_pdf()
 
     out <- plot_archetypes_compositions(fit[["compositions"]], legend = FALSE)
     expect_named(out, c("sample", "archetype", "weight"))
@@ -73,8 +70,7 @@ test_that("plot_archetypes_compositions exposes clustering distance and linkage"
         byrow = TRUE
     )
 
-    pdf(NULL)
-    on.exit(dev.off(), add = TRUE)
+    local_test_pdf()
 
     clustered <- plot_archetypes_compositions(
         S,
@@ -117,8 +113,7 @@ test_that("plot_archetypes_compositions supports PC1 and AOP ordering", {
 
     pca <- stats::prcomp(S, center = TRUE, scale. = FALSE)
 
-    pdf(NULL)
-    on.exit(dev.off(), add = TRUE)
+    local_test_pdf()
 
     pc1 <- plot_archetypes_compositions(
         S,
@@ -156,6 +151,7 @@ test_that("plot_archetypes_compositions supports PC1 and AOP ordering", {
 
 test_that("plot helpers support plot = FALSE", {
     fit <- manual_fit()
+    local_test_pdf()
 
     comp_visible <- withVisible(plot_archetypes_compositions(fit[["compositions"]], plot = FALSE))
     expect_true(comp_visible[["visible"]])
@@ -231,8 +227,7 @@ test_that("plot.archetypes handles higher-dimensional coordinate projections", {
     fit[["data"]] <- X
     fit[["A"]] <- X[1:3, , drop = FALSE]
     fit[["feature_map"]] <- .aa_identity_feature_map(fit[["A"]])
-    pdf(NULL)
-    on.exit(dev.off(), add = TRUE)
+    local_test_pdf()
 
     expect_named(plot(fit, "coordinates"), c("x", "y", "z", "w", "name", "archetype"))
     pca <- plot(fit, "coordinates", projection = "pca")
@@ -247,8 +242,7 @@ test_that("plot.archetypes coordinates supports data vectors with args.data.scat
     group <- c("g1", "g2", "g1", "g2")
     data_col <- c(g1 = "#1b9e77", g2 = "#d95f02")[group]
 
-    pdf(NULL)
-    on.exit(dev.off(), add = TRUE)
+    local_test_pdf()
 
     out <- plot(
         fit,
@@ -286,8 +280,7 @@ test_that("plot.archetypes can subset samples in observation-level plots", {
     rownames(fit[["compositions"]]) <- sample_names
     rownames(fit[["data"]]) <- sample_names
 
-    pdf(NULL)
-    on.exit(dev.off(), add = TRUE)
+    local_test_pdf()
 
     comp <- plot(fit, "compositions", subset = c(1L, 3L), legend = FALSE)
     expect_equal(sort(levels(comp[["sample"]])), sample_names[c(1L, 3L)])

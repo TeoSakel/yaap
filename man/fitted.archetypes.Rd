@@ -12,7 +12,7 @@
 \item{...}{Ignored.}
 }
 \value{
-Fitted values in the same representation as the original data.
+Fitted values in the input feature space for Gaussian fits and in the family parameter space for non-Gaussian fits.
 }
 \description{
 Computes the projection of the data on the convex hull

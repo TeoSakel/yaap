@@ -31,9 +31,9 @@ or as barycentric coordinates (\code{type = "compositions"}) on the archetype si
 }
 \details{
 For non-Gaussian families, the reconstructions live in parameter space.
-In particular, "bernoulli" family returns probabilities and "poisson"
+In particular, "binomial" family returns probabilities and "poisson"
 family returns positive rates. For multinomial family, the reconstructions
-are normalized to sum to the row totals of \code{newdata}.
+are category probabilities, so each row sums to one.
 }
 \seealso{
 \code{\link[=fit_simplex]{fit_simplex()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}}, \code{\link[=fitted.archetypes]{fitted.archetypes()}}.

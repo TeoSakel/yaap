@@ -95,6 +95,18 @@ manual_fit <- function() {
     )
 }
 
+local_test_pdf <- function(envir = parent.frame()) {
+    path <- tempfile(fileext = ".pdf")
+    grDevices::pdf(path)
+    withr::defer({
+        if (names(grDevices::dev.cur()) != "null device") {
+            grDevices::dev.off()
+        }
+        unlink(path)
+    }, envir = envir)
+    invisible(path)
+}
+
 directional_matrix <- function(n = 90L) {
     theta <- seq(0.05, pi / 2 - 0.05, length.out = n)
     X <- cbind(cos(theta), sin(theta), 0.35 * sin(2 * theta))

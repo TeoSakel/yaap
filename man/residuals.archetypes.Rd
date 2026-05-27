@@ -9,7 +9,7 @@
 \arguments{
 \item{object}{An object of class \code{archetypes}.}
 
-\item{type}{Residual type. \code{"response"} (default) returns \code{data - fitted}.
+\item{type}{Residual type. \code{"response"} (default) returns observed minus fitted values on the observation scale.
 \code{"pearson"} returns GLM-style Pearson residuals, dividing response
 residuals by the square root of the family variance function and applying
 stored row weights when present.}

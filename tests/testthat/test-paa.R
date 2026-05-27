@@ -31,7 +31,7 @@ paa_count_data <- function() {
 test_that("archetypes_paa fits supported families with shared invariants", {
     cases <- list(
         gaussian = toy_matrix(),
-        bernoulli = paa_binary_data(),
+        binomial = paa_binary_data(),
         poisson = paa_count_data(),
         multinomial = paa_count_data()
     )
@@ -63,13 +63,13 @@ test_that("run_aa dispatches to PAA", {
         paa_binary_data(),
         K = 3L,
         method = "paa",
-        family = "bernoulli",
+        family = "binomial",
         max_iter = 4L,
         tol_r2 = 1
     ))
 
     expect_s3_class(fit, "archetypes")
-    expect_identical(fit[["family"]], "bernoulli")
+    expect_identical(fit[["family"]], "binomial")
     expect_true(is_all_finite(fit[["loss"]][["loss"]]))
 })
 
@@ -96,10 +96,17 @@ test_that("PAA warns and ignores explicit run_aa scaling", {
     expect_s3_class(fit, "archetypes")
 })
 
+test_that("PAA rejects the old bernoulli family name", {
+    expect_error(
+        archetypes_paa(paa_binary_data(), 2L, family = "bernoulli"),
+        "should be one of"
+    )
+})
+
 test_that("PAA validates family-specific inputs", {
     expect_error(
-        archetypes_paa(matrix(c(0, 2, 1, 0), ncol = 2), 2L, family = "bernoulli"),
-        "Bernoulli"
+        archetypes_paa(matrix(c(0, 2, 1, 0), ncol = 2), 2L, family = "binomial"),
+        "Binomial"
     )
     expect_error(
         archetypes_paa(matrix(c(0, -1, 1, 0), ncol = 2), 2L, family = "poisson"),
@@ -126,7 +133,8 @@ test_that("PAA fitted and predict are family-aware", {
 
     X_hat <- fitted(fit)
     expect_matrix_dim(X_hat, nrow(X), ncol(X))
-    expect_equal(unname(rowSums(X_hat)), unname(rowSums(X)), tolerance = 1e-6)
+    expect_equal(unname(rowSums(X_hat)), rep(1, nrow(X)), tolerance = 1e-6)
+    expect_true(all(X_hat >= 0 & X_hat <= 1))
 
     rec <- predict(fit, X[1:3, , drop = FALSE], max_iter = 3L)
     rec_explicit <- predict(fit, X[1:3, , drop = FALSE], type = "reconstruction", max_iter = 3L)
@@ -135,7 +143,8 @@ test_that("PAA fitted and predict are family-aware", {
     expect_row_stochastic(pred)
     expect_equal(rec, rec_explicit)
     expect_matrix_dim(rec, 3L, ncol(X))
-    expect_equal(unname(rowSums(rec)), unname(rowSums(X[1:3, , drop = FALSE])), tolerance = 1e-6)
+    expect_equal(unname(rowSums(rec)), rep(1, 3L), tolerance = 1e-6)
+    expect_true(all(rec >= 0 & rec <= 1))
 })
 
 test_that("archetypes default family is gaussian", {
@@ -147,7 +156,7 @@ test_that("PAA coordinate plots reject observation-space data for non-Gaussian f
     fit <- suppressWarnings(archetypes_paa(
         paa_binary_data(),
         K = 3L,
-        family = "bernoulli",
+        family = "binomial",
         max_iter = 3L,
         tol_r2 = 1
     ))
@@ -162,13 +171,12 @@ test_that("PAA profile plots use parameter-space coordinates", {
     fit <- suppressWarnings(archetypes_paa(
         paa_binary_data(),
         K = 3L,
-        family = "bernoulli",
+        family = "binomial",
         max_iter = 3L,
         tol_r2 = 1
     ))
 
-    pdf(NULL)
-    on.exit(dev.off(), add = TRUE)
+    local_test_pdf()
     prof <- plot(fit, "profiles")
 
     expect_named(prof, c("archetype", "feature", "value"))

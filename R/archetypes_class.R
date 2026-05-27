@@ -293,7 +293,7 @@ anames.archetypes <- function(x) {
 #' @param ... Ignored.
 #'
 #' @return
-#' Fitted values in the same representation as the original data.
+#' Fitted values in the input feature space for Gaussian fits and in the family parameter space for non-Gaussian fits.
 #'
 #' @seealso [residuals.archetypes()], [predict.archetypes()], [coefficients.archetypes()]
 #'
@@ -305,11 +305,6 @@ fitted.archetypes <- function(object, ...) {
     S <- compositions(object)
     A <- .aa_input_coordinates_matrix(object)
     X_hat <- S %*% A
-    family <- object[["family"]] %||% "gaussian"
-    if (identical(family, "multinomial") && !is.null(object[["data"]])) {
-        totals <- rowSums(as.matrix(object[["data"]]))
-        X_hat <- totals * X_hat
-    }
     if (inherits(object[["data"]], "fd")) {
         return(.aa_fd_from_rows(X_hat, object[["data"]], rownames(X_hat)))
     }
@@ -319,7 +314,7 @@ fitted.archetypes <- function(object, ...) {
 #' Residuals for archetypes objects
 #'
 #' @param object An object of class `archetypes`.
-#' @param type Residual type. `"response"` (default) returns `data - fitted`.
+#' @param type Residual type. `"response"` (default) returns observed minus fitted values on the observation scale.
 #'   `"pearson"` returns GLM-style Pearson residuals, dividing response
 #'   residuals by the square root of the family variance function and applying
 #'   stored row weights when present.
@@ -348,13 +343,17 @@ residuals.archetypes <- function(object,
     }
 
     stopifnot(all(dim(X) == dim(X_hat)))
+    fitted_param <- X_hat
+    if (identical(object[["family"]] %||% "gaussian", "multinomial")) {
+        X_hat <- rowSums(as.matrix(X)) * X_hat
+    }
     out <- X - X_hat
     if (identical(type, "response")) {
         return(out)
     }
 
     # Pearson residuals
-    variance <- .aa_family_variance(object, X_hat)
+    variance <- .aa_family_variance(object, fitted_param)
     out <- out / sqrt(variance)
     weights <- object[["weights"]] %||% 1
     sqrt(weights) * out
@@ -368,8 +367,8 @@ residuals.archetypes <- function(object,
     variance <- switch(family,
         gaussian    = 1,
         poisson     = fitted,
-        bernoulli   = fitted * (1 - fitted),
-        multinomial = fitted * (1 - fitted / rowSums(X))
+        binomial    = fitted * (1 - fitted),
+        multinomial = rowSums(as.matrix(X)) * fitted * (1 - fitted)
     )
 
     if (is.null(variance)) {
@@ -404,9 +403,9 @@ residuals.archetypes <- function(object,
 #'
 #' @details
 #' For non-Gaussian families, the reconstructions live in parameter space.
-#' In particular, "bernoulli" family returns probabilities and "poisson"
+#' In particular, "binomial" family returns probabilities and "poisson"
 #' family returns positive rates. For multinomial family, the reconstructions
-#' are normalized to sum to the row totals of `newdata`.
+#' are category probabilities, so each row sums to one.
 #'
 #' @seealso
 #' [fit_simplex()], [residuals.archetypes()], [fitted.archetypes()].
@@ -460,10 +459,6 @@ predict.archetypes <- function(object,
     # Reconstruction Branch
     A <- .aa_input_coordinates_matrix(object)
     X_hat <- S %*% A
-    if (identical(family, "multinomial")) {
-        totals <- rowSums(as.matrix(X))
-        X_hat <- totals * X_hat
-    }
     if (is_fd_newdata && inherits(object[["data"]], "fd")) {
         return(.aa_fd_from_rows(X_hat, object[["data"]], rownames(X_hat)))
     }

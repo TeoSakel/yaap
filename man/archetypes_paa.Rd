@@ -7,7 +7,7 @@
 archetypes_paa(
   x,
   K,
-  family = c("gaussian", "bernoulli", "poisson", "multinomial"),
+  family = c("gaussian", "binomial", "poisson", "multinomial"),
   init = "furthest_sum",
   init_args = list(),
   max_iter = 100L,
@@ -26,7 +26,7 @@ archetypes_paa(
 
 \item{K}{number of archetypes.}
 
-\item{family}{observation family. One of \code{"gaussian"}, \code{"bernoulli"},
+\item{family}{observation family. One of \code{"gaussian"}, \code{"binomial"},
 \code{"poisson"}, or \code{"multinomial"} (default: \code{"gaussian"}).}
 
 \item{init}{initialization method; see \code{\link[=run_aa]{run_aa()}} for available options.}
@@ -67,13 +67,13 @@ PAA models each observation as drawn from an exponential-family distribution
 whose natural parameter is a convex combination of K archetypal profiles.
 Before optimisation begins, each data point is mapped to a fixed profile by
 computing its per-sample MLE parameter under the chosen family (e.g. the raw
-values for \code{"gaussian"}, high probability for \code{"bernoulli"}, etc.). The
+values for \code{"gaussian"}, high probability for \code{"binomial"}, etc.). The
 archetypes are then found as convex combinations of these fixed profiles.
 Built-in families and their data requirements:
 
 \describe{
 \item{\code{gaussian}}{Squared reconstruction error; data can be any real matrix.}
-\item{\code{bernoulli}}{Binary cross-entropy; each entry must lie in [0, 1].}
+\item{\code{binomial}}{Binary cross-entropy; each entry must lie in [0, 1].}
 \item{\code{poisson}}{Poisson log-likelihood; all entries must be non-negative.}
 \item{\code{multinomial}}{Multinomial log-likelihood; entries must be non-negative
 with positive row sums, treated as count vectors.}

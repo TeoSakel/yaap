@@ -6,7 +6,7 @@
 #'
 #' @param x data matrix (rows = samples, columns = dimensions).
 #' @param K number of archetypes.
-#' @param family observation family. One of `"gaussian"`, `"bernoulli"`,
+#' @param family observation family. One of `"gaussian"`, `"binomial"`,
 #'   `"poisson"`, or `"multinomial"` (default: `"gaussian"`).
 #' @param init initialization method; see [run_aa()] for available options.
 #' @param init_args list of additional arguments for the initialization function.
@@ -28,13 +28,13 @@
 #' whose natural parameter is a convex combination of K archetypal profiles.
 #' Before optimisation begins, each data point is mapped to a fixed profile by
 #' computing its per-sample MLE parameter under the chosen family (e.g. the raw
-#' values for `"gaussian"`, high probability for `"bernoulli"`, etc.). The
+#' values for `"gaussian"`, high probability for `"binomial"`, etc.). The
 #' archetypes are then found as convex combinations of these fixed profiles.
 #' Built-in families and their data requirements:
 #'
 #' \describe{
 #'   \item{`gaussian`}{Squared reconstruction error; data can be any real matrix.}
-#'   \item{`bernoulli`}{Binary cross-entropy; each entry must lie in \[0, 1\].}
+#'   \item{`binomial`}{Binary cross-entropy; each entry must lie in \[0, 1\].}
 #'   \item{`poisson`}{Poisson log-likelihood; all entries must be non-negative.}
 #'   \item{`multinomial`}{Multinomial log-likelihood; entries must be non-negative
 #'                        with positive row sums, treated as count vectors.}
@@ -59,7 +59,7 @@
 #' @export
 archetypes_paa <- function(x,
                            K,
-                           family = c("gaussian", "bernoulli", "poisson", "multinomial"),
+                           family = c("gaussian", "binomial", "poisson", "multinomial"),
                            init = "furthest_sum",
                            init_args = list(),
                            max_iter = 100L,
@@ -71,7 +71,7 @@ archetypes_paa <- function(x,
                            max_iter_optimizer = 10L,
                            step_shrinkage = 0.5,
                            max_no_update = 5L) {
-    family <- match.arg(family)
+    family <- .aa_paa_normalize_family(family)
     .aa_fit_engine(
         call = match.call(),
         x = x,
@@ -96,15 +96,16 @@ archetypes_paa <- function(x,
     )
 }
 
+.aa_paa_normalize_family <- function(family) {
+    match.arg(family, c("gaussian", "binomial", "poisson", "multinomial"))
+}
+
 .aa_paa_block <- function(ctx,
                           step_size = 1.0,
                           max_iter_optimizer = 10L,
                           step_shrinkage = 0.5,
                           max_no_update = 5L) {
-    family <- match.arg(
-        ctx[["family"]],
-        c("gaussian", "bernoulli", "poisson", "multinomial")
-    )
+    family <- .aa_paa_normalize_family(ctx[["family"]])
     list(
         check = function(ctx) {
             if (ctx[["missing"]]) {
@@ -174,6 +175,7 @@ archetypes_paa <- function(x,
 }
 
 .aa_paa_family <- function(family, eps) {
+    family <- .aa_paa_normalize_family(family)
     clip_prob <- function(Y) pmin(pmax(Y, eps), 1 - eps)
     clip_pos <- function(Y) pmax(Y, eps)
     as_numeric_matrix <- function(data) {
@@ -194,12 +196,12 @@ archetypes_paa <- function(x,
             objective = function(X, Y) norm(X - Y, "F")^2,
             gradient = function(X, Y) 2 * (Y - X)
         ),
-        bernoulli = list(
+        binomial = list(
             family = family,
             prepare = function(data) {
                 X <- as_numeric_matrix(data)
                 if (!all(X >= 0 & X <= 1)) {
-                    stop("Bernoulli data must lie in [0, 1].", call. = FALSE)
+                    stop("Binomial data must lie in [0, 1].", call. = FALSE)
                 }
                 P <- clip_prob(X)
                 list(X = X, P = P)
@@ -348,7 +350,7 @@ archetypes_paa <- function(x,
             step_B <- step_B * step_shrinkage
         }
 
-        # TODO: consider adding slack parametrers for poisson and potentially bernoulli
+        # TODO: consider adding slack parametrers for poisson and potentially binomial
         if (!accepted_update) {
             no_update <- no_update + 1L
             for (nm in names(loss)) {

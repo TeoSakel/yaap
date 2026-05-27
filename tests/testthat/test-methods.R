@@ -93,11 +93,11 @@ test_that("print.archetypes reports compact fitting method labels", {
     paa <- suppressWarnings(archetypes_paa(
         matrix(c(1, 0, 0, 1, 1, 1), ncol = 2, byrow = TRUE),
         K = 2L,
-        family = "bernoulli",
+        family = "binomial",
         max_iter = 1L
     ))
     paa_output <- paste(capture.output(print(paa)), collapse = "\n")
-    expect_match(paa_output, "PAA Archetypal Analysis \\(bernoulli family\\)")
+    expect_match(paa_output, "PAA Archetypal Analysis \\(binomial family\\)")
 })
 
 test_that("print.archetypes reports the numeric final loss", {
@@ -197,20 +197,20 @@ test_that("pearson residuals use GLM variance functions and stored sample weight
     res <- residuals(fit, type = "response")
     expect_equal(residuals(fit, type = "pearson"), sqrt(w) * res)
 
-    bernoulli <- archetypes(
+    binomial <- archetypes(
         A = matrix(c(0.2, 0.8, 0.7, 0.3), nrow = 2L, byrow = TRUE),
         coefficients = matrix(c(1, 0, 0, 1), nrow = 2L, byrow = TRUE),
         compositions = matrix(c(1, 0, 0, 1), nrow = 2L, byrow = TRUE),
         data = matrix(c(0, 1, 1, 0), nrow = 2L, byrow = TRUE),
-        family = "bernoulli"
+        family = "binomial"
     )
-    mu <- fitted(bernoulli)
+    mu <- fitted(binomial)
     expect_equal(
-        residuals(bernoulli, type = "pearson"),
-        residuals(bernoulli, type = "response") / sqrt(mu * (1 - mu))
+        residuals(binomial, type = "pearson"),
+        residuals(binomial, type = "response") / sqrt(mu * (1 - mu))
     )
 
-    poisson <- bernoulli
+    poisson <- binomial
     poisson[["family"]] <- "poisson"
     poisson[["data"]] <- matrix(c(0, 2, 3, 1), nrow = 2L, byrow = TRUE)
     expect_equal(
@@ -225,9 +225,11 @@ test_that("pearson residuals use GLM variance functions and stored sample weight
         data = matrix(c(2, 2, 7, 3), nrow = 2L, byrow = TRUE),
         family = "multinomial"
     )
-    mu <- fitted(multinomial)
+    p <- fitted(multinomial)
     n <- rowSums(multinomial[["data"]])
-    p <- mu / n
+    expected_counts <- n * p
+    expect_equal(unname(rowSums(p)), rep(1, nrow(p)))
+    expect_equal(residuals(multinomial, type = "response"), multinomial[["data"]] - expected_counts)
     expect_equal(
         residuals(multinomial, type = "pearson"),
         residuals(multinomial, type = "response") / sqrt(n * p * (1 - p))
