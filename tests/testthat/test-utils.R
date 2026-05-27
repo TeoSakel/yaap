@@ -11,6 +11,8 @@ test_that("dependency metadata keeps optional solvers optional", {
     expect_true(grepl("\\barchetypes\\b", suggests))
     expect_false(grepl("\\bggplot2\\b", imports))
     expect_true(grepl("\\bggplot2\\b", suggests))
+    expect_false(grepl("\\bggtern\\b", imports))
+    expect_true(grepl("\\bggtern\\b", suggests))
     expect_false(grepl("\\bquadprog\\b", imports))
     expect_true(grepl("\\bquadprog\\b", suggests))
     expect_false(grepl("\\bMASS\\b", imports))

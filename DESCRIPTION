@@ -27,6 +27,7 @@ Suggests:
     fda,
     geometry,
     ggplot2,
+    ggtern,
     irlba,
     knitr,
     MASS,
