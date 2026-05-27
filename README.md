@@ -1,6 +1,6 @@
 # yaap
 
-yaap fits archetypal analysis models for numeric matrix data. It includes Euclidean, probabilistic, kernel, and directional variants, plus initialization helpers, model selection paths, plotting methods, broom methods, and a tidymodels recipe step.
+yaap is Yet Another Archetypes Package. It fits archetypal analysis models for multivariate and functional data. It includes Euclidean, probabilistic, kernel, and directional variants, plus initialization helpers, model selection paths, plotting methods, broom methods, and a tidymodels recipe step.
 
 ## Installation
 

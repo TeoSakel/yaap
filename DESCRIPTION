@@ -1,5 +1,5 @@
 Package: yaap
-Title: Archetypal Analysis for Matrix Data
+Title: Yet Another Archetypes Package for Multivariate and Functional Data
 Version: 1.0.0
 Authors@R: c(
     person("Teo", "Sakel",
@@ -10,8 +10,9 @@ Authors@R: c(
            role = c("fnd"),
            comment = c(ROR = "05r0vyz12", DOI = "10.13039/501100011033"))
   )
-Description: Fits archetypal analysis models for numeric matrix data, including
-    Euclidean, probabilistic, kernel, and directional variants. Provides
+Description: Fits archetypal analysis models for multivariate and functional
+    data, including Euclidean, probabilistic, kernel, and directional variants.
+    Provides
     initialization helpers, model selection paths, plotting methods, broom
     methods, and a 'tidymodels' recipe step.
 License: GPL (>= 3)
