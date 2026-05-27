@@ -5,8 +5,7 @@
 #' selected solver's fit step is run independently for each candidate `K`.
 #'
 #' @param x numeric matrix, data frame, formula, or supported specialized input.
-#' @param formula formula selecting variables from `data`. The response, when
-#'   present, is ignored.
+#'   For formula input, the response, when present, is ignored.
 #' @param data optional data frame supplying variables for formula input.
 #' @param K candidate numbers of archetypes. A single value expands to `1:K`;
 #'   a vector is sorted and deduplicated.
@@ -35,12 +34,13 @@ archetypes_path <- function(x, K, ...) {
 #'   input. Defaults to [stats::na.omit()].
 #' @method archetypes_path formula
 #' @export
-archetypes_path.formula <- function(formula,
-                                    data = NULL,
+archetypes_path.formula <- function(x,
                                     K,
+                                    data = NULL,
                                     ...,
                                     subset,
                                     na.action) {
+    formula <- x
     path_args <- .aa_path_dots(...)
     call <- path_args[["call"]] %||% match.call()
     if (is.null(path_args[["call"]])) {
@@ -49,8 +49,9 @@ archetypes_path.formula <- function(formula,
 
     terms <- stats::delete.response(stats::terms(formula, data = data))
     mf_call <- match.call(expand.dots = FALSE)
-    keep <- match(c("formula", "data", "subset", "na.action"), names(mf_call), 0L)
+    keep <- match(c("x", "data", "subset", "na.action"), names(mf_call), 0L)
     mf_call <- mf_call[c(1L, keep)]
+    names(mf_call)[names(mf_call) == "x"] <- "formula"
     mf_call[[1L]] <- quote(stats::model.frame)
     mf_call[["formula"]] <- terms
     mf <- eval(mf_call, parent.frame())

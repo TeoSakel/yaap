@@ -5,3 +5,6 @@
 .positai
 dev/
 .vscode/
+yaap.Rcheck/
+yaap_*.tar.gz
+CRAN-SUBMISSION

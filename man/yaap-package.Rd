@@ -4,16 +4,21 @@
 \name{yaap-package}
 \alias{yaap}
 \alias{yaap-package}
-\title{yaap: Yet Another Archetypes Package}
+\title{yaap: Archetypal Analysis for Matrix Data}
 \description{
-Implements different flavors of the archetypal analysis.
+Fits archetypal analysis models for numeric matrix data, including Euclidean, probabilistic, kernel, and directional variants. Provides initialization helpers, model selection paths, plotting methods, broom methods, and a 'tidymodels' recipe step.
 }
 \author{
-\strong{Maintainer}: Teo Sakel \email{teo@intelligentbiodata.com}
+\strong{Maintainer}: Teo Sakel \email{teo@intelligentbiodata.com} (\href{https://orcid.org/0000-0001-9946-9498}{ORCID}) [copyright holder]
 
 Authors:
 \itemize{
-  \item Teo Sakel \email{teo@intelligentbiodata.com}
+  \item Teo Sakel \email{teo@intelligentbiodata.com} (\href{https://orcid.org/0000-0001-9946-9498}{ORCID}) [copyright holder]
+}
+
+Other contributors:
+\itemize{
+  \item MCIU/AEI (\href{https://ror.org/05r0vyz12}{ROR}) (DOI: 10.13039/501100011033) [funder]
 }
 
 }

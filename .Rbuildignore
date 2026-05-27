@@ -16,3 +16,7 @@
 ^vignettes/.*_files$
 ^AGENTS[.]md$
 ^references[.]bib$
+^cran-comments[.]md$
+^CRAN-SUBMISSION$
+^yaap[.]Rcheck$
+^yaap_.*[.]tar[.]gz$

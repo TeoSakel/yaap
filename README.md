@@ -1,10 +1,23 @@
 # yaap
 
-Yet Another Archetypes Package.
+yaap fits archetypal analysis models for numeric matrix data. It includes Euclidean, probabilistic, kernel, and directional variants, plus initialization helpers, model selection paths, plotting methods, broom methods, and a tidymodels recipe step.
 
-This R package implements different flavors of [Archetypal Analysis](https://arxiv.org/abs/2504.12392).
+## Installation
 
-## Currently implemented
+Install the released version from CRAN:
+
+```r
+install.packages("yaap")
+```
+
+You can also install the development version from GitHub:
+
+```r
+# install.packages("pak")
+pak::pak("teosakel/yaap")
+```
+
+## Features
 
 - [Principal archetypal analysis (PCHA)](https://doi.org/10.1016/j.neucom.2011.06.033),
   with gradient descent and NNLS-based fitting methods
@@ -15,13 +28,3 @@ This R package implements different flavors of [Archetypal Analysis](https://arx
 - Multiple initialization helpers, including `FurthestSum` and
   [`AA++`](https://arxiv.org/abs/2301.13748)
 - Plotting methods, broom methods, and a tidymodels recipe step
-
-## Work in progress
-
-- Vignettes and examples
-- Tools for tuning several archetype fits
-- Tools for comparing and combining ensembles of archetype fits
-- Publish on CRAN
-
-The project is still a work in progress. Interfaces, documentation, and
-examples may change as the package develops.

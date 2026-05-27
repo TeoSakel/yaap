@@ -8,7 +8,7 @@
 \usage{
 archetypes_path(x, K, ...)
 
-\method{archetypes_path}{formula}(formula, data = NULL, K, ..., subset, na.action)
+\method{archetypes_path}{formula}(x, K, data = NULL, ..., subset, na.action)
 
 \method{archetypes_path}{default}(
   x,
@@ -33,15 +33,13 @@ archetypes_path(x, K, ...)
 )
 }
 \arguments{
-\item{x}{numeric matrix, data frame, formula, or supported specialized input.}
+\item{x}{numeric matrix, data frame, formula, or supported specialized input.
+For formula input, the response, when present, is ignored.}
 
 \item{K}{candidate numbers of archetypes. A single value expands to \code{1:K};
 a vector is sorted and deduplicated.}
 
 \item{...}{additional arguments passed to \code{\link[=run_aa]{run_aa()}}.}
-
-\item{formula}{formula selecting variables from \code{data}. The response, when
-present, is ignored.}
 
 \item{data}{optional data frame supplying variables for formula input.}
 
