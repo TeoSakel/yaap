@@ -1,12 +1,12 @@
 ---
-title: "Non-Gaussian and Metric Variants of Archetypal Analysis"
+title: "Metric and Non-Gaussian Variants of Archetypal Analysis"
 bibliography: references.bib
 output:
   rmarkdown::html_vignette:
     toc: true
     toc_depth: 3
 vignette: >
-  %\VignetteIndexEntry{Non-Gaussian and Metric Variants of Archetypal Analysis}
+  %\VignetteIndexEntry{Metric and Non-Gaussian Variants of Archetypal Analysis}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -28,35 +28,41 @@ library(yaap)
 ## One simplex, several geometries
 
 Classical archetypal analysis (AA) represents each observation as a convex
-mixture of a small number of extreme profiles [@Cutler1994]. In yaap, the main
+mixture of a small number of extreme profiles [@Cutler1994]. In `yaap`, the main
 objects keep the same interpretation across most variants:
 
-- `coefficients` describe each archetype as a mixture of training observations
-  or training observation profiles.
-- `compositions` describe each observation as a mixture of archetypes.
-- `coordinates` are the fitted archetype profiles, when an input-space profile
-  is available.
+- `coefficients` describe each archetype as a mixture of training observations.
+- `compositions` describe each observation as a mixture of archetype profiles.
+- `coordinates` are the fitted archetype profiles, when an input-space profile is available.
 
-What changes is the notion of closeness. Ordinary AA uses Euclidean squared
-error. Metric and kernel AA keep a Gaussian squared-error view but alter the
-inner-product geometry. Probabilistic AA replaces squared error with a
-family-specific likelihood. Directional AA replaces Euclidean residuals with an
-angular Watson-style loss for data where direction matters more than magnitude
+What changes is the notion of closeness. For Gaussian models, this is usually an
+inner product that defines lengths and angles in feature space. For
+non-Gaussian or directional models, it is a likelihood or angular objective.
+
+- Ordinary AA uses squared Euclidean distance.
+- Metric AA uses a metric matrix $G$ to weight feature-space residuals.
+- Kernel AA implicitly maps the data into another feature space and uses that
+  space's inner product.
+- Probabilistic AA uses a likelihood objective, and directional AA uses an angular objective.
+
 [@Seth2016; @Olsen2022].
 
-| Variant              | Main function                              | What changes                         | Typical data                                |
-| -------------------- | ------------------------------------------ | ------------------------------------ | ------------------------------------------- |
-| Metric Gaussian AA   | `run_aa(..., scale = G)`                   | Feature inner product                | Curves, spectra, correlated features        |
-| Kernel AA            | `run_aa(..., method = "kernel")`           | Implicit feature-space inner product | Nonlinear geometry                          |
+| Variant              | Main function                               | What changes                         | Typical data                                |
+| -------------------- | ------------------------------------------- | ------------------------------------ | ------------------------------------------- |
+| Metric Gaussian AA   | `run_aa(..., scale = G)`                    | Feature inner product                | Curves, spectra, correlated features        |
+| Kernel AA            | `run_aa(..., method = "kernel")`            | Implicit feature-space inner product | Nonlinear geometry                          |
 | Probabilistic AA     | `run_aa(..., method = "paa", family = ...)` | Likelihood/objective                 | Binary, count, compositional observations   |
-| Directional AA       | `run_aa(..., method = "directional")`      | Angular objective                    | Unit directions, polarity-invariant signals |
+| Directional AA       | `run_aa(..., method = "directional")`       | Angular objective                    | Unit directions, polarity-invariant signals |
 
-This vignette walks through those variants in that order. The examples are
-small and synthetic so they can be re-run quickly.
+This vignette is organized as a set of recipes. Each section starts with the
+modeling situation where the variant is useful, then shows the smallest code
+pattern needed to fit the model and interpret the result. The examples are
+small and synthetic so they can be rerun quickly.
 
 ```{r helpers, include = FALSE}
 pal_aa <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")
-pal_data <- "grey70"
+pal_data <- adjustcolor("black", 0.20)
+pal_data_mid <- adjustcolor("black", 0.45)
 
 sample_simplex <- function(n, k) {
     Z <- matrix(stats::rexp(n * k), nrow = n, ncol = k)
@@ -71,190 +77,355 @@ unit_rows <- function(X) {
     X <- as.matrix(X)
     X / sqrt(rowSums(X * X))
 }
-
-plot_proxy_archetypes <- function(X, A_linear, A_kernel, main) {
-    plot(
-        X,
-        asp = 1, pch = 19, cex = 0.45, col = pal_data,
-        xlab = "x", ylab = "y", main = main
-    )
-    points(A_linear, pch = 4, cex = 1.25, lwd = 1.5, col = "black")
-    points(A_kernel, pch = 1, cex = 1.45, lwd = 1.6, col = pal_aa[2])
-}
 ```
 
 ## Metric Gaussian AA
 
-Some data are non-Gaussian in representation but can still be reduced to
-ordinary Gaussian AA after choosing the right geometry. Functional data are a
-common example: if rows are smooth curves sampled on a grid, then a pointwise
-Euclidean norm treats all grid locations as equally spaced and independent. A
-more appropriate approximation to an integrated squared error uses a metric on
-the feature axis.
+Use this recipe when the rows are still numeric profiles, but ordinary
+Euclidean distance is the wrong residual scale. Common cases include calibrated
+measurement error, correlated features, spectra, and functional curves.
 
-In yaap the two sides of this weighted Gaussian objective are controlled by
-separate arguments. Let $E = X - SA$ be the residual matrix, let
-$W = \mathrm{diag}(w_1, \ldots, w_N)$ be a diagonal matrix of sample weights, and
-let $G$ be the feature metric. The fitted objective is conceptually
+In `yaap`, the standard Gaussian objective uses the following matrices:
 
-$$
-  \mathcal{L}(S,A; W, G)
-    = \mathrm{tr}\{W^{1/2} E G E^\top W^{1/2}\}
-    = \mathrm{tr}\{W E G E^\top\}.
-$$
+- $X$, the data matrix ($N \times M$)
+- $S$, the composition matrix ($N \times K$)
+- $A$, the archetype matrix ($K \times M$)
+- $E = X - SA$, the residual matrix
+- $W = \mathrm{diag}(w_1, \ldots, w_N)$, the diagonal matrix of sample weights
+- $G$, the feature metric, a $M \times M$ positive-definite matrix
 
-The `weights` argument sets $W$; when it is omitted, $W$ is the identity matrix.
-The `scale` argument sets $G$. Conceptually, every non-kernel Gaussian use of
-`scale` is a choice of this feature metric: `scale = FALSE` uses the identity
-metric, a numeric vector gives a diagonal metric through per-feature scale
-factors, and a positive-definite matrix supplies a full non-diagonal metric. Use
-`weights`, not `scale`, when the goal is to make some samples count more than
-others.
+The fitted objective is a weighted and metric-adjusted sum of squared errors:
 
-```{r metric-data}
-t_grid <- seq(0, 1, length.out = 60)
-A_true <- rbind(
-    early_peak = exp(-45 * (t_grid - 0.18)^2),
-    late_peak  = exp(-45 * (t_grid - 0.82)^2),
-    ramp       = 0.2 + 0.8 * t_grid
+$$\mathcal{L}(S,A; W, G) = \mathrm{tr}\{W E G E^\top\}$$
+
+Here, $W$ is used to adjust the contribution of each sample, and $G$ defines how
+feature-space residuals are measured. If $G$ is diagonal, its entries say how
+strongly each feature contributes to squared error. $G$'s off-diagonal entries
+add cross-terms to the quadratic error, so residuals in nearby or related
+features can be judged together.
+
+The `weights` argument sets $W$; when it is omitted, $W$ is the identity
+matrix. The `scale` argument sets $G$. Conceptually, every non-kernel
+Gaussian use of `scale` is a choice of this feature metric:
+
+- `scale = FALSE` uses the identity metric
+- `scale = TRUE` uses the feature-wise sample variances as a diagonal metric
+- a numeric vector of column divisors gives a diagonal metric through
+  per-feature scale factors
+- a positive-definite matrix supplies a full non-diagonal metric.
+
+### Recipe: known measurement-error metric
+
+A feature metric is useful when technical measurement error is known from
+instrument calibration or prior domain knowledge. In the recipe below, the
+true archetypal structure is a triangle in the first two measured features.
+The last two features are nuisance measurements with large correlated technical
+noise. For simplicity, we do not add any other irreducible noise. Plain
+Euclidean AA treats all feature directions as having the same reliability.
+Metric Gaussian AA uses the technical-noise precision matrix, so residuals are
+judged relative to measurement reliability.
+
+It is important that this metric describes measurement noise, not the total
+covariance of `X_metric`. The total covariance of `X_metric` contains the
+archetypal signal we want to model. Using its inverse would also downweight
+meaningful variation between archetypes.
+
+```{r metric-simplex-data}
+# Define the signal archetypes.
+A_signal_true <- rbind(
+    left  = c(-1,      0, 0, 0),
+    right = c(1,       0, 0, 0),
+    top   = c(0, sqrt(3), 0, 0)
 )
 
-S_true <- sample_simplex(90, 3)
-X_fun <- S_true %*% A_true +
-    matrix(rnorm(90 * length(t_grid), sd = 0.025), nrow = 90)
-colnames(X_fun) <- sprintf("t%02d", seq_along(t_grid))
+# Basic dimensions
+K <- nrow(A_signal_true)
+M <- ncol(A_signal_true)
+N <- 220  # samples
+
+# Archetype compositions for each sample
+S_metric_true <- sample_simplex(N, K)
+X_metric_mean <- S_metric_true %*% A_signal_true
+
+# Build block-diagonal measurement-noise covariance
+Sigma_noise <- matrix(0, nrow = M, ncol = M)
+# Signal features: small, moderately correlated noise
+Sigma_noise[1:2, 1:2] <- 0.03^2 * matrix(c(1, -0.5, -0.5, 1), nrow = 2)
+# Nuisance features: large, weakly correlated noise
+Sigma_noise[3:4, 3:4] <- 3^2 * matrix(c(1, 0.2, 0.2, 1), nrow = 2)
+# Precision matrix used as metric for AA
+G_noise <- solve(Sigma_noise)
+
+# Correlated anisotropic noise
+X_noise <- matrix(rnorm(N * M), ncol = M) %*% chol(Sigma_noise)
+X_metric <- X_metric_mean + X_noise
+colnames(X_metric) <- c("feature_1", "feature_2", "noise_1", "noise_2")
 ```
 
-```{r metric-fit}
-feature_weight <- ifelse(t_grid < 0.25 | t_grid > 0.75, 3, 0.5)
-G_diag <- diag(feature_weight)  # diagonal feature metric G
-
-set.seed(1)
+```{r metric-simplex-fit, warning=FALSE}
+set.seed(42)
 fit_plain <- run_aa(
-    X_fun,
-    K = 3,
-    scale = FALSE,  # G = I
-    max_iter = 25,
-    tol_r2 = 1
+    X_metric,
+    K = K,
+    scale = FALSE,
+    sd_threshold = 0,
+    init = "random",
+    nrep = 20
 )
+fit_plain
 
-set.seed(1)
+set.seed(42)  # same starts
 fit_metric <- run_aa(
-    X_fun,
-    K = 3,
-    scale = G_diag,  # G = G_diag
-    max_iter = 25,
-    tol_r2 = 1
+    X_metric,
+    K = K,
+    scale = G_noise,
+    sd_threshold = 0,
+    init = "random",
+    nrep = 20
 )
+fit_metric
+```
 
-rbind(
-    plain_metric = final_loss(fit_plain),
-    weighted_metric = final_loss(fit_metric)
+The two fits use the same observations and the same simplex model. The metric
+fit differs only in how residuals are judged: directions with larger technical
+measurement noise count less, and the off-diagonal entries in `G_noise`
+account for correlated errors.
+
+```{r metric-simplex-loss, echo=FALSE}
+match_to_truth <- function(fit, truth, G = diag(ncol(truth))) {
+    perms <- rbind(
+        c(1, 2, 3), c(1, 3, 2), c(2, 1, 3),
+        c(2, 3, 1), c(3, 1, 2), c(3, 2, 1)
+    )
+    error <- apply(perms, 1, function(ix) {
+        E <- coordinates(fit)[ix, , drop = FALSE] - truth
+        sum(diag(E %*% G %*% t(E)))
+    })
+    perms[which.min(error), ]
+}
+
+noise_metric_archetype_error <- function(fit, truth, G) {
+    ix <- match_to_truth(fit, truth, G)
+    E <- coordinates(fit)[ix, , drop = FALSE] - truth
+    sum(diag(E %*% G %*% t(E)))
+}
+
+clr <- function(x) {
+    logx <- log2(pmax(x, 1e-6))
+    logx - rowMeans(logx)
+}
+
+composition_rmse <- function(fit, truth, S_true, G) {
+    ix <- match_to_truth(fit, truth, G)
+    clr_true <- clr(S_true)
+    clr_fit <- clr(compositions(fit)[, ix, drop = FALSE])
+    sqrt(mean((clr_fit - clr_true)^2))
+}
+
+res <- rbind(
+    plain = cbind(
+        final_loss(fit_plain),
+        data.frame(
+            noise_metric_archetype_error = noise_metric_archetype_error(
+                fit_plain, A_signal_true, G_noise
+            ),
+            composition_rmse = composition_rmse(
+                fit_plain, A_signal_true, S_metric_true, G_noise
+            )
+        )
+    ),
+    metric = cbind(
+        final_loss(fit_metric),
+        data.frame(
+            noise_metric_archetype_error = noise_metric_archetype_error(
+                fit_metric, A_signal_true, G_noise
+            ),
+            composition_rmse = composition_rmse(
+                fit_metric, A_signal_true, S_metric_true, G_noise
+            )
+        )
+    )
+)
+knitr::kable(
+    as.data.frame(res),
+    digits = c(0, 3, 2, 2),
+    col.names = c("Final loss", "R2", "Noise-metric archetype error", "Composition RMSE")
 )
 ```
 
-```{r metric-plot, echo=FALSE, fig.cap = "Synthetic curves and metric-weighted archetype profiles. The shaded bands mark regions emphasized by the diagonal feature metric."}
-sample_ix <- seq(1, nrow(X_fun), length.out = 25)
+The loss values are on different scales because each fit uses its own residual
+metric. The archetype error and composition RMSE are evaluated against the known
+generating structure, using the noise precision matrix to match the fitted
+archetypes to the truth and thus are comparable across fits.
 
-matplot(
-    t_grid,
-    t(X_fun[sample_ix, ]),
-    type = "l", lty = 1, col = adjustcolor("black", 0.12),
-    xlab = "t", ylab = "Value", main = "Metric Gaussian AA"
+```{r metric-simplex-plot, echo=FALSE, fig.cap = "Metric Gaussian AA with known correlated measurement noise."}
+plot(
+    X_metric[, 1:2], frame.plot = FALSE,
+    asp = 1, pch = 19, cex = 0.45, col = pal_data,
+    xlab = "feature 1", ylab = "feature 2", main = "Metric Gaussian AA"
 )
-usr <- par("usr")
-rect(0, usr[3], 0.25, usr[4], col = adjustcolor(pal_aa[2], 0.12), border = NA)
-rect(0.75, usr[3], 1, usr[4], col = adjustcolor(pal_aa[2], 0.12), border = NA)
-matlines(
-    t_grid,
-    t(coordinates(fit_metric)),
-    lty = 1, lwd = 2, col = pal_aa[1:3]
+polygon(A_signal_true[c(1, 3, 2), ], border = "black", lty = 3, lwd = 1.4)
+points(A_signal_true, pch = 15, cex = 1.1, col = "black")
+points(coordinates(fit_plain)[, 1:2], pch = 4, cex = 1.45, lwd = 1.7, col = pal_aa[2])
+points(coordinates(fit_metric)[, 1:2], pch = 1, cex = 1.65, lwd = 1.8, col = pal_aa[1])
+legend(
+    "topright",
+    legend = c("Data", "True archetypes", "Plain Euclidean", "Metric"),
+    pch = c(19, 15, 4, 1),
+    col = c(pal_data, "black", pal_aa[2], pal_aa[1]),
+    pt.cex = c(0.7, 1.1, 1.3, 1.5),
+    bty = "n"
+)
+```
+
+### Functional AA
+
+Functional data use the same metric idea, but the metric is usually not supplied
+by hand. Use this recipe when analyzing functional data with the `fda` package.
+
+In functional analysis, a curve is represented as a weighted sum of basis
+functions, such as sine waves in Fourier analysis. The appropriate feature
+metric is computed from the inner-product matrix of the basis functions.
+
+The package `fda` provides a rich set of basis functions and tools for working
+with functional data. `run_aa.fd()` works directly with `fda::fd` objects and
+applies the basis inner-product metric (computed using `fda::eval.penalty()`) to
+the Gaussian AA engine automatically, so users can fit the functional object
+directly. The resulting archetypes and fitted values are also `fd` objects so
+that they can be post-processed with the same tools as the input data.
+
+Below we demonstrate functional AA on synthetic curves with known archetypal
+structure. The true archetypes are smooth curves with peaks at different times.
+The data are noisy samples from the convex hull of those archetypes.
+
+```{r functional-aa-fit, eval=requireNamespace("fda", quietly = TRUE)}
+N <- 90  # number of curves
+t_fd <- seq(0, 1, length.out = 80)  # time points for functional data
+A_fd_true <- rbind(
+    early_peak = exp(-60 * (t_fd - 0.18)^2),
+    late_peak  = exp(-60 * (t_fd - 0.82)^2),
+    ramp       = 0.15 + 0.85 * t_fd
+)
+# Archetype compositions for each sample
+S_fd_true <- sample_simplex(N, 3)
+X_fd_noise <- matrix(rnorm(N * length(t_fd), sd = 0.025), nrow = N)
+X_fd <- S_fd_true %*% A_fd_true + X_fd_noise
+
+# Convert the sampled curves to an fda::fd object
+basis_fd <- fda::create.bspline.basis(rangeval = c(0, 1), nbasis = 14)
+fd_data <- fda::Data2fd(argvals = t_fd, y = t(X_fd), basisobj = basis_fd)
+
+fit_fd <- run_aa(fd_data, K = 3, sd_threshold = 0)
+fit_fd
+```
+
+The resulting archetypes are functional objects, and the fitted values are
+curves in the same space. The plot below shows the fitted archetypes overlaid on
+a sample of the data curves.
+
+```{r functional-aa-plot, eval=requireNamespace("fda", quietly = TRUE), fig.cap = "Functional Gaussian AA fitted directly to an fda::fd object."}
+
+A_fit_fd <- coordinates(fit_fd)
+class(A_fit_fd)  # fitted archetype curves
+
+sample_ix <- seq(1, nrow(X_fd), length.out = 25) # sample curves for plotting
+
+# Plot sampled curves, then overlay archetype curves
+matplot(
+    t_fd,
+    t(X_fd[sample_ix, ]),
+    type = "l", lty = 1, col = pal_data,
+    xlab = "t", ylab = "Value", main = "Functional AA"
+)
+invisible( # plot.fd prints a "done" message that we want to suppress
+    plot(A_fit_fd, lty = 1, lwd = 2, col = pal_aa[1:3], add = TRUE)
 )
 legend(
     "top",
-    legend = anames(fit_metric),
+    legend = anames(fit_fd),
     lty = 1, lwd = 2, col = pal_aa[1:3],
     bty = "n", horiz = TRUE
 )
 ```
 
-The diagonal metric above is just a simple quadrature-like weighting. A full
-positive-definite matrix can encode correlated features, basis inner products,
-or a functional-data penalty. The `run_aa.fd()` method uses this idea internally:
-it fits AA to basis coefficients with the basis inner-product matrix. The caveat
-is that this remains Gaussian AA. The data are still reconstructed by
-`compositions %*% coordinates`; only the metric used to judge residuals has
-changed.
-
 ## Kernel AA
 
-Kernel AA is the nonlinear analogue of changing the inner product. Instead of
-choosing an explicit feature metric, it works with a Gram matrix
-$K_{ij} = k(x_i, x_j)$ and fits archetypes in the kernel-induced feature space
-[@Morup2012]. With the linear kernel, this recovers the ordinary Euclidean
-geometry. With nonlinear kernels, the convex hull is formed after the implicit
-feature map.
+Kernel AA is the nonlinear analog of changing the inner product. Instead of
+choosing an explicit feature metric ($G$), it works with a $N \times N$
+Gram matrix $K_{ij} = k(x_i, x_j)$ and fits archetypes in the kernel-induced
+feature space [@Morup2012]. With the linear kernel, this recovers the ordinary
+Euclidean geometry. With nonlinear kernels, the convex hull is formed after the
+implicit feature map.
 
-The example below has a dense core and an outer ring. Linear AA sees the input
-space and places proxy archetypes around broad outer directions. A Laplace
-kernel changes the geometry so local neighborhoods are emphasized.
+Use this recipe when the relevant extremes are defined by a nonlinear geometry
+rather than by the convex hull in the original feature space. The example below
+has a dense core and an outer ring. Linear AA sees the input space and places
+proxy archetypes around broad outer directions. A Laplace kernel changes the
+geometry so local neighborhoods are emphasized.
 
 ```{r kernel-data}
-set.seed(2011)
+# Choose the sample sizes
 n_outer <- 120
 n_inner <- 80
 
+# Simulate an outer ring
 theta_outer <- runif(n_outer, 0, 2 * pi)
 r_outer <- 1 + 0.12 * runif(n_outer)
 X_outer <- cbind(r_outer * cos(theta_outer), r_outer * sin(theta_outer))
 
+# Simulate an inner core
 theta_inner <- runif(n_inner, 0, 2 * pi)
 r_inner <- 0.15 * runif(n_inner)
 X_inner <- cbind(r_inner * cos(theta_inner), r_inner * sin(theta_inner))
 
+# Combine the two groups
 X_ring <- rbind(X_outer, X_inner)
 colnames(X_ring) <- c("x", "y")
 ```
 
-```{r kernel-fit}
-set.seed(2)
+```{r kernel-fit, warning=FALSE}
+set.seed(42)
 fit_linear <- run_aa(
     X_ring,
-    K = 8,
+    K = 7,
     scale = FALSE,
-    max_iter = 35,
-    tol_r2 = 1
+    init = "random",
+    nrep = 20
 )
+fit_linear
 
-set.seed(2)
+set.seed(42)
 fit_kernel <- run_aa(
     X_ring,
-    K = 8,
+    K = 7,
     method = "kernel",
     kernel = "laplace",
     kernel_args = list(sigma = 0.35),
-    max_iter = 35,
-    tol_r2 = 1
+    init = "random",
+    nrep = 20
 )
-
-rbind(
-    linear = final_loss(fit_linear),
-    laplace_kernel = final_loss(fit_kernel)
-)
+fit_kernel
 ```
 
-```{r kernel-plot, echo=FALSE, fig.cap = "Linear AA archetypes and nonlinear kernel-AA input-space proxy archetypes on a ring/core dataset."}
-plot_proxy_archetypes(
-    X_ring,
-    coordinates(fit_linear),
-    coordinates(fit_kernel),
-    main = "Linear AA vs kernel-AA proxies"
+The two loss metrics are not directly comparable because they are computed in
+different spaces. Even the `r2` values are not directly comparable because they
+are computed relative to different null models. There is no simple scalar
+diagnostic that decides whether to use kernel AA or linear AA. Use domain
+knowledge and visual inspection of the fitted profiles.
+
+```{r kernel-plot, fig.cap = "Linear AA archetypes and kernel-AA input-space proxy archetypes."}
+plot(
+    X_ring, frame.plot = FALSE, axes = FALSE,
+    col = pal_data, asp = 1, pch = 19, cex = 0.45,
+    main = "Linear AA vs kernel-AA proxies", xlab = "", ylab = ""
 )
+points(coordinates(fit_linear), pch = 4, cex = 1.25, lwd = 1.5, col = pal_aa[1])
+points(coordinates(fit_kernel), pch = 1, cex = 1.45, lwd = 1.6, col = pal_aa[2])
 legend(
-    "topright",
-    legend = c("Data", "Linear AA", "Kernel-AA proxy"),
+    "topleft",
+    legend = c("Data", "Linear AA", "Kernel-AA"),
     pch = c(19, 4, 1),
-    col = c(pal_data, "black", pal_aa[2]),
+    col = c(pal_data, pal_aa[1:2]),
     pt.cex = c(0.7, 1.2, 1.4),
     bty = "n"
 )
@@ -263,9 +434,14 @@ legend(
 For nonlinear kernels, `coordinates` are input-space proxy coordinates computed
 as `coefficients %*% data`. They are useful for plotting, but they are not exact
 preimages of the Hilbert-space archetypes. This distinction also explains why
-`fitted()` and out-of-sample `predict()` are currently not defined for
-`kernel_archetypes`: new samples would require kernel-specific cross-Gram
-evaluation and a reconstruction convention for the selected kernel.
+`fitted()` and out-of-sample `predict()` for `type = "reconstruction"` are not
+defined for `kernel_archetypes`. `predict()` for `type = "compositions"` on the
+other hand is defined and returns the new composition weights using cross-Gram
+evaluation (new samples vs every training sample).
+
+In this particular example, the kernel-AA considers the inner core and outer
+ring as two separate archetypal directions, while linear AA places archetypes
+around the outer ring and considers the inner core as a uniformly mixed profile.
 
 The kernel choice and bandwidth are substantive modeling decisions. Very local
 kernels can make many points effectively extreme in feature space, a phenomenon
@@ -275,127 +451,166 @@ are stable.
 
 ## Probabilistic AA
 
-PAA changes the objective rather than the inner product. It keeps the simplex
-structure, but archetypes are profiles in the parameter space of an observation
-family [@Seth2016]. In yaap, the supported families are `"gaussian"`,
-`"bernoulli"`, `"poisson"`, and `"multinomial"`.
+Use PAA when the observed entries are generated from a distribution such as
+binary responses, counts, or category counts. PAA changes the objective rather
+than the inner product. It keeps the simplex structure, but archetypes are
+profiles in the parameter space of an observation family [@Seth2016]. In `yaap`,
+the supported families are:
 
-The following binary example represents observations as answers to six yes/no
-items. The archetypes are probability profiles, not binary observations.
-
-```{r paa-bernoulli-data}
-set.seed(3)
-P_true <- rbind(
-    broad_yes = c(0.85, 0.80, 0.75, 0.20, 0.15, 0.10),
-    middle    = c(0.25, 0.75, 0.35, 0.70, 0.35, 0.65),
-    broad_no  = c(0.10, 0.15, 0.20, 0.80, 0.85, 0.75)
-)
-S_bin <- sample_simplex(120, 3)
-P_bin <- S_bin %*% P_true
-X_bin <- matrix(
-    rbinom(length(P_bin), size = 1, prob = as.vector(P_bin)),
-    nrow = nrow(P_bin)
-)
-colnames(X_bin) <- paste0("item_", seq_len(ncol(X_bin)))
-```
-
-```{r paa-bernoulli-fit}
-set.seed(4)
-fit_bernoulli <- run_aa(
-    X_bin,
-    K = 3,
-    method = "paa",
-    family = "bernoulli",
-    max_iter = 35,
-    tol_r2 = 1
-)
-
-fit_bernoulli
-```
-
-```{r paa-profile, echo=FALSE, fig.cap = "Bernoulli PAA archetypes. Bar heights are fitted response probabilities, not observed 0/1 data."}
-plot(
-    fit_bernoulli,
-    what = "profiles",
-    col = pal_aa[1:3],
-    ylim = c(0, 1),
-    main = "Bernoulli archetype probabilities"
-)
-```
-
-Prediction keeps the learned archetypes fixed and returns reconstructions by
-default. With `type = "compositions"`, it returns the new composition weights.
-
-```{r paa-predict}
-S_new <- predict(fit_bernoulli, X_bin[1:5, ], type = "compositions", max_iter = 20)
-round(S_new, 3)
-
-P_new <- predict(
-    fit_bernoulli,
-    X_bin[1:5, ],
-    max_iter = 20
-)
-round(P_new, 2)
-```
-
-For count data, use `family = "poisson"`; for rows of category counts, use
-`family = "multinomial"`. Multinomial fitted values preserve each row total.
-
-```{r paa-multinomial}
-set.seed(5)
-Topic_true <- rbind(
-    visual = c(0.55, 0.25, 0.10, 0.05, 0.05),
-    text   = c(0.05, 0.10, 0.55, 0.25, 0.05),
-    mixed  = c(0.15, 0.25, 0.15, 0.20, 0.25)
-)
-S_txt <- sample_simplex(80, 3)
-Theta <- S_txt %*% Topic_true
-totals <- sample(40:80, nrow(Theta), replace = TRUE)
-X_txt <- t(vapply(seq_len(nrow(Theta)), function(i) {
-    as.integer(rmultinom(1, totals[i], Theta[i, ]))
-}, integer(ncol(Theta))))
-colnames(X_txt) <- paste0("term_", seq_len(ncol(X_txt)))
-
-set.seed(6)
-fit_multi <- run_aa(
-    X_txt,
-    K = 3,
-    method = "paa",
-    family = "multinomial",
-    max_iter = 25,
-    tol_r2 = 1
-)
-
-head(round(fitted(fit_multi), 1), 3)
-rowSums(fitted(fit_multi)[1:3, ])
-rowSums(X_txt[1:3, ])
-```
+| `family =`      | Input data                   | Parameter space                            |
+| --------------- | ---------------------------- | ------------------------------------------ |
+| `"gaussian"`    | Real-valued numeric matrix   | Mean profiles on the data scale            |
+| `"binomial"`    | Binary 0/1 response matrix   | Response probabilities                     |
+| `"poisson"`     | Non-negative count matrix    | Poisson rates, or expected counts          |
+| `"multinomial"` | Rows of category counts      | Category probabilities that sum to one     |
 
 PAA's main caveat is interpretive: the convex hull lives in parameter space.
 For non-Gaussian families, `plot(fit, what = "coordinates")` is intentionally
 unavailable because the observed data and fitted archetypes are not in the same
 space. PAA also does not currently support sample `weights`, robust fitting, or
-missing-data fitting.
+missing-data fitting.  For Gaussian data, PAA is equivalent to ordinary AA but
+less versatile and slower. Prefer the standard Gaussian fitters unless you
+specifically need the PAA interface.
+
+### Recipe: binary responses
+
+The following example represents observations as answers to six yes/no
+items. The archetypes are probability profiles, not binary observations. For
+your own data, use an `N x M` matrix of 0/1 responses.
+
+```{r paa-binomial-data}
+N <- 120
+P_true <- rbind(
+    broad_yes = c(0.85, 0.80, 0.75, 0.20, 0.15, 0.10),
+    middle    = c(0.25, 0.75, 0.35, 0.70, 0.35, 0.65),
+    broad_no  = c(0.10, 0.15, 0.20, 0.80, 0.85, 0.75)
+)
+K <- nrow(P_true)
+M <- ncol(P_true)
+S_bin <- sample_simplex(N, K)
+P_bin <- S_bin %*% P_true
+X_bin <- matrix(rbinom(N * M, size = 1, prob = as.vector(P_bin)), nrow = N)
+colnames(X_bin) <- paste0("item_", seq_len(M))
+head(X_bin)
+```
+
+```{r paa-binomial-fit}
+fit_binomial <- run_aa(
+    X_bin,
+    K = K,
+    method = "paa",
+    family = "binomial"
+)
+
+fit_binomial
+```
+
+```{r paa-profile, echo=FALSE, fig.cap = "Binomial PAA archetype response probabilities."}
+old_par <- par(mar = c(5.1, 4.1, 4.1, 8.5), xpd = TRUE)
+plot(
+    fit_binomial,
+    what = "profiles",
+    col = pal_aa[1:3],
+    ylim = c(0, 1),
+    main = "Binomial archetype probabilities",
+    args.legend = list(
+        x = "topright",
+        inset = c(-0.32, 0),
+        bty = "n"
+    )
+)
+par(old_par)
+```
+
+Because the archetypes are in parameter space, the fitted values are
+family parameters. The compositions are still convex weights over archetypes,
+but the reconstruction is not always a convex combination of observed data.
+Instead, it is a convex combination of archetype profiles in parameter space.
+
+The `predict()` method for PAA supports both types of prediction. However,
+`type = "reconstruction"` returns fitted values in parameter space, not
+observed data in the original sample space.
+
+```{r paa-predict}
+S_new <- predict(fit_binomial, X_bin[1:5, ], type = "compositions")
+round(S_new, 3)
+
+P_new <- predict(fit_binomial, X_bin[1:5, ], type = "reconstruction")
+round(P_new, 2)
+```
+
+### Recipe: multinomial counts
+
+Next, we fit a multinomial example. The data are counts of five terms in three
+document types:
+
+- "visual" documents have high counts of the first two terms and low counts
+  of the last three.
+- "text" documents have the opposite pattern.
+- "mixed" documents have moderate counts of all terms.
+
+The archetypes are term-probability profiles, not observed count vectors. The
+fitted and predicted values are probabilities whose rows sum to one. If expected
+counts are needed, multiply those probabilities by the document totals.
+
+```{r paa-multinomial}
+# Define term probabilities for three document types
+Topic_true <- rbind(
+    visual = c(0.55, 0.25, 0.10, 0.05, 0.05),
+    text   = c(0.05, 0.10, 0.55, 0.25, 0.05),
+    mixed  = c(0.15, 0.25, 0.15, 0.20, 0.25)
+)
+# Basic dimensions
+K <- nrow(Topic_true)
+M <- ncol(Topic_true)
+N <- 80
+# Archetype compositions
+S_txt <- sample_simplex(N, K)
+Theta <- S_txt %*% Topic_true
+
+totals <- 39 + sample(40, N, replace = TRUE) # total term counts per document
+X_txt <- matrix(0L, nrow = N, ncol = M)     # observed term counts
+for (i in seq_len(N)) {
+    X_txt[i, ] <- as.integer(rmultinom(1, totals[i], Theta[i, ]))
+}
+colnames(X_txt) <- paste0("term_", seq_len(ncol(X_txt)))
+
+fit_multi <- run_aa(
+    X_txt,
+    K = K,
+    method = "paa",
+    family = "multinomial",
+    tol = 1e-6
+)
+fit_multi
+
+P_hat <- fitted(fit_multi)
+head(round(P_hat, 2), 3)
+rowSums(P_hat[1:3, ])
+
+expected_counts <- rowSums(X_txt) * P_hat
+head(round(expected_counts, 1), 3)
+```
 
 ## Directional AA
 
-Directional AA changes the objective to model directions rather than Euclidean
-magnitudes. It is useful when rows lie on, or are naturally normalized to, a
-sphere and signs may be arbitrary. The implementation uses a Watson-style loss
+Use directional AA when row direction matters more than magnitude, especially
+when signs can be arbitrary. The implementation uses a Watson-style loss
 that is insensitive to polarity after hemisphere handling [@Olsen2022].
 
-The synthetic example below draws points from a spherical triangle, then flips
-some rows by multiplying them by `-1`. Euclidean AA treats the flipped rows as
-opposite points. Directional AA can model them as the same direction.
+The recipe below draws points from a spherical triangle, then flips some rows
+by multiplying them by `-1`. Euclidean AA treats the flipped rows as opposite
+points. Directional AA can model them as the same direction.
 
 ```{r directional-data}
-set.seed(7)
 A_dir_true <- rbind(
     c(1, 0, 0),
     c(0, 1, 0),
     c(0, 0.15, 1)
 )
-S_dir <- sample_simplex(120, 3)
+K <- nrow(A_dir_true)
+N <- 120
+S_dir <- sample_simplex(N, K)
 X_dir <- unit_rows(S_dir %*% A_dir_true)
 flip <- sample(c(-1, 1), nrow(X_dir), replace = TRUE)
 X_dir_flip <- X_dir * flip
@@ -403,31 +618,26 @@ colnames(X_dir_flip) <- c("x", "y", "z")
 ```
 
 ```{r directional-fit}
-set.seed(8)
+set.seed(42)
 fit_euclidean_dir <- run_aa(
     X_dir_flip,
-    K = 3,
-    scale = FALSE,
-    max_iter = 30,
-    tol_r2 = 1,
-    max_kappa = Inf,
-    sd_threshold = 0
+    K = K,
+    sd_threshold = 0,
+    init = "random",
+    nrep = 20
 )
+fit_euclidean_dir
 
-set.seed(8)
+set.seed(42)
 fit_directional <- run_aa(
     X_dir_flip,
-    K = 3,
+    K = K,
     method = "directional",
-    max_iter = 30,
-    tol_r2 = 1,
-    max_kappa = Inf
+    sd_threshold = 0,
+    init = "random",
+    nrep = 20
 )
-
-rbind(
-    euclidean = final_loss(fit_euclidean_dir),
-    directional = final_loss(fit_directional)
-)
+fit_directional
 ```
 
 ```{r directional-directions}
@@ -435,40 +645,88 @@ round(fit_directional[["directions"]], 3)
 round(rowSums(fitted(fit_directional)^2), 6)[1:6]
 ```
 
-```{r directional-plot, echo=FALSE, fig.cap = "First two coordinates of polarity-flipped spherical data. Directional AA estimates unit directions; Euclidean AA is pulled by sign-flipped observations."}
+```{r directional-plot, echo=FALSE, fig.cap = "Orthographic view of polarity-flipped spherical data."}
+grid_t <- seq(0, 2 * pi, length.out = 200)
+grid_lat <- seq(-60, 60, by = 30) * pi / 180
+grid_lon <- seq(-60, 60, by = 30) * pi / 180
+view_tilt <- 25 * pi / 180
+view_turn <- 15 * pi / 180
+rot_x <- matrix(
+    c(1, 0, 0,
+      0, cos(view_tilt), -sin(view_tilt),
+      0, sin(view_tilt), cos(view_tilt)),
+    nrow = 3, byrow = TRUE
+)
+rot_z <- matrix(
+    c(cos(view_turn), -sin(view_turn), 0,
+      sin(view_turn), cos(view_turn), 0,
+      0, 0, 1),
+    nrow = 3, byrow = TRUE
+)
+project_sphere <- function(X) {
+    as.matrix(X) %*% t(rot_z %*% rot_x)
+}
+
 plot(
-    X_dir_flip[, 1:2],
-    asp = 1, pch = 19, cex = 0.5,
-    col = ifelse(
-        flip > 0,
-        adjustcolor("black", 0.25),
-        adjustcolor(pal_aa[2], 0.25)
-    ),
-    xlab = "x", ylab = "y", main = "Directional vs Euclidean AA"
+    NA, NA, axes = FALSE,
+    xlim = c(-1.05, 1.05), ylim = c(-1.05, 1.05), asp = 1,
+    main = "Directional AA on the unit sphere", xlab = "", ylab = ""
+)
+polygon(
+    cos(grid_t), sin(grid_t),
+    border = adjustcolor("black", 0.35), col = adjustcolor("black", 0.03),
+    lwd = 1.2
+)
+for (lat in grid_lat) {
+    grid_line <- cbind(
+        cos(lat) * cos(grid_t),
+        cos(lat) * sin(grid_t),
+        sin(lat)
+    )
+    grid_line <- project_sphere(grid_line)
+    lines(grid_line[, 1:2], col = adjustcolor("black", 0.12), lwd = 0.8)
+}
+for (lon in grid_lon) {
+    grid_lat_dense <- seq(-pi / 2, pi / 2, length.out = 200)
+    grid_line <- cbind(
+        cos(grid_lat_dense) * cos(lon),
+        cos(grid_lat_dense) * sin(lon),
+        sin(grid_lat_dense)
+    )
+    grid_line <- project_sphere(grid_line)
+    lines(grid_line[, 1:2], col = adjustcolor("black", 0.12), lwd = 0.8)
+}
+
+X_dir_view <- project_sphere(X_dir_flip)
+A_euclidean_view <- project_sphere(unit_rows(coordinates(fit_euclidean_dir)))
+A_directional_view <- project_sphere(fit_directional[["directions"]])
+front <- X_dir_view[, 3] >= 0
+points(X_dir_view[!front, 1:2], pch = 19, cex = 0.48, col = pal_data)
+points(X_dir_view[front, 1:2], pch = 19, cex = 0.52, col = pal_data_mid)
+points(
+    A_euclidean_view[, 1:2],
+    pch = 4, cex = 1.45, lwd = 1.7, col = pal_aa[2]
 )
 points(
-    unit_rows(coordinates(fit_euclidean_dir))[, 1:2],
-    pch = 4, cex = 1.4, lwd = 1.5, col = "black"
-)
-points(
-    fit_directional[["directions"]][, 1:2],
-    pch = 16, cex = 1.2, col = pal_aa[1]
+    A_directional_view[, 1:2],
+    pch = 16, cex = 1.25, col = pal_aa[1]
 )
 legend(
     "bottomleft",
-    legend = c("Positive row", "Flipped row", "Euclidean AA", "Directional AA"),
+    legend = c("Back hemisphere", "Front hemisphere", "Euclidean AA", "Directional AA"),
     pch = c(19, 19, 4, 16),
-    col = c(adjustcolor("black", 0.45), adjustcolor(pal_aa[2], 0.45),
-            "black", pal_aa[1]),
+    col = c(pal_data, pal_data_mid, pal_aa[2], pal_aa[1]),
+    pt.cex = c(0.7, 0.8, 1.2, 1.1),
     bty = "n"
 )
 ```
 
 Directional AA returns `directional_archetypes`, which extends the ordinary
-`archetypes` class. `fitted()` returns row-normalized reconstructions aligned
-to the original row polarity when the training data are available. The
-directional loss is not comparable to Euclidean SSE, so compare directional
-fits with directional diagnostics, not with ordinary residual sums of squares.
+`archetypes` class. `fitted()` and out-of-sample `predict()` return
+row-normalized reconstructions aligned to the original row polarity when the
+training data are available. The directional loss is not comparable to Euclidean
+SSE, so compare directional fits with directional diagnostics, not with ordinary
+residual sums of squares.
 
 Current limitations are stricter than for Gaussian AA: input must be a dense
 numeric matrix with no zero rows; missing data, robust fitting, and custom
