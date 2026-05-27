@@ -12,8 +12,7 @@ Authors@R: c(
   )
 Description: Fits archetypal analysis models for multivariate and functional
     data, including Euclidean, probabilistic, kernel, and directional variants.
-    Provides
-    initialization helpers, model selection paths, plotting methods, broom
+    Provides initialization helpers, model selection paths, plotting methods, broom
     methods, and a 'tidymodels' recipe step.
 License: GPL (>= 3)
 Encoding: UTF-8
