@@ -12,6 +12,10 @@ Windows R-devel, win-builder, <https://win-builder.r-project.org/66AID23ZP4cn/>:
 
 * This is a new submission.
 
+macOS release, macOS Builder, <https://mac.R-project.org/macbuilder/results/1779894638-816890347dafa8d1/>:
+
+0 errors | 0 warnings | 0 notes
+
 ## revdepcheck results
 
 There are currently no downstream dependencies for this package because it is not yet on CRAN.
