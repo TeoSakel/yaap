@@ -248,6 +248,8 @@ test_that("run_aa validates method and method-specific arguments", {
     expect_error(run_aa(X, K = 3L, method = "nnls", max_kappa = 0), "max_kappa")
     expect_error(run_aa(X, K = 3L, method = "fw", max_iter_optimizer = 0), "max_iter_optimizer")
     expect_error(run_aa(X, K = 3L, method = "fw", max_no_update = 0), "max_no_update")
+    expect_error(run_aa(X, K = 3L, method = "fw", fw_step_offset = 0.5), "fw_step_offset")
+    expect_no_error(suppressWarnings(run_aa(X, K = 3L, method = "fw", fw_step_offset = 1, max_iter = 1L)))
     expect_error(run_aa(X, K = 3L, method = "fw", robust = "bad"), "robust")
     expect_error(run_aa(X, K = 3L, method = "fw", robust = TRUE, robust_args = list(u = 1)), "robust_args")
     expect_error(run_aa(X, K = 3L, method = "fw", missing = TRUE, robust = TRUE), "robust")
@@ -256,6 +258,19 @@ test_that("run_aa validates method and method-specific arguments", {
     expect_error(run_aa(X, K = 3L, method = "pgd", max_kappa = Inf), "unused")
 })
 
+
+test_that("Frank-Wolfe step offset controls first update aggressiveness", {
+    W <- matrix(c(0.7, 0.3, 0.2, 0.8), nrow = 2L, byrow = TRUE)
+    grad <- matrix(c(-1, 0, 0, -1), nrow = 2L, byrow = TRUE)
+
+    full <- .aa_fw_row_step(W, grad, step = 2 / (1 + 1))
+    conservative <- .aa_fw_row_step(W, grad, step = 2 / (1 + 2))
+
+    expect_equal(full, matrix(c(1, 0, 0, 1), nrow = 2L, byrow = TRUE))
+    expect_true(all(conservative >= 0))
+    expect_equal(rowSums(conservative), rep(1, 2L))
+    expect_true(all(conservative > 0))
+})
 
 test_that("Frank-Wolfe records monotone accepted loss and stalls explicitly", {
     X <- toy_matrix()

@@ -22,6 +22,7 @@ archetypes_fw(
   missing = any(is.na(x)),
   nrep = 1L,
   max_iter_optimizer = 10L,
+  fw_step_offset = 2,
   max_no_update = 5L
 )
 }
@@ -66,6 +67,9 @@ The default activates missing-data mode when x contains NAs.}
 \item{max_iter_optimizer}{number of Frank-Wolfe inner steps used for each
 alternating update of the composition and coefficient matrices (default: 10)}
 
+\item{fw_step_offset}{denominator offset in the open-loop Frank-Wolfe step size.
+Smaller values give more aggressive vertex moves; must be at least 1 (default: 2).}
+
 \item{max_no_update}{maximum consecutive outer iterations with no accepted
 Frank-Wolfe update before stopping as stalled (default: 5)}
 }
@@ -88,6 +92,14 @@ The method is often attractive when a fast, sparse approximation is preferred
 over the smoother projected-gradient trajectory. The paper also frames AA as
 an autoencoder because the factorisation maps \eqn{X} through archetypal
 coefficients and back to a reconstruction \eqn{XBA}.
+
+\code{max_iter_optimizer} controls how many Frank-Wolfe vertex moves are attempted
+for each alternating composition or coefficient update. Each inner move uses
+the open-loop step size \eqn{2 / (j + c)}, where \eqn{j} is the inner
+iteration and \eqn{c} is \code{fw_step_offset}. Smaller offsets make the first
+moves more aggressive and closer to a pure vertex replacement; larger offsets
+preserve more of the current iterate and make the alternating updates more
+conservative.
 
 \code{method = "fw"} supports ordinary Euclidean fitting with optional scaling,
 sample weights, robust row weights, random restarts, and sparse matrix

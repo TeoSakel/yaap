@@ -25,6 +25,8 @@
 #' @param nrep number of random restarts; the best fit is returned (default: 1)
 #' @param max_iter_optimizer number of Frank-Wolfe inner steps used for each
 #'   alternating update of the composition and coefficient matrices (default: 10)
+#' @param fw_step_offset denominator offset in the open-loop Frank-Wolfe step size.
+#'   Smaller values give more aggressive vertex moves; must be at least 1 (default: 2).
 #' @param max_no_update maximum consecutive outer iterations with no accepted
 #'   Frank-Wolfe update before stopping as stalled (default: 5)
 #'
@@ -41,6 +43,14 @@
 #' over the smoother projected-gradient trajectory. The paper also frames AA as
 #' an autoencoder because the factorisation maps \eqn{X} through archetypal
 #' coefficients and back to a reconstruction \eqn{XBA}.
+#'
+#' `max_iter_optimizer` controls how many Frank-Wolfe vertex moves are attempted
+#' for each alternating composition or coefficient update. Each inner move uses
+#' the open-loop step size \eqn{2 / (j + c)}, where \eqn{j} is the inner
+#' iteration and \eqn{c} is `fw_step_offset`. Smaller offsets make the first
+#' moves more aggressive and closer to a pure vertex replacement; larger offsets
+#' preserve more of the current iterate and make the alternating updates more
+#' conservative.
 #'
 #' `method = "fw"` supports ordinary Euclidean fitting with optional scaling,
 #' sample weights, robust row weights, random restarts, and sparse matrix
@@ -78,6 +88,7 @@ archetypes_fw <- function(x,
                           missing = any(is.na(x)),
                           nrep = 1L,
                           max_iter_optimizer = 10L,
+                          fw_step_offset = 2,
                           max_no_update = 5L) {
     .aa_fit_engine(
         call = match.call(),
@@ -99,12 +110,14 @@ archetypes_fw <- function(x,
         missing = missing,
         nrep = nrep,
         max_iter_optimizer = max_iter_optimizer,
+        fw_step_offset = fw_step_offset,
         max_no_update = max_no_update
     )
 }
 
 .aa_fw_block <- function(ctx,
                          max_iter_optimizer = 10L,
+                         fw_step_offset = 2,
                          max_no_update = 5L) {
     loss_fun <- if (!identical(ctx[["robust"]], FALSE)) .aa_pgd_weighted_loss else .aa_pgd_loss
     fit_fun <- if (ctx[["missing"]]) .aa_fit_fw_missing else .aa_fit_fw
@@ -114,6 +127,9 @@ archetypes_fw <- function(x,
             .aa_euclidean_check(ctx)
             if (!is_count(max_iter_optimizer)) {
                 stop("`max_iter_optimizer` must be a positive integer.", call. = FALSE)
+            }
+            if (!(is_number(fw_step_offset) && fw_step_offset >= 1)) {
+                stop("`fw_step_offset` must be a single number greater than or equal to 1.", call. = FALSE)
             }
             .aa_check_max_no_update(max_no_update)
             invisible(TRUE)
@@ -134,6 +150,7 @@ archetypes_fw <- function(x,
                 S = init_vars[["S"]],
                 loss = init_vars[["loss"]],
                 max_iter_optimizer = as.integer(max_iter_optimizer),
+                fw_step_offset = fw_step_offset,
                 max_no_update = as.integer(max_no_update)
             )
             if (ctx[["missing"]]) {
@@ -163,6 +180,7 @@ archetypes_fw <- function(x,
                                S,
                                loss,
                                max_iter_optimizer,
+                               fw_step_offset,
                                max_no_update) {
     # Missing FW optimizes only observed entries; B stays row-stochastic.
     denom_eps <- ifelse(eps > 0, eps, 1e-8)
@@ -201,13 +219,13 @@ archetypes_fw <- function(x,
 
         for (j in seq_len(max_iter_optimizer)) {
             grad <- grad_S_matrix(S, R, A)
-            S <- .aa_fw_row_step(S, grad, step = 2 / (j + 1))
+            S <- .aa_fw_row_step(S, grad, step = 2 / (j + fw_step_offset))
             R <- .aa_pgd_missing_resid(M, S, A, X)
         }
 
         for (j in seq_len(max_iter_optimizer)) {
             grad <- grad_aB_matrix(B, X, M, S, A, R, denom_eps)
-            B <- .aa_fw_row_step(B, grad, step = 2 / (j + 1))
+            B <- .aa_fw_row_step(B, grad, step = 2 / (j + fw_step_offset))
             A <- .aa_pgd_missing_A(B, X, M, denom_eps)
             R <- .aa_pgd_missing_resid(M, S, A, X)
         }
@@ -274,6 +292,7 @@ archetypes_fw <- function(x,
                        loss_fun,
                        weight_fun,
                        max_iter_optimizer,
+                       fw_step_offset,
                        max_no_update) {
     # Paper X is M x N. yaap X is N x M, S is paper A^T, and B is paper B^T.
     A0 <- A
@@ -317,7 +336,7 @@ archetypes_fw <- function(x,
         # Paper Algorithm 1: update compositions while archetypes are fixed.
         for (j in seq_len(max_iter_optimizer)) {
             grad <- grad_S_trace(S, AAt, XAt, row_weights = row_weights)
-            S <- .aa_fw_row_step(S, grad, step = 2 / (j + 1))
+            S <- .aa_fw_row_step(S, grad, step = 2 / (j + fw_step_offset))
         }
         S_weighted <- .aa_weight_rows(S, row_weights)
         StS <- crossprod(S_weighted, S)
@@ -327,7 +346,7 @@ archetypes_fw <- function(x,
         # Paper Algorithm 2: update archetype coefficients with S fixed.
         for (j in seq_len(max_iter_optimizer)) {
             grad <- grad_aB_trace(B, A, X, StS, StXXt)
-            B <- .aa_fw_row_step(B, grad, step = 2 / (j + 1))
+            B <- .aa_fw_row_step(B, grad, step = 2 / (j + fw_step_offset))
             A <- B %*% X
         }
         AAt <- tcrossprod(A)
