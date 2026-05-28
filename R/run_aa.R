@@ -29,8 +29,8 @@
 #' }
 #'
 #' @seealso
-#' Solvers: [archetypes_pgd()], [archetypes_nnls()], [archetypes_kernel_pgd()],
-#'   [archetypes_directional()], [archetypes_paa()].
+#' Solvers: [archetypes_pgd()], [archetypes_nnls()], [archetypes_fw()],
+#'   [archetypes_kernel_pgd()], [archetypes_directional()], [archetypes_paa()].
 #' Post-fit: [plot.archetypes()], [predict.archetypes()],
 #'   [fitted.archetypes()], [residuals.archetypes()], [anames()].
 #' Model selection: [AIC.archetypes()].
@@ -119,8 +119,8 @@ run_aa.formula <- function(formula,
 }
 
 #' @rdname run_aa
-#' @param method fitting method. One of `"pgd"`, `"nnls"`, `"kernel"`,
-#'   `"directional"`, or `"paa"` (default: `"pgd"`).
+#' @param method fitting method. One of `"pgd"`, `"nnls"`, `"fw"`,
+#'   `"kernel"`, `"directional"`, or `"paa"` (default: `"pgd"`).
 #' @param family observation family passed to `method = "paa"`. Defaults to
 #'   `"gaussian"`.
 #' @param init initialization method for archetype starting coordinates.
@@ -150,8 +150,8 @@ run_aa.formula <- function(formula,
 #' @param weights optional numeric vector of sample weights (default: `NULL`).
 #'   Internally scaled to mean 1 and square-rooted before use.
 #' @param scale common `run_aa()` scaling argument, present for consistency
-#'   across method dispatch. Only Euclidean Gaussian methods (`"pgd"` and
-#'   `"nnls"`) use it: `FALSE` (default) leaves columns on their original
+#'   across method dispatch. Euclidean Gaussian methods (`"pgd"`, `"nnls"`, and
+#'   `"fw"`) use it: `FALSE` (default) leaves columns on their original
 #'   scale, `TRUE` applies z-score standardization, a positive numeric vector
 #'   divides by user-supplied scale factors, and a symmetric positive-definite
 #'   matrix applies the corresponding feature metric. Specialized methods
@@ -175,8 +175,9 @@ run_aa.formula <- function(formula,
 #' @param nrep number of random restarts; the best fit (lowest final loss)
 #'   is returned (default: 1).
 #' @param ... additional arguments passed to the selected solver. See
-#'   [archetypes_pgd()], [archetypes_nnls()], [archetypes_kernel_pgd()],
-#'   [archetypes_directional()], and [archetypes_paa()] for method-specific
+#'   [archetypes_pgd()], [archetypes_nnls()], [archetypes_fw()],
+#'   [archetypes_kernel_pgd()], [archetypes_directional()], and
+#'   [archetypes_paa()] for method-specific
 #'   parameters.
 #'
 #' @details
@@ -184,13 +185,13 @@ run_aa.formula <- function(formula,
 #' matrix over training samples, not a coordinate matrix. See
 #' [archetypes_kernel_pgd()] for the full kernel initialization contract.
 #'
-#' Robust fitting is not supported for methods "directional" and "paa".
+#' Robust fitting is not supported for methods "fw", "directional", and "paa".
 #' Also compared to [MASS::rlm()] the "MM" mode is not supported in AA.
 #'
 #' @exportS3Method
 run_aa.default <- function(x,
                            K,
-                           method = c("pgd", "nnls", "kernel", "directional", "paa"),
+                           method = c("pgd", "nnls", "fw", "kernel", "directional", "paa"),
                            family = "gaussian",
                            init = NULL,
                            init_args = list(),
@@ -306,7 +307,7 @@ run_aa.fd <- function(x, K, ...) {
 .aa_fit_engine_setup <- function(call,
                                  x,
                                  K,
-                                 method = c("pgd", "nnls", "kernel", "directional", "paa"),
+                                 method = c("pgd", "nnls", "fw", "kernel", "directional", "paa"),
                                  family = "gaussian",
                                  init = NULL,
                                  init_args = list(),
@@ -324,7 +325,7 @@ run_aa.fd <- function(x, K, ...) {
                                  nrep = 1L,
                                  data = NULL,
                                  ...) {
-    method <- match.arg(method, c("pgd", "nnls", "kernel", "directional", "paa"))
+    method <- match.arg(method, c("pgd", "nnls", "fw", "kernel", "directional", "paa"))
     init <- init %||% ifelse(identical(method, "directional"), "dirichlet", "furthest_sum")
     if (!is_logical(missing)) {
         stop("`missing` must be TRUE or FALSE.", call. = FALSE)
@@ -363,6 +364,7 @@ run_aa.fd <- function(x, K, ...) {
     block <- switch(method,
         pgd         = .aa_pgd_block(ctx, ...),
         nnls        = .aa_nnls_block(ctx, ...),
+        fw          = .aa_fw_block(ctx, ...),
         kernel      = .aa_kernel_block(ctx, ...),
         directional = .aa_directional_block(ctx, ...),
         paa         = .aa_paa_block(ctx, ...)
@@ -397,7 +399,7 @@ run_aa.fd <- function(x, K, ...) {
 .aa_fit_engine <- function(call,
                            x,
                            K,
-                           method = c("pgd", "nnls", "kernel", "directional", "paa"),
+                           method = c("pgd", "nnls", "fw", "kernel", "directional", "paa"),
                            family = "gaussian",
                            init = NULL,
                            init_args = list(),

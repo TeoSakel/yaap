@@ -11,7 +11,7 @@ test_that("internal helper names follow package conventions", {
 
     exports <- c(
         "aa_init", "anames", "anames<-", "archetypes_directional",
-        "archetypes_kernel_pgd", "archetypes_nnls", "archetypes_paa",
+        "archetypes_fw", "archetypes_kernel_pgd", "archetypes_nnls", "archetypes_paa",
         "archetypes_path", "archetypes_pgd", "compositions", "consistency", "coordinates",
         "fit_simplex",
         "onehot", "plot_archetypes_compositions", "plot_archetypes_coordinates",

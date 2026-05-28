@@ -91,6 +91,25 @@ test_that("archetypes_path supports fda fd input", {
     expect_matrix_dim(fit[["compositions"]], 5L, 2L)
 })
 
+
+test_that("archetypes_path supports Frank-Wolfe method", {
+    set.seed(42)
+    X <- toy_matrix()
+
+    path <- suppressWarnings(archetypes_path(
+        X,
+        K = 2:3,
+        method = "fw",
+        max_iter = 2L,
+        tol_r2 = 0.95
+    ))
+
+    expect_s3_class(path, "archetypes_path")
+    expect_equal(path$method, "fw")
+    expect_archetypes_fit(path[["K2"]], K = 2L, n = nrow(X), p = ncol(X))
+    expect_archetypes_fit(path[["K3"]], K = 3L, n = nrow(X), p = ncol(X))
+})
+
 test_that("archetypes_path validates K and ambiguous matrix initialization", {
     X <- toy_matrix()
 

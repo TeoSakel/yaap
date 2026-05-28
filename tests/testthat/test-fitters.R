@@ -21,6 +21,28 @@ test_that("Euclidean fitters and run_aa share core toy-data invariants", {
     }
 })
 
+test_that("Frank-Wolfe fitter and run_aa share core toy-data invariants", {
+    X <- toy_matrix()
+    cases <- list(
+        fw = function() archetypes_fw(X, K = 3L, max_iter = 5L, tol_r2 = 0.95),
+        run_aa_fw = function() run_aa(X, K = 3L, method = "fw", max_iter = 5L, tol_r2 = 0.95)
+    )
+
+    for (case in cases) {
+        set.seed(1)
+        fit <- suppressWarnings(case())
+        expect_archetypes_fit(
+            fit,
+            K = 3L,
+            n = nrow(X),
+            p = ncol(X),
+            fitted_dim = dim(X),
+            residual_dim = dim(X)
+        )
+        expect_identical(fit[["fit_info"]][["method"]], "fw")
+    }
+})
+
 test_that("PGD and NNLS integrate with hull_outmost initialization", {
     X <- toy_matrix()
     cases <- list(
@@ -57,11 +79,15 @@ test_that("PGD and NNLS integrate with hull_outmost initialization", {
 test_that("common fitter defaults are synchronized", {
     pgd_formals <- formals(archetypes_pgd)
     nnls_formals <- formals(archetypes_nnls)
+    fw_formals <- formals(archetypes_fw)
 
     expect_identical(pgd_formals[["sd_threshold"]], nnls_formals[["sd_threshold"]])
+    expect_identical(fw_formals[["sd_threshold"]], pgd_formals[["sd_threshold"]])
     expect_identical(pgd_formals[["max_iter"]], nnls_formals[["max_iter"]])
+    expect_identical(fw_formals[["max_iter"]], pgd_formals[["max_iter"]])
     expect_identical(pgd_formals[["tol"]], 1e-4)
     expect_identical(nnls_formals[["tol"]], pgd_formals[["tol"]])
+    expect_identical(fw_formals[["tol"]], pgd_formals[["tol"]])
     expect_identical(formals(run_aa.default)[["tol"]], pgd_formals[["tol"]])
     expect_identical(formals(archetypes_kernel_pgd)[["tol"]], pgd_formals[["tol"]])
     expect_identical(formals(archetypes_directional)[["tol"]], pgd_formals[["tol"]])
@@ -200,11 +226,15 @@ test_that("fitters preserve the user-facing call", {
 
     pgd <- suppressWarnings(archetypes_pgd(X, K = 3L, max_iter = 1L))
     nnls <- suppressWarnings(archetypes_nnls(X, K = 3L, max_iter = 1L))
+    fw <- suppressWarnings(archetypes_fw(X, K = 3L, max_iter = 1L))
     entry <- suppressWarnings(run_aa(X, K = 3L, method = "nnls", max_iter = 1L))
+    entry_fw <- suppressWarnings(run_aa(X, K = 3L, method = "fw", max_iter = 1L))
 
     expect_identical(as.character(pgd[["call"]][[1L]]), "archetypes_pgd")
     expect_identical(as.character(nnls[["call"]][[1L]]), "archetypes_nnls")
+    expect_identical(as.character(fw[["call"]][[1L]]), "archetypes_fw")
     expect_identical(as.character(entry[["call"]][[1L]]), "run_aa")
+    expect_identical(as.character(entry_fw[["call"]][[1L]]), "run_aa")
 })
 
 test_that("run_aa validates method and method-specific arguments", {
@@ -216,8 +246,52 @@ test_that("run_aa validates method and method-specific arguments", {
     expect_error(run_aa(X, K = 3L, method = "nnls", bigM = 0), "bigM")
     expect_error(run_aa(X, K = 3L, method = "nnls", max_no_update = 0), "max_no_update")
     expect_error(run_aa(X, K = 3L, method = "nnls", max_kappa = 0), "max_kappa")
+    expect_error(run_aa(X, K = 3L, method = "fw", max_iter_optimizer = 0), "max_iter_optimizer")
+    expect_error(run_aa(X, K = 3L, method = "fw", max_no_update = 0), "max_no_update")
+    expect_error(run_aa(X, K = 3L, method = "fw", robust = TRUE), "robust")
+    expect_error(run_aa(X, K = 3L, method = "fw", missing = TRUE), "missing")
+    expect_error(run_aa(X, K = 3L, method = "fw", max_kappa = Inf), "unused")
     expect_no_error(suppressWarnings(run_aa(X, K = 3L, method = "nnls", max_kappa = Inf, max_iter = 1L)))
     expect_error(run_aa(X, K = 3L, method = "pgd", max_kappa = Inf), "unused")
+})
+
+
+test_that("Frank-Wolfe records monotone accepted loss and stalls explicitly", {
+    X <- toy_matrix()
+
+    set.seed(1)
+    fit <- suppressWarnings(archetypes_fw(
+        X,
+        K = 3L,
+        max_iter = 10L,
+        max_iter_optimizer = 3L,
+        tol_r2 = 1
+    ))
+    expect_named(fit[["loss"]], c("loss", "r2", "rloss"))
+    expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
+
+    expect_warning(
+        withCallingHandlers(
+            stalled <- archetypes_fw(
+                X,
+                K = 3L,
+                max_iter = 10L,
+                max_iter_optimizer = 1L,
+                max_no_update = 1L,
+                tol = 1e-12,
+                tol_r2 = 1
+            ),
+            warning = function(w) {
+                if (grepl("Algorithm did not converge", conditionMessage(w))) {
+                    invokeRestart("muffleWarning")
+                }
+            }
+        ),
+        "Frank-Wolfe stalled"
+    )
+    expect_false(stalled[["converged"]])
+    expect_true(all(diff(stalled[["loss"]][["loss"]]) <= 1e-8))
+    expect_true(tail(stalled[["loss"]][["rloss"]], 1L) >= tail(stalled[["loss"]][["loss"]], 1L))
 })
 
 test_that("PGD stalls instead of converging when no updates are accepted", {
@@ -377,8 +451,9 @@ test_that("PGD and NNLS accept matrix scale and return original-unit coordinates
 
     pgd <- suppressWarnings(archetypes_pgd(X, K = 3L, scale = scale, max_iter = 2L))
     nnls <- suppressWarnings(archetypes_nnls(X, K = 3L, scale = scale, max_iter = 2L))
+    fw <- suppressWarnings(archetypes_fw(X, K = 3L, scale = scale, max_iter = 2L))
 
-    for (fit in list(pgd, nnls)) {
+    for (fit in list(pgd, nnls, fw)) {
         expect_archetypes_fit(fit, K = 3L, n = nrow(X), p = ncol(X))
         expect_equal(colnames(coordinates(fit)), colnames(X))
     }
@@ -577,10 +652,41 @@ test_that("archetypes fitters accept sparse input with expected invariants", {
         sd_threshold = 0,
         max_iter = 1L
     ))
+    set.seed(2)
+    fw <- suppressWarnings(archetypes_fw(
+        X,
+        K = 2L,
+        init = "random",
+        sd_threshold = 0,
+        max_iter = 2L
+    ))
 
-    for (fit in list(pgd, nnls)) {
+    for (fit in list(pgd, nnls, fw)) {
         expect_archetypes_fit(fit, K = 2L, n = nrow(X), p = ncol(X))
     }
+})
+
+
+test_that("Frank-Wolfe supports weights, nrep, and Euclidean edge cases", {
+    X <- toy_matrix()
+    weights <- rep(1, nrow(X))
+    weights[1L] <- 2
+
+    set.seed(1)
+    weighted <- suppressWarnings(archetypes_fw(
+        X,
+        K = 3L,
+        weights = weights,
+        nrep = 2L,
+        max_iter = 2L
+    ))
+    expect_archetypes_fit(weighted, K = 3L, n = nrow(X), p = ncol(X))
+    expect_equal(weighted[["fit_info"]][["sample_weights"]], TRUE)
+
+    one <- suppressWarnings(archetypes_fw(X, K = 1L, max_iter = 2L))
+    full <- suppressWarnings(archetypes_fw(X[1:4, , drop = FALSE], K = 4L, max_iter = 2L))
+    expect_archetypes_fit(one, K = 1L, n = nrow(X), p = ncol(X))
+    expect_archetypes_fit(full, K = 4L, n = 4L, p = ncol(X))
 })
 
 test_that("missing-data PGD defaults on for dense NA input", {

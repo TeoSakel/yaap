@@ -14,7 +14,7 @@ run_aa(x, ...)
 \method{run_aa}{default}(
   x,
   K,
-  method = c("pgd", "nnls", "kernel", "directional", "paa"),
+  method = c("pgd", "nnls", "fw", "kernel", "directional", "paa"),
   family = "gaussian",
   init = NULL,
   init_args = list(),
@@ -40,8 +40,9 @@ run_aa(x, ...)
 with a class-specific \code{run_aa()} method.}
 
 \item{...}{additional arguments passed to the selected solver. See
-\code{\link[=archetypes_pgd]{archetypes_pgd()}}, \code{\link[=archetypes_nnls]{archetypes_nnls()}}, \code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}},
-\code{\link[=archetypes_directional]{archetypes_directional()}}, and \code{\link[=archetypes_paa]{archetypes_paa()}} for method-specific
+\code{\link[=archetypes_pgd]{archetypes_pgd()}}, \code{\link[=archetypes_nnls]{archetypes_nnls()}}, \code{\link[=archetypes_fw]{archetypes_fw()}},
+\code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}}, \code{\link[=archetypes_directional]{archetypes_directional()}}, and
+\code{\link[=archetypes_paa]{archetypes_paa()}} for method-specific
 parameters.}
 
 \item{formula}{formula selecting variables from \code{data}. The response, when
@@ -57,8 +58,8 @@ present, is ignored.}
 \item{na.action}{function controlling missing-value handling for formula
 input. Defaults to \code{\link[stats:na.omit]{stats::na.omit()}}.}
 
-\item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, \code{"kernel"},
-\code{"directional"}, or \code{"paa"} (default: \code{"pgd"}).}
+\item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, \code{"fw"},
+\code{"kernel"}, \code{"directional"}, or \code{"paa"} (default: \code{"pgd"}).}
 
 \item{family}{observation family passed to \code{method = "paa"}. Defaults to
 \code{"gaussian"}.}
@@ -93,8 +94,8 @@ See \code{vignette("initialization", package = "yaap")} for a comparison.}
 Internally scaled to mean 1 and square-rooted before use.}
 
 \item{scale}{common \code{run_aa()} scaling argument, present for consistency
-across method dispatch. Only Euclidean Gaussian methods (\code{"pgd"} and
-\code{"nnls"}) use it: \code{FALSE} (default) leaves columns on their original
+across method dispatch. Euclidean Gaussian methods (\code{"pgd"}, \code{"nnls"}, and
+\code{"fw"}) use it: \code{FALSE} (default) leaves columns on their original
 scale, \code{TRUE} applies z-score standardization, a positive numeric vector
 divides by user-supplied scale factors, and a symmetric positive-definite
 matrix applies the corresponding feature metric. Specialized methods
@@ -154,7 +155,7 @@ For \code{method = "kernel"}, matrix-valued \code{init} is a \verb{K x N} coeffi
 matrix over training samples, not a coordinate matrix. See
 \code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}} for the full kernel initialization contract.
 
-Robust fitting is not supported for methods "directional" and "paa".
+Robust fitting is not supported for methods "fw", "directional", and "paa".
 Also compared to \code{\link[MASS:rlm]{MASS::rlm()}} the "MM" mode is not supported in AA.
 
 \code{run_aa.fd()} fits archetypal analysis to the coefficient matrix of an
@@ -189,8 +190,8 @@ arch_fd <- coordinates(fit_fd)
 
 }
 \seealso{
-Solvers: \code{\link[=archetypes_pgd]{archetypes_pgd()}}, \code{\link[=archetypes_nnls]{archetypes_nnls()}}, \code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}},
-\code{\link[=archetypes_directional]{archetypes_directional()}}, \code{\link[=archetypes_paa]{archetypes_paa()}}.
+Solvers: \code{\link[=archetypes_pgd]{archetypes_pgd()}}, \code{\link[=archetypes_nnls]{archetypes_nnls()}}, \code{\link[=archetypes_fw]{archetypes_fw()}},
+\code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}}, \code{\link[=archetypes_directional]{archetypes_directional()}}, \code{\link[=archetypes_paa]{archetypes_paa()}}.
 Post-fit: \code{\link[=plot.archetypes]{plot.archetypes()}}, \code{\link[=predict.archetypes]{predict.archetypes()}},
 \code{\link[=fitted.archetypes]{fitted.archetypes()}}, \code{\link[=residuals.archetypes]{residuals.archetypes()}}, \code{\link[=anames]{anames()}}.
 Model selection: \code{\link[=AIC.archetypes]{AIC.archetypes()}}.

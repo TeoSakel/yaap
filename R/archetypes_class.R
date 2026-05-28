@@ -845,6 +845,7 @@ AIC.archetypes <- function(object, ...) {
     method <- switch(info[["method"]] %||% "",
         pgd = "PGD",
         nnls = "NNLS",
+        fw = "Frank-Wolfe",
         paa = "PAA",
         kernel = "Kernel",
         directional = "Directional",

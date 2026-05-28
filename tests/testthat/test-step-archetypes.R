@@ -93,6 +93,26 @@ test_that("step_archetypes works with nnls method", {
     expect_true(all(c("A1", "A2", "A3") %in% colnames(baked)))
 })
 
+
+test_that("step_archetypes works with fw method", {
+    skip_if_not_installed("recipes")
+    library(recipes)
+
+    rec <- suppressWarnings(
+        recipe(~., data = toy_data()) |>
+            step_archetypes(all_numeric(),
+                num_comp = 3L,
+                fit_method = "fw", seed = 42L,
+                options = list(max_iter = 2L)
+            ) |>
+            prep(training = toy_data())
+    )
+
+    baked <- bake(rec, new_data = toy_data())
+    expect_true(all(c("A1", "A2", "A3") %in% colnames(baked)))
+    expect_equal(rec$steps[[1L]]$res[["fit_info"]][["method"]], "fw")
+})
+
 test_that("seed makes fitting reproducible", {
     skip_if_not_installed("recipes")
     library(recipes)

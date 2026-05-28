@@ -40,7 +40,7 @@ called)?  Set by \code{prep()} — do not change manually.}
 \item{delta}{Convexity penalty for the pgd solver (default \code{0}). Ignored
 when \code{fit_method != "pgd"}. Tunable via \code{\link[tune:tune]{tune::tune()}}.}
 
-\item{fit_method}{Solver to use: \code{"pgd"} (default), \code{"nnls"}, or \code{"paa"}.}
+\item{fit_method}{Solver to use: \code{"pgd"} (default), \code{"nnls"}, \code{"fw"}, or \code{"paa"}.}
 
 \item{options}{A named list of additional arguments passed to \code{\link[=run_aa]{run_aa()}}
 (e.g. \code{nrep}, \code{max_iter}, \code{scale}). These are not validated here.}

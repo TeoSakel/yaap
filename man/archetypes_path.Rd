@@ -13,7 +13,7 @@ archetypes_path(x, K, ...)
 \method{archetypes_path}{default}(
   x,
   K,
-  method = c("pgd", "nnls", "kernel", "directional", "paa"),
+  method = c("pgd", "nnls", "fw", "kernel", "directional", "paa"),
   family = "gaussian",
   init = NULL,
   init_args = list(),
@@ -48,8 +48,8 @@ a vector is sorted and deduplicated.}
 \item{na.action}{function controlling missing-value handling for formula
 input. Defaults to \code{\link[stats:na.omit]{stats::na.omit()}}.}
 
-\item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, \code{"kernel"},
-\code{"directional"}, or \code{"paa"} (default: \code{"pgd"}).}
+\item{method}{fitting method. One of \code{"pgd"}, \code{"nnls"}, \code{"fw"},
+\code{"kernel"}, \code{"directional"}, or \code{"paa"} (default: \code{"pgd"}).}
 
 \item{family}{observation family passed to \code{method = "paa"}. Defaults to
 \code{"gaussian"}.}
@@ -84,8 +84,8 @@ See \code{vignette("initialization", package = "yaap")} for a comparison.}
 Internally scaled to mean 1 and square-rooted before use.}
 
 \item{scale}{common \code{run_aa()} scaling argument, present for consistency
-across method dispatch. Only Euclidean Gaussian methods (\code{"pgd"} and
-\code{"nnls"}) use it: \code{FALSE} (default) leaves columns on their original
+across method dispatch. Euclidean Gaussian methods (\code{"pgd"}, \code{"nnls"}, and
+\code{"fw"}) use it: \code{FALSE} (default) leaves columns on their original
 scale, \code{TRUE} applies z-score standardization, a positive numeric vector
 divides by user-supplied scale factors, and a symmetric positive-definite
 matrix applies the corresponding feature metric. Specialized methods

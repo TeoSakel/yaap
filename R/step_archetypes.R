@@ -16,7 +16,7 @@
 #'   [tune::tune()].
 #' @param delta Convexity penalty for the pgd solver (default `0`). Ignored
 #'   when `fit_method != "pgd"`. Tunable via [tune::tune()].
-#' @param fit_method Solver to use: `"pgd"` (default), `"nnls"`, or `"paa"`.
+#' @param fit_method Solver to use: `"pgd"` (default), `"nnls"`, `"fw"`, or `"paa"`.
 #' @param options A named list of additional arguments passed to [run_aa()]
 #'   (e.g. `nrep`, `max_iter`, `scale`). These are not validated here.
 #' @param reconstruct If `TRUE`, `bake()` also appends columns named
