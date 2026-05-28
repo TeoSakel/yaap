@@ -10,6 +10,8 @@ archetypes_fw(
   init = "furthest_sum",
   init_args = list(),
   weights = NULL,
+  robust = FALSE,
+  robust_args = list(),
   scale = FALSE,
   sd_threshold = 1e-06,
   max_iter = 100L,
@@ -32,6 +34,11 @@ archetypes_fw(
 \item{init_args}{list of additional arguments for the initialization function.}
 
 \item{weights}{optional vector of sample weights (default: NULL)}
+
+\item{robust}{FALSE for ordinary squared error, TRUE for "psi.bisquare",
+a MASS psi function name, or a custom psi function.}
+
+\item{robust_args}{list of tuning arguments passed to the robust psi function.}
 
 \item{scale}{scaling or metric embedding used before fitting; see
 \code{\link[=archetypes_pgd]{archetypes_pgd()}} for details (default: FALSE).}
@@ -79,8 +86,8 @@ an autoencoder because the factorisation maps \eqn{X} through archetypal
 coefficients and back to a reconstruction \eqn{XBA}.
 
 \code{method = "fw"} supports ordinary Euclidean fitting with optional scaling,
-sample weights, random restarts, and sparse matrix input. Robust and
-missing-data objectives are not supported by this solver.
+sample weights, robust row weights, random restarts, and sparse matrix
+input. Missing-data objectives are not supported by this solver.
 }
 \examples{
 toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))

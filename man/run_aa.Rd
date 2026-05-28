@@ -155,7 +155,7 @@ For \code{method = "kernel"}, matrix-valued \code{init} is a \verb{K x N} coeffi
 matrix over training samples, not a coordinate matrix. See
 \code{\link[=archetypes_kernel_pgd]{archetypes_kernel_pgd()}} for the full kernel initialization contract.
 
-Robust fitting is not supported for methods "fw", "directional", and "paa".
+Robust fitting is not supported for methods "directional" and "paa".
 Also compared to \code{\link[MASS:rlm]{MASS::rlm()}} the "MM" mode is not supported in AA.
 
 \code{run_aa.fd()} fits archetypal analysis to the coefficient matrix of an

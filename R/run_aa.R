@@ -185,7 +185,7 @@ run_aa.formula <- function(formula,
 #' matrix over training samples, not a coordinate matrix. See
 #' [archetypes_kernel_pgd()] for the full kernel initialization contract.
 #'
-#' Robust fitting is not supported for methods "fw", "directional", and "paa".
+#' Robust fitting is not supported for methods "directional" and "paa".
 #' Also compared to [MASS::rlm()] the "MM" mode is not supported in AA.
 #'
 #' @exportS3Method

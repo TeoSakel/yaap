@@ -7,6 +7,9 @@
 #' @param init initialization method; see [run_aa()] for available options.
 #' @param init_args list of additional arguments for the initialization function.
 #' @param weights optional vector of sample weights (default: NULL)
+#' @param robust FALSE for ordinary squared error, TRUE for "psi.bisquare",
+#'   a MASS psi function name, or a custom psi function.
+#' @param robust_args list of tuning arguments passed to the robust psi function.
 #' @param scale scaling or metric embedding used before fitting; see
 #'   [archetypes_pgd()] for details (default: FALSE).
 #' @param sd_threshold threshold for feature standard deviation to filter
@@ -38,8 +41,8 @@
 #' coefficients and back to a reconstruction \eqn{XBA}.
 #'
 #' `method = "fw"` supports ordinary Euclidean fitting with optional scaling,
-#' sample weights, random restarts, and sparse matrix input. Robust and
-#' missing-data objectives are not supported by this solver.
+#' sample weights, robust row weights, random restarts, and sparse matrix
+#' input. Missing-data objectives are not supported by this solver.
 #'
 #' @returns An object of class \code{archetypes}.
 #'
@@ -60,6 +63,8 @@ archetypes_fw <- function(x,
                           init = "furthest_sum",
                           init_args = list(),
                           weights = NULL,
+                          robust = FALSE,
+                          robust_args = list(),
                           scale = FALSE,
                           sd_threshold = 1e-6,
                           max_iter = 100L,
@@ -79,8 +84,8 @@ archetypes_fw <- function(x,
         init_args = init_args,
         weights = weights,
         scale = scale,
-        robust = FALSE,
-        robust_args = list(),
+        robust = robust,
+        robust_args = robust_args,
         sd_threshold = sd_threshold,
         max_iter = max_iter,
         tol = tol,
@@ -97,14 +102,13 @@ archetypes_fw <- function(x,
 .aa_fw_block <- function(ctx,
                          max_iter_optimizer = 10L,
                          max_no_update = 5L) {
+    loss_fun <- if (!identical(ctx[["robust"]], FALSE)) .aa_pgd_weighted_loss else .aa_pgd_loss
+
     list(
         check = function(ctx) {
             .aa_euclidean_check(ctx)
             if (ctx[["missing"]]) {
                 stop("`missing = TRUE` is not supported for `method = 'fw'`.", call. = FALSE)
-            }
-            if (!identical(ctx[["robust"]], FALSE)) {
-                stop("`robust` is not supported for `method = 'fw'`.", call. = FALSE)
             }
             if (!is_count(max_iter_optimizer)) {
                 stop("`max_iter_optimizer` must be a positive integer.", call. = FALSE)
@@ -127,6 +131,8 @@ archetypes_fw <- function(x,
                 B = init_vars[["B"]],
                 S = init_vars[["S"]],
                 loss = init_vars[["loss"]],
+                loss_fun = loss_fun,
+                weight_fun = .aa_weight_fun(ctx[["robust"]], ctx[["robust_args"]]),
                 max_iter_optimizer = as.integer(max_iter_optimizer),
                 max_no_update = as.integer(max_no_update)
             )
@@ -148,11 +154,13 @@ archetypes_fw <- function(x,
                        B,
                        S,
                        loss,
+                       loss_fun,
+                       weight_fun,
                        max_iter_optimizer,
                        max_no_update) {
     # Paper X is M x N. yaap X is N x M, S is paper A^T, and B is paper B^T.
     A0 <- A
-    loss_terms <- .aa_pgd_loss(X, A, S)
+    loss_terms <- loss_fun(X, A, S, weight_fun = weight_fun)
     loss[["loss"]][1L] <- loss_terms[["rss"]]
     loss[["r2"]][1L] <- 1 - loss_terms[["rss"]] / loss_terms[["xss"]]
     loss[["rloss"]] <- rep(NA_real_, length(loss[["loss"]]))
@@ -167,11 +175,14 @@ archetypes_fw <- function(x,
             delta = 0,
             i = 0L,
             loss = loss,
-            converged = TRUE
+            converged = TRUE,
+            row_weights = loss_terms[["row_weights"]]
         ))
     }
 
     xss <- loss_terms[["xss"]]
+    row_xss <- loss_terms[["row_xss"]]
+    row_weights <- loss_terms[["row_weights"]]
     AAt <- loss_terms[["AAt"]]
     XAt <- loss_terms[["XAt"]]
     StS <- loss_terms[["StS"]]
@@ -188,11 +199,12 @@ archetypes_fw <- function(x,
 
         # Paper Algorithm 1: update compositions while archetypes are fixed.
         for (j in seq_len(max_iter_optimizer)) {
-            grad <- grad_S_trace(S, AAt, XAt)
+            grad <- grad_S_trace(S, AAt, XAt, row_weights = row_weights)
             S <- .aa_fw_row_step(S, grad, step = 2 / (j + 1))
         }
-        StS <- crossprod(S)
-        StX <- crossprod(S, X)
+        S_weighted <- .aa_weight_rows(S, row_weights)
+        StS <- crossprod(S_weighted, S)
+        StX <- crossprod(S_weighted, X)
         StXXt <- tcrossprod(StX, X)
 
         # Paper Algorithm 2: update archetype coefficients with S fixed.
@@ -204,15 +216,18 @@ archetypes_fw <- function(x,
         AAt <- tcrossprod(A)
         XAt <- tcrossprod(X, A)
 
-        loss_terms <- .aa_pgd_loss(
+        loss_terms <- loss_fun(
             X, A, S,
+            weight_fun = weight_fun,
             xss = xss,
+            row_xss = row_xss,
             AAt = AAt,
             XAt = XAt,
             StS = StS,
             StX = StX,
             StXXt = StXXt
         )
+        row_weights <- loss_terms[["row_weights"]]
 
         if (loss_terms[["rss"]] < best_loss_terms[["rss"]]) {
             best_loss_terms <- loss_terms
@@ -249,7 +264,17 @@ archetypes_fw <- function(x,
     }
 
     best_args[["S"]] <- fit_simplex(best_args[["A"]], X, eps = eps)
-    c(best_args, list(A0 = A0, delta = 0, i = i, loss = loss, converged = converged))
+    c(
+        best_args,
+        list(
+            A0 = A0,
+            delta = 0,
+            i = i,
+            loss = loss,
+            converged = converged,
+            row_weights = best_loss_terms[["row_weights"]]
+        )
+    )
 }
 
 .aa_fw_row_step <- function(W, gradient, step) {

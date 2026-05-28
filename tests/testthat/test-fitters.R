@@ -248,7 +248,8 @@ test_that("run_aa validates method and method-specific arguments", {
     expect_error(run_aa(X, K = 3L, method = "nnls", max_kappa = 0), "max_kappa")
     expect_error(run_aa(X, K = 3L, method = "fw", max_iter_optimizer = 0), "max_iter_optimizer")
     expect_error(run_aa(X, K = 3L, method = "fw", max_no_update = 0), "max_no_update")
-    expect_error(run_aa(X, K = 3L, method = "fw", robust = TRUE), "robust")
+    expect_error(run_aa(X, K = 3L, method = "fw", robust = "bad"), "robust")
+    expect_error(run_aa(X, K = 3L, method = "fw", robust = TRUE, robust_args = list(u = 1)), "robust_args")
     expect_error(run_aa(X, K = 3L, method = "fw", missing = TRUE), "missing")
     expect_error(run_aa(X, K = 3L, method = "fw", max_kappa = Inf), "unused")
     expect_no_error(suppressWarnings(run_aa(X, K = 3L, method = "nnls", max_kappa = Inf, max_iter = 1L)))
@@ -850,6 +851,14 @@ test_that("robust fitters accept MASS psi selectors", {
         max_iter = 3L,
         tol_r2 = 0.95
     ))
+    fw <- suppressWarnings(archetypes_fw(
+        X,
+        K = 3L,
+        robust = "psi.huber",
+        robust_args = list(k = 1.345),
+        max_iter = 5L,
+        tol_r2 = 0.95
+    ))
     kernel <- suppressWarnings(archetypes_kernel_pgd(
         X,
         K = 3L,
@@ -860,11 +869,13 @@ test_that("robust fitters accept MASS psi selectors", {
         tol_r2 = 0.95
     ))
 
-    for (fit in list(pgd, nnls, kernel)) {
+    for (fit in list(pgd, nnls, fw, kernel)) {
         expect_archetypes_fit(fit, K = 3L, n = nrow(X), p = ncol(X))
         expect_true(fit[["fit_info"]][["robust"]])
         expect_match(fit[["fit_info"]][["robust_psi"]], "psi\\.(huber|hampel)")
     }
+    expect_length(fw[["weights"]], nrow(X))
+    expect_true(is_all_finite(fw[["weights"]]))
 })
 
 test_that("robust archetypes fitters keep expected invariants", {
@@ -887,9 +898,34 @@ test_that("robust archetypes fitters keep expected invariants", {
         tol_r2 = 0.95
     ))
 
-    for (fit in list(pgd, nnls)) {
+    fw <- suppressWarnings(archetypes_fw(
+        X,
+        K = 3L,
+        robust = TRUE,
+        max_iter = 5L,
+        tol_r2 = 0.95
+    ))
+    entry_fw <- suppressWarnings(run_aa(
+        X,
+        K = 3L,
+        method = "fw",
+        robust = TRUE,
+        max_iter = 5L,
+        tol_r2 = 0.95
+    ))
+
+    for (fit in list(pgd, nnls, fw, entry_fw)) {
         expect_archetypes_fit(fit, K = 3L, n = nrow(X), p = ncol(X))
+        expect_true(fit[["fit_info"]][["robust"]])
+        expect_equal(fit[["fit_info"]][["robust_psi"]], "psi.bisquare")
     }
+    for (fit in list(fw, entry_fw)) {
+        expect_length(fit[["weights"]], nrow(X))
+        expect_true(is_all_finite(fit[["weights"]]))
+    }
+    expect_identical(fw[["fit_info"]][["method"]], "fw")
+    expect_identical(entry_fw[["fit_info"]][["method"]], "fw")
+    expect_identical(as.character(entry_fw[["call"]][[1L]]), "run_aa")
 })
 
 test_that("archetypes fitters accept named coordinate matrix initialization", {
