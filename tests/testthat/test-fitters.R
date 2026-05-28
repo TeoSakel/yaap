@@ -250,7 +250,7 @@ test_that("run_aa validates method and method-specific arguments", {
     expect_error(run_aa(X, K = 3L, method = "fw", max_no_update = 0), "max_no_update")
     expect_error(run_aa(X, K = 3L, method = "fw", robust = "bad"), "robust")
     expect_error(run_aa(X, K = 3L, method = "fw", robust = TRUE, robust_args = list(u = 1)), "robust_args")
-    expect_error(run_aa(X, K = 3L, method = "fw", missing = TRUE), "missing")
+    expect_error(run_aa(X, K = 3L, method = "fw", missing = TRUE, robust = TRUE), "robust")
     expect_error(run_aa(X, K = 3L, method = "fw", max_kappa = Inf), "unused")
     expect_no_error(suppressWarnings(run_aa(X, K = 3L, method = "nnls", max_kappa = Inf, max_iter = 1L)))
     expect_error(run_aa(X, K = 3L, method = "pgd", max_kappa = Inf), "unused")
@@ -767,6 +767,130 @@ test_that("missing-data PGD treats sparse structural zeros as missing", {
     expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
 })
 
+test_that("missing-data Frank-Wolfe defaults on for dense NA input", {
+    X <- missing_test_matrix()
+
+    set.seed(3)
+    fit <- suppressWarnings(archetypes_fw(
+        X,
+        K = 2L,
+        init = "random",
+        sd_threshold = 0,
+        max_iter = 3L
+    ))
+    set.seed(3)
+    entry <- suppressWarnings(run_aa(
+        X,
+        K = 2L,
+        method = "fw",
+        init = "random",
+        sd_threshold = 0,
+        max_iter = 3L
+    ))
+
+    for (obj in list(fit, entry)) {
+        expect_archetypes_fit(obj, K = 2L, n = nrow(X), p = ncol(X))
+        expect_equal(obj[["fit_info"]][["method"]], "fw")
+        expect_true(obj[["fit_info"]][["missing"]])
+        expect_true(all(diff(obj[["loss"]][["loss"]]) <= 1e-8))
+        expect_true(is_all_finite(obj[["loss"]][["rloss"]]))
+    }
+    expect_identical(as.character(entry[["call"]][[1L]]), "run_aa")
+})
+
+test_that("missing-data Frank-Wolfe supports zero optimizer iterations", {
+    X <- missing_test_matrix()
+
+    set.seed(3)
+    fit <- suppressWarnings(archetypes_fw(
+        X,
+        K = 2L,
+        init = "random",
+        sd_threshold = 0,
+        max_iter = 0L
+    ))
+
+    expect_s3_class(fit, "archetypes")
+    expect_true(fit[["converged"]])
+    expect_equal(fit[["fit_info"]][["missing"]], TRUE)
+    expect_equal(nrow(fit[["loss"]]), 1L)
+    expect_true(is_number(fit[["loss"]][["loss"]]))
+})
+
+test_that("missing-data Frank-Wolfe handles K edge cases directly", {
+    X <- missing_test_matrix()
+
+    fit_mean <- archetypes_fw(
+        X,
+        K = 1L,
+        scale = FALSE,
+        sd_threshold = 0,
+        max_iter = 0L
+    )
+    fit_identity <- archetypes_fw(
+        X,
+        K = nrow(X),
+        scale = FALSE,
+        sd_threshold = 0,
+        max_iter = 0L
+    )
+
+    expect_equal(unname(coordinates(fit_mean)[1L, ]), unname(colMeans(X, na.rm = TRUE)))
+    expect_equal(nrow(fit_mean[["loss"]]), 1L)
+    expect_true(is.na(AIC(fit_mean)))
+    expect_equal(unname(crossprod(as.matrix(fit_identity[["coefficients"]]))), diag(nrow(X)), ignore_attr = TRUE)
+    expect_equal(fit_identity[["loss"]][["loss"]], 0)
+    expect_equal(nrow(fit_identity[["loss"]]), 1L)
+})
+
+test_that("missing-data Frank-Wolfe treats sparse structural zeros as missing", {
+    X <- sparse_test_matrix()
+
+    set.seed(4)
+    fit <- suppressWarnings(archetypes_fw(
+        X,
+        K = 2L,
+        init = "random",
+        missing = TRUE,
+        sd_threshold = 0,
+        max_iter = 3L
+    ))
+
+    expect_archetypes_fit(fit, K = 2L, n = nrow(X), p = ncol(X))
+    expect_true(fit[["fit_info"]][["missing"]])
+    expect_true(all(diff(fit[["loss"]][["loss"]]) <= 1e-8))
+})
+
+test_that("missing-data Frank-Wolfe vertex choice follows the masked gradient", {
+    X_raw <- matrix(
+        c(
+            1, NA,
+            0, 2,
+            3, 1
+        ),
+        nrow = 3L,
+        byrow = TRUE
+    )
+    pre <- .aa_test_euclidean_preprocess(X_raw, scale = FALSE, missing = TRUE)
+    X <- pre[["X"]]
+    M <- pre[["M"]]
+    S <- matrix(c(0.7, 0.3, 0.2, 0.8, 0.5, 0.5), nrow = 3L, byrow = TRUE)
+    B <- matrix(c(0.6, 0.2, 0.2, 0.1, 0.4, 0.5), nrow = 2L, byrow = TRUE)
+    A <- .aa_pgd_missing_A(B, X, M, 1e-8)
+    R <- .aa_pgd_missing_resid(M, S, A, X)
+    grad <- grad_S_matrix(S, R, A)
+
+    S_step <- .aa_fw_row_step(S, grad, step = 1)
+    chosen <- max.col(S_step, ties.method = "first")
+    expected <- max.col(-as.matrix(grad), ties.method = "first")
+    directional_derivative <- vapply(seq_len(ncol(S)), function(k) {
+        grad[1L, k] - sum(grad[1L, ] * S[1L, ])
+    }, numeric(1))
+
+    expect_equal(chosen, expected)
+    expect_lte(directional_derivative[chosen[1L]], min(directional_derivative) + 1e-12)
+})
+
 test_that("missing preprocessing scales observed entries", {
     X <- matrix(
         c(
@@ -826,6 +950,9 @@ test_that("missing-data PGD validates unsupported combinations", {
     expect_error(archetypes_pgd(X, K = 3L, robust = "psi.huber"), "robust")
     expect_error(archetypes_pgd(X, K = 3L, weights = rep(1, nrow(X))), "weights")
     expect_error(archetypes_pgd(X, K = 3L, scale = diag(ncol(X))), "matrix `scale`")
+    expect_error(run_aa(X, K = 3L, method = "fw", robust = TRUE), "robust")
+    expect_error(archetypes_fw(X, K = 3L, weights = rep(1, nrow(X))), "weights")
+    expect_error(archetypes_fw(X, K = 3L, scale = diag(ncol(X))), "matrix `scale`")
     expect_error(run_aa(X, K = 3L, method = "nnls"), "missing = TRUE")
 })
 

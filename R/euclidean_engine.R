@@ -1,8 +1,8 @@
 # euclidean_engine.R: Shared Euclidean fitting lifecycle helpers
 
 .aa_check_missing_route <- function(ctx) {
-    if (!identical(ctx[["method"]], "pgd") && ctx[["missing"]]) {
-        stop("`missing = TRUE` is only supported for `method = 'pgd'`.", call. = FALSE)
+    if (!(ctx[["method"]] %in% c("pgd", "fw")) && ctx[["missing"]]) {
+        stop("`missing = TRUE` is only supported for `method = 'pgd'` or `method = 'fw'`.", call. = FALSE)
     }
     if (ctx[["missing"]] && !identical(ctx[["robust"]], FALSE)) {
         stop("`robust` is not supported with `missing = TRUE`.", call. = FALSE)

@@ -19,6 +19,7 @@ archetypes_fw(
   tol_r2 = 0.9999,
   eps = ifelse(inherits(x, "sparseMatrix"), 0, 1e-08),
   verbose = FALSE,
+  missing = any(is.na(x)),
   nrep = 1L,
   max_iter_optimizer = 10L,
   max_no_update = 5L
@@ -57,6 +58,9 @@ low-variance features (default: 1e-6)}
 
 \item{verbose}{whether to print progress messages (default: FALSE)}
 
+\item{missing}{whether to fit the missing-data observed-entry objective.
+The default activates missing-data mode when x contains NAs.}
+
 \item{nrep}{number of random restarts; the best fit is returned (default: 1)}
 
 \item{max_iter_optimizer}{number of Frank-Wolfe inner steps used for each
@@ -87,7 +91,8 @@ coefficients and back to a reconstruction \eqn{XBA}.
 
 \code{method = "fw"} supports ordinary Euclidean fitting with optional scaling,
 sample weights, robust row weights, random restarts, and sparse matrix
-input. Missing-data objectives are not supported by this solver.
+input. With \code{missing = TRUE}, FW minimizes reconstruction error over only
+observed entries. Robust fitting remains incompatible with missing-data fits.
 }
 \examples{
 toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
