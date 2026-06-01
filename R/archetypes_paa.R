@@ -53,8 +53,8 @@
 #' archetypes_paa(as.matrix(toy), K = 3)
 #'
 #' @references
-#' Seth, S., & Eugster, M. J. A. (2014). Probabilistic archetypal analysis.
-#' arXiv:1312.7604.
+#' Seth, S., & Eugster, M. J. A. (2016). Probabilistic archetypal analysis.
+#' *Machine Learning*, 102, 85-113. \doi{10.1007/s10994-015-5498-8}
 #'
 #' @export
 archetypes_paa <- function(x,

@@ -29,7 +29,10 @@ compositions, and initial coordinates when present.
 Get or set the names of archetypes in an archetype analysis result.
 }
 \examples{
-# anames(fit)
-# anames(fit) <- c("A", "B", "C")
+toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
+fit <- run_aa(as.matrix(toy), K = 3, max_iter = 20, tol_r2 = 0.95)
+anames(fit)
+anames(fit) <- c("A", "B", "C")
+anames(fit)
 
 }

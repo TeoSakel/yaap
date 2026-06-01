@@ -232,8 +232,11 @@ compositions.archetypes <- function(object, ...) {
 #' compositions, and initial coordinates when present.
 #'
 #' @examples
-#' # anames(fit)
-#' # anames(fit) <- c("A", "B", "C")
+#' toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
+#' fit <- run_aa(as.matrix(toy), K = 3, max_iter = 20, tol_r2 = 0.95)
+#' anames(fit)
+#' anames(fit) <- c("A", "B", "C")
+#' anames(fit)
 #'
 #' @rdname archetypes
 #' @export
@@ -298,7 +301,10 @@ anames.archetypes <- function(x) {
 #' @seealso [residuals.archetypes()], [predict.archetypes()], [coefficients.archetypes()]
 #'
 #' @examples
-#' # Xhat <- fitted(fit)
+#' toy <- read.csv(system.file("extdata", "toy.csv", package = "yaap"))
+#' fit <- run_aa(as.matrix(toy), K = 3, max_iter = 20, tol_r2 = 0.95)
+#' Xhat <- fitted(fit)
+#' dim(Xhat)
 #'
 #' @exportS3Method
 fitted.archetypes <- function(object, ...) {

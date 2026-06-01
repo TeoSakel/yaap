@@ -42,21 +42,18 @@
 #' run_aa(as.matrix(toy), K = 3, method = "nnls")
 #' run_aa(Species ~ ., data = iris, K = 3)
 #'
-#' \dontrun{
 #' # Functional data example based on fda::growth
-#' library(fda)
-#' data(growth, package = "fda")
+#' if (requireNamespace("fda", quietly = TRUE)) {
+#'     data(growth, package = "fda")
+#'     basis_fd <- fda::create.bspline.basis(c(1, nrow(growth$hgtm)), 10)
+#'     temp_fd <- fda::Data2fd(
+#'         argvals = seq_len(nrow(growth$hgtm)),
+#'         y = growth$hgtm,
+#'         basisobj = basis_fd
+#'     )
 #'
-#' hgtm <- t(growth$hgtm)
-#' basis_fd <- create.bspline.basis(c(1, ncol(hgtm)), 10)
-#' temp_fd <- Data2fd(
-#'     argvals = seq_len(ncol(hgtm)),
-#'     y = growth$hgtm,
-#'     basisobj = basis_fd
-#' )
-#'
-#' fit_fd <- run_aa(temp_fd, K = 3, max_iter = 20)
-#' arch_fd <- coordinates(fit_fd)
+#'     fit_fd <- run_aa(temp_fd, K = 3, max_iter = 20, tol_r2 = 0.95)
+#'     arch_fd <- coordinates(fit_fd)
 #' }
 #'
 #' @export

@@ -1,3 +1,16 @@
+## Resubmission
+
+This is a resubmission. In this version I have:
+
+* Updated the Title and Description fields so software and package names are
+  formatted according to CRAN policy.
+* Added method references to the Description field using CRAN's auto-linking format.
+* Replaced commented-out examples in `archetypes.Rd` and
+  `fitted.archetypes.Rd` with executable toy examples.
+* Removed unnecessary `\dontrun{}` wrappers from examples, using small
+  executable examples guarded for suggested packages where needed.
+* Regenerated the Rd files.
+
 ## R CMD check results
 
 Local Linux, R 4.6.0, `R CMD check --as-cran yaap_1.0.0.tar.gz`:
