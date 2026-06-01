@@ -225,3 +225,8 @@ plot.kernel_archetypes <- function(x,
 AIC.kernel_archetypes <- function(object, ...) {
     stop("AIC is not defined for kernel archetypes.", call. = FALSE)
 }
+
+#' @exportS3Method
+BIC.kernel_archetypes <- function(object, ...) {
+    stop("BIC is not defined for kernel archetypes.", call. = FALSE)
+}

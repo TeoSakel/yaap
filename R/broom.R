@@ -144,6 +144,7 @@ glance.archetypes <- function(x, ...) {
         r2        = loss_df[["r2"]][n],
         n_iter    = n - 1L,
         aic       = tryCatch(AIC(x), error = function(e) NA_real_, warning = function(w) NA_real_),
+        bic       = tryCatch(BIC(x), error = function(e) NA_real_, warning = function(w) NA_real_),
         family    = x[["family"]] %||% "gaussian"
     )
 }

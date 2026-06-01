@@ -130,6 +130,10 @@ test_that("screeplot.archetypes_path scores final metrics", {
     expect_equal(loss[["metric"]], rep("loss", 2L))
     expect_equal(loss[["value"]], vapply(1:2, function(i) tail(path[[i]][["loss"]][["loss"]], 1L), numeric(1L)))
 
+    bic <- screeplot(path, y = "BIC", plot = FALSE)
+    expect_equal(bic[["metric"]], rep("BIC", 2L))
+    expect_equal(bic[["value"]], vapply(1:2, function(i) BIC(path[[i]]), numeric(1L)))
+
     fn <- screeplot(path, y = function(fit) ncol(compositions(fit)), plot = FALSE)
     expect_equal(fn[["metric"]], rep("function", 2L))
     expect_equal(fn[["value"]], 1:2)

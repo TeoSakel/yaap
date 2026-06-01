@@ -428,7 +428,7 @@ print.archetypes_path <- function(x, ...) {
 #' @param x An `archetypes_path` object.
 #' @param y Metric to plot. `NULL` defaults to `"AIC"` for Euclidean Gaussian
 #'   `pgd` and `nnls` paths, and to `"r2"` otherwise. A character value may be
-#'   `"AIC"` or a column from each fit's `loss` table. A function is called on
+#'   `"AIC"`, `"BIC"`, or a column from each fit's `loss` table. A function is called on
 #'   each extracted fit and must return a single numeric value.
 #' @param plot Logical. Should the plot be drawn?
 #' @param ... Additional graphical parameters passed to [graphics::plot()].
@@ -512,7 +512,7 @@ screeplot.archetypes_path <- function(x, y = NULL, plot = TRUE, ...) {
         return("function")
     }
     if (!is_non_empty_string(y)) {
-        stop("`y` must be NULL, a single loss-column name, 'AIC', or a function.", call. = FALSE)
+        stop("`y` must be NULL, a single loss-column name, 'AIC', 'BIC', or a function.", call. = FALSE)
     }
     y
 }
@@ -520,15 +520,18 @@ screeplot.archetypes_path <- function(x, y = NULL, plot = TRUE, ...) {
 .aa_path_metric_value <- function(fit, y, metric) {
     value <- if (is.function(y)) {
         y(fit)
-    } else if (identical(metric, "AIC")) {
-        tryCatch(AIC(fit), error = function(e) NA_real_, warning = function(w) NA_real_)
     } else {
         loss <- fit[["loss"]]
-        if (is.null(loss[[metric]])) {
-            fmt <- "`y` must name a column in the loss table or be 'AIC'; unknown metric '%s'."
+        if (!is.null(loss[[metric]])) {
+            utils::tail(loss[[metric]], 1L)
+        } else if (identical(metric, "AIC")) {
+            tryCatch(AIC(fit), error = function(e) NA_real_, warning = function(w) NA_real_)
+        } else if (identical(metric, "BIC")) {
+            tryCatch(BIC(fit), error = function(e) NA_real_, warning = function(w) NA_real_)
+        } else {
+            fmt <- "`y` must name a column in the loss table or be 'AIC' or 'BIC'; unknown metric '%s'."
             stop(sprintf(fmt, metric), call. = FALSE)
         }
-        utils::tail(loss[[metric]], 1L)
     }
     if (!(is.numeric(value) && length(value) == 1L && (is.finite(value) || is.na(value)))) {
         stop("`y` function must return a single numeric value.", call. = FALSE)

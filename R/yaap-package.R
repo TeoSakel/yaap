@@ -4,5 +4,5 @@
 #' @importMethodsFrom Matrix colMeans colSums crossprod diag rcond rowMeans rowSums t tcrossprod
 #' @importFrom methods as
 #' @importFrom rlang check_installed %||%
-#' @importFrom stats AIC coefficients fitted predict residuals screeplot
+#' @importFrom stats AIC BIC coefficients fitted predict residuals screeplot
 "_PACKAGE"

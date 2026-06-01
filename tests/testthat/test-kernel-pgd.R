@@ -39,6 +39,7 @@ test_that("kernel PGD matches Euclidean PGD for the linear kernel", {
     ))
 
     expect_s3_class(kernel, "kernel_archetypes")
+    expect_error(BIC(kernel), "not defined")
     expect_equal(kernel[["loss"]][["loss"]], pgd[["loss"]][["loss"]], tolerance = 1e-6)
     expect_equal(kernel[["loss"]][["r2"]], pgd[["loss"]][["r2"]], tolerance = 1e-7)
     row_order <- function(A) do.call(order, as.data.frame(round(A, 7L)))

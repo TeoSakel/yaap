@@ -53,15 +53,16 @@ test_that("glance.archetypes returns a one-row tibble with correct fields", {
 
     expect_s3_class(gl, "tbl_df")
     expect_equal(nrow(gl), 1L)
-    expect_named(gl, c("K", "converged", "loss", "r2", "n_iter", "aic", "family"))
+    expect_named(gl, c("K", "converged", "loss", "r2", "n_iter", "aic", "bic", "family"))
     expect_equal(gl[["K"]], 3L)
     expect_type(gl[["converged"]], "logical")
     expect_type(gl[["loss"]], "double")
     expect_true(gl[["r2"]] >= 0 && gl[["r2"]] <= 1)
     expect_true(gl[["n_iter"]] >= 0L)
     expect_equal(gl[["family"]], "gaussian")
-    # AIC requires stored data; fit above has data stored so should be finite
+    # IC methods require stored data; fit above has data stored so should be finite
     expect_true(is.numeric(gl[["aic"]]))
+    expect_true(is.numeric(gl[["bic"]]))
 })
 
 test_that("augment.archetypes uses stored data when data = NULL", {

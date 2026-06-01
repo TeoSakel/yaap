@@ -203,7 +203,7 @@ fit |> tidy(matrix = "compositions") |> head()
 
 `glance()` returns one row of model-level diagnostics, including the
 number of archetypes, convergence status, final loss, final $R^2$, number of
-iterations, adapted AIC, and model family.
+iterations, information criteria, and model family.
 
 ```{r broom-glance}
 glance(fit)
@@ -429,11 +429,12 @@ quality metrics improve only modestly. Typical metrics used for this purpose are
 - **Unexplained variance** (`1 - r2`): the proportion of variance in the
   original data that is not captured by the archetypes.
 
-Alongside elbow plots, `yaap` also provides an **adapted AIC criterion** (`AIC`)
-based on [@Suleman2017] that balances model fit and complexity, which can be
-used to select `K` more systematically. Unlike the other metrics we discussed,
-the adapted AIC is not monotonic in `K`, so we are not looking for an elbow but
-rather for the minimum value, which indicates the best trade-off between fit and parsimony.
+Alongside elbow plots, `yaap` also provides **information criteria** through
+`AIC()`, `BIC()`, and the lower-level `aa_ic()` helper. Bare `AIC()` preserves
+the adapted Suleman criterion [@Suleman2017] for backward compatibility, while
+`aa_ic()` exposes alternative degrees-of-freedom estimates. These criteria are
+not monotonic in `K`, so we are not looking for an elbow but rather for the
+minimum value, which indicates the best trade-off between fit and parsimony.
 
 Here we fit a "path" of archetypes models for `K = 1, ..., 6` to the toy dataset,
 using the `archetypes_path()` function, which fits multiple models in a single call
@@ -452,9 +453,9 @@ fit_path <- archetypes_path(
 The resulting `fit_path` object contains the fitted models for all `K`, which
 can be accessed with `[[` using their index or `K` value, for example `fit_path[[3]]`
 (third model) or `fit_path[["K3"]]` (model with `K = 3`).  The path object also
-supports plotting the scree and adapted AIC curves across `K` values with `screeplot()`.
+supports plotting scree and information-criterion curves across `K` values with `screeplot()`.
 
-```{r k-selection-plot, results = "hold", fig.width = 9, fig.height = 3.5, out.width = "100%", fig.cap = "RSS, unexplained variance, and adapted AIC across candidate values of K."}
+```{r k-selection-plot, results = "hold", fig.width = 9, fig.height = 3.5, out.width = "100%", fig.cap = "RSS, unexplained variance, and information criteria across candidate values of K."}
 op <- par(mfrow = c(1, 3), mar = c(4, 4, 2.5, 0.5), bty = "n")
 
 selected_K <- 3
@@ -484,8 +485,8 @@ screeplot(
     fit_path,
     col = "steelblue4",
     frame.plot = FALSE,
-    ylab = "Adapted AIC",
-    main = "Adapted AIC"
+    ylab = "AIC",
+    main = "AIC"
 )
 abline(v = selected_K, lty = 2, col = "firebrick")
 
@@ -494,11 +495,11 @@ par(op)
 
 For this dataset, all three diagnostics agree that the optimal number of
 archetypes is `K = 3`, the true number of generating vertices. The RSS and
-unexplained-variance curves show a clear elbow at `K = 3`. The adapted AIC
+unexplained-variance curves show a clear elbow at `K = 3`. The AIC curve
 has a strong minimum at `K = 3`. In real analyses, these plots are diagnostics
 rather than automatic rules. AA optimization is non-convex, so single-restart
 curves can be noisy and may not decrease monotonically for every larger `K`. Use
-more restarts and domain knowledge when the elbow or adapted AIC is ambiguous.
+more restarts and domain knowledge when the elbow or information criteria are ambiguous.
 
 ### Scaling
 

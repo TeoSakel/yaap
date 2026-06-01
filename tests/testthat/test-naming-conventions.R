@@ -10,7 +10,7 @@ test_that("internal helper names follow package conventions", {
     defs <- unique(defs)
 
     exports <- c(
-        "aa_init", "anames", "anames<-", "archetypes_directional",
+        "aa_ic", "aa_init", "anames", "anames<-", "archetypes_directional",
         "archetypes_kernel_pgd", "archetypes_nnls", "archetypes_paa",
         "archetypes_path", "archetypes_pgd", "compositions", "consistency", "coordinates",
         "fit_simplex",

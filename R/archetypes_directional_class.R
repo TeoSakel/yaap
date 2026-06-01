@@ -148,3 +148,8 @@ predict.directional_archetypes <- function(object,
 AIC.directional_archetypes <- function(object, ...) {
     stop("AIC is not defined for Watson-loss directional archetypes.", call. = FALSE)
 }
+
+#' @exportS3Method
+BIC.directional_archetypes <- function(object, ...) {
+    stop("BIC is not defined for Watson-loss directional archetypes.", call. = FALSE)
+}

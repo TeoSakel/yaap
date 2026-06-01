@@ -22,6 +22,7 @@ test_that("archetypes_directional fits spherical data with expected invariants",
     expect_matrix_dim(Y_pred, 5L, ncol(X))
     expect_equal(as.vector(rowSums(Y_pred^2)), rep(1, nrow(Y_pred)), tolerance = 1e-6)
     expect_error(AIC(fit), "not defined")
+    expect_error(BIC(fit), "not defined")
 })
 
 test_that("directional loss is monotone non-increasing", {

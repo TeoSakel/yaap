@@ -59,6 +59,57 @@ test_that("S3 methods return expected values", {
     expect_error(residuals(fit_no_data), "Original data")
     expect_output(print(fit), "Archetypal Analysis")
     expect_true(is.numeric(AIC(fit)))
+    expect_true(is.numeric(BIC(fit)))
+})
+
+test_that("aa_ic exposes AIC, BIC, Cp, and degrees-of-freedom choices", {
+    fit <- manual_fit()
+    X <- fit[["data"]]
+    S <- compositions(fit)
+    B <- coefficients(fit)
+    A <- coordinates(fit)
+    K <- ncol(S)
+    N <- nrow(X)
+    M <- ncol(X)
+    rss <- norm(X - S %*% A, "F")^2
+    n_eff_entries <- prod(dim(X))
+    npar <- N * (K - 1L) + K * (N - 1L) + 1L
+    eta <- .aa_effic(X, S %*% A)
+
+    expect_true("aa_ic" %in% getNamespaceExports("yaap"))
+    expect_equal(aa_ic(fit), AIC(fit))
+    expect_equal(
+        AIC(fit),
+        log(rss / n_eff_entries) + 2 * npar / (N * eta),
+        tolerance = 1e-12
+    )
+    expect_equal(
+        BIC(fit),
+        log(rss / n_eff_entries) + log(N) * npar / (N * eta),
+        tolerance = 1e-12
+    )
+
+    expected_cov_df <- M * sum(diag(S %*% B))
+    expected_param_df <- npar
+    expect_equal(
+        aa_ic(fit, type = "aic", df_method = "covariance", n_eff = "entries"),
+        n_eff_entries * log(rss / n_eff_entries) + 2 * expected_cov_df,
+        tolerance = 1e-12
+    )
+    expect_equal(
+        aa_ic(fit, type = "bic", df_method = "parametric", n_eff = "samples"),
+        N * log(rss / N) + log(N) * expected_param_df,
+        tolerance = 1e-12
+    )
+    expect_error(
+        aa_ic(fit, type = "cp", df_method = "covariance"),
+        "`sigma2`"
+    )
+    expect_equal(
+        aa_ic(fit, type = "cp", df_method = "covariance", n_eff = "entries", sigma2 = 0.5),
+        rss / 0.5 - n_eff_entries + 2 * expected_cov_df,
+        tolerance = 1e-12
+    )
 })
 
 test_that("print.archetypes reports compact fitting method labels", {
@@ -261,6 +312,28 @@ test_that("adapted AIC returns NA outside covariance assumptions", {
         "pseudo-inverse"
     )
     expect_true(is_number(aic))
+})
+
+test_that("PAA non-Gaussian fits support AIC and BIC but not Cp", {
+    cases <- list(
+        binomial = matrix(c(1, 0, 0, 1, 1, 1, 0, 1), ncol = 2L, byrow = TRUE),
+        poisson = matrix(c(4, 0, 5, 1, 0, 3, 1, 4), ncol = 2L, byrow = TRUE),
+        multinomial = matrix(c(4, 1, 5, 1, 1, 4, 2, 3), ncol = 2L, byrow = TRUE)
+    )
+
+    for (family in names(cases)) {
+        fit <- suppressWarnings(archetypes_paa(
+            cases[[family]],
+            K = 2L,
+            family = family,
+            max_iter = 2L,
+            tol_r2 = 1
+        ))
+
+        expect_true(is.finite(aa_ic(fit, type = "aic", df_method = "parametric")))
+        expect_true(is.finite(aa_ic(fit, type = "bic", df_method = "covariance")))
+        expect_error(aa_ic(fit, type = "cp", df_method = "parametric"), "Gaussian")
+    }
 })
 
 test_that("predict returns row-stochastic compositions for new data", {

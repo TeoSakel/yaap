@@ -11,7 +11,7 @@
 
 \item{y}{Metric to plot. \code{NULL} defaults to \code{"AIC"} for Euclidean Gaussian
 \code{pgd} and \code{nnls} paths, and to \code{"r2"} otherwise. A character value may be
-\code{"AIC"} or a column from each fit's \code{loss} table. A function is called on
+\code{"AIC"}, \code{"BIC"}, or a column from each fit's \code{loss} table. A function is called on
 each extracted fit and must return a single numeric value.}
 
 \item{plot}{Logical. Should the plot be drawn?}
