@@ -24,8 +24,8 @@
 #' `2 * MI(X, Y) / (MI(X, X) + MI(Y, Y))`. This makes the score insensitive to
 #' permutations of the archetype labels.
 #'
-#' For `what = "coordinates"`, archetypes in `x` are greedily matched to the
-#' nearest unmatched archetypes in `y`, then a similarity-style score is
+#' For `what = "coordinates"`, archetypes are greedily matched by repeatedly selecting the
+#' closest remaining pair across the two fits, then a similarity-style score is
 #' computed by scaling the mean matched squared distances by the average
 #' squared pairwise distance between observations in `data`. This denominator
 #' is computed through the equivalent identity `2 * sum(colVars(data))`,
@@ -172,13 +172,20 @@ consistency.archetypes <- function(x,
 }
 
 .aa_greedy_coordinate_d2 <- function(ax, ay) {
-    available <- seq_len(nrow(ay))
+    if (nrow(ax) > nrow(ay)) {
+        stop("`ay` must have at least as many rows as `ax`.", call. = FALSE)
+    }
+
+    available_x <- seq_len(nrow(ax))
+    available_y <- seq_len(nrow(ay))
     d2 <- numeric(nrow(ax))
     distances <- .aa_pdist2(ax, ay)
     for (i in seq_len(nrow(ax))) {
-        best <- which.min(distances[i, available])
-        d2[[i]] <- distances[i, available[[best]]]
-        available <- available[-best]
+        remaining <- distances[available_x, available_y, drop = FALSE]
+        best <- which(remaining == min(remaining), arr.ind = TRUE)[1L, ]
+        d2[i] <- remaining[best[1L], best[2L]]
+        available_x <- available_x[-best[1L]]
+        available_y <- available_y[-best[2L]]
     }
     d2
 }

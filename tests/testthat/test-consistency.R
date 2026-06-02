@@ -49,3 +49,20 @@ test_that("coordinate consistency returns NA for decreasing K and uses mean pair
     expect_equal(consistency(fit3, fit4, what = "coordinates"), expected)
     expect_true(is.na(consistency(fit4, fit3, what = "coordinates")))
 })
+
+test_that("coordinate matching greedily selects the closest remaining pair", {
+    ax <- matrix(c(
+        0, 0,
+        1, 0
+    ), ncol = 2L, byrow = TRUE)
+    ay <- matrix(c(
+        0.9, 0,
+        0.2, 0
+    ), ncol = 2L, byrow = TRUE)
+
+    expect_equal(
+        .aa_greedy_coordinate_d2(ax, ay),
+        c(0.01, 0.04),
+        tolerance = 1e-12
+    )
+})

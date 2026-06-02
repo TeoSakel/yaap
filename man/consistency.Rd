@@ -51,8 +51,8 @@ computed from \code{Pxy} and its row and column marginals, then normalized as
 \code{2 * MI(X, Y) / (MI(X, X) + MI(Y, Y))}. This makes the score insensitive to
 permutations of the archetype labels.
 
-For \code{what = "coordinates"}, archetypes in \code{x} are greedily matched to the
-nearest unmatched archetypes in \code{y}, then a similarity-style score is
+For \code{what = "coordinates"}, archetypes are greedily matched by repeatedly selecting the
+closest remaining pair across the two fits, then a similarity-style score is
 computed by scaling the mean matched squared distances by the average
 squared pairwise distance between observations in \code{data}. This denominator
 is computed through the equivalent identity \code{2 * sum(colVars(data))},
