@@ -62,7 +62,7 @@ test_that("S3 methods return expected values", {
     expect_true(is.numeric(BIC(fit)))
 })
 
-test_that("aa_ic exposes AIC, BIC, Cp, and degrees-of-freedom choices", {
+test_that("aa_ic exposes AIC, BIC, and degrees-of-freedom choices", {
     fit <- manual_fit()
     X <- fit[["data"]]
     S <- compositions(fit)
@@ -91,9 +91,15 @@ test_that("aa_ic exposes AIC, BIC, Cp, and degrees-of-freedom choices", {
 
     expected_cov_df <- M * sum(diag(S %*% B))
     expected_param_df <- npar
+    expected_active_df <- 2 + 1L
     expect_equal(
         aa_ic(fit, type = "aic", df_method = "covariance", n_eff = "entries"),
-        n_eff_entries * log(rss / n_eff_entries) + 2 * expected_cov_df,
+        n_eff_entries * log(rss / n_eff_entries) + 2 * (expected_cov_df + 1L),
+        tolerance = 1e-12
+    )
+    expect_equal(
+        aa_ic(fit, type = "aic", df_method = "active", n_eff = "samples"),
+        N * log(rss / N) + 2 * expected_active_df,
         tolerance = 1e-12
     )
     expect_equal(
@@ -101,14 +107,56 @@ test_that("aa_ic exposes AIC, BIC, Cp, and degrees-of-freedom choices", {
         N * log(rss / N) + log(N) * expected_param_df,
         tolerance = 1e-12
     )
-    expect_error(
-        aa_ic(fit, type = "cp", df_method = "covariance"),
-        "`sigma2`"
+})
+
+test_that("active-set information criteria use local affine ranks", {
+    fit <- manual_fit()
+    X <- fit[["data"]]
+    B <- rbind(
+        c(0.5, 0.5, 0, 0),
+        c(0, 0.5, 0.5, 0),
+        c(0.25, 0.25, 0.25, 0.25)
+    )
+    rownames(B) <- rownames(coefficients(fit))
+    fit[["coefficients"]] <- B
+    fit[["A"]] <- B %*% X
+
+    S <- compositions(fit)
+    rss <- norm(X - S %*% coordinates(fit), "F")^2
+    expected_df <- 2 + 1 + 1 + 2 + 1L
+
+    expect_equal(
+        aa_ic(fit, type = "aic", df_method = "active", n_eff = "samples"),
+        nrow(X) * log(rss / nrow(X)) + 2 * expected_df,
+        tolerance = 1e-12
+    )
+})
+
+test_that("active-set degrees of freedom respect support tolerance", {
+    fit <- manual_fit()
+    X <- fit[["data"]]
+    B <- coefficients(fit)
+    B[1, ] <- c(1 - 5e-9, 5e-9, 0, 0)
+    fit[["coefficients"]] <- B
+    fit[["A"]] <- B %*% X
+
+    S <- compositions(fit)
+    rss <- norm(X - S %*% coordinates(fit), "F")^2
+    base <- nrow(X) * log(rss / nrow(X))
+
+    expect_equal(
+        aa_ic(fit, type = "aic", df_method = "active", n_eff = "samples"),
+        base + 2 * 3,
+        tolerance = 1e-12
     )
     expect_equal(
-        aa_ic(fit, type = "cp", df_method = "covariance", n_eff = "entries", sigma2 = 0.5),
-        rss / 0.5 - n_eff_entries + 2 * expected_cov_df,
+        aa_ic(fit, type = "aic", df_method = "active", n_eff = "samples", support_tol = 0),
+        base + 2 * 4,
         tolerance = 1e-12
+    )
+    expect_error(
+        aa_ic(fit, type = "aic", df_method = "active", support_tol = -1),
+        "`support_tol`"
     )
 })
 
@@ -314,7 +362,7 @@ test_that("adapted AIC returns NA outside covariance assumptions", {
     expect_true(is_number(aic))
 })
 
-test_that("PAA non-Gaussian fits support AIC and BIC but not Cp", {
+test_that("PAA non-Gaussian fits support AIC and BIC", {
     cases <- list(
         binomial = matrix(c(1, 0, 0, 1, 1, 1, 0, 1), ncol = 2L, byrow = TRUE),
         poisson = matrix(c(4, 0, 5, 1, 0, 3, 1, 4), ncol = 2L, byrow = TRUE),
@@ -330,9 +378,16 @@ test_that("PAA non-Gaussian fits support AIC and BIC but not Cp", {
             tol_r2 = 1
         ))
 
-        expect_true(is.finite(aa_ic(fit, type = "aic", df_method = "parametric")))
+        n <- nrow(cases[[family]])
+        K <- 2L
+        expected_param_df <- n * (K - 1L) + K * (n - 1L)
+        expected_aic <- 2 * tail(fit[["loss"]][["loss"]], 1L) + 2 * expected_param_df
+        expect_equal(
+            aa_ic(fit, type = "aic", df_method = "parametric"),
+            expected_aic,
+            tolerance = 1e-12
+        )
         expect_true(is.finite(aa_ic(fit, type = "bic", df_method = "covariance")))
-        expect_error(aa_ic(fit, type = "cp", df_method = "parametric"), "Gaussian")
     }
 })
 

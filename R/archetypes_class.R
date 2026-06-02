@@ -649,15 +649,11 @@ plot.archetypes <- function(x,
 
     args <- list(data = x[["data"]], archetype_names = anames(x), plot = plot) %|p|% dots
     if (!is.null(args[["data"]])) {
-        X <- if (inherits(args[["data"]], "fd")) {
-            .aa_fd_to_matrix(args[["data"]])
-        } else {
-            as.matrix(args[["data"]])
-        }
+        X <- .aa_data_to_matrix(args[["data"]])
         args[["data"]] <- .aa_plot_subset_rows(X, subset)
     }
     coord <- coordinates(x)
-    args[["coordinates"]] <- if (inherits(coord, "fd")) .aa_fd_to_matrix(coord) else coord
+    args[["coordinates"]] <- .aa_data_to_matrix(coord)
     do.call(plot_archetypes_coordinates, args)
 }
 
@@ -692,10 +688,28 @@ plot.archetypes <- function(x,
     if (is.null(A)) {
         return(NULL)
     }
-    if (inherits(A, "fd")) {
-        return(.aa_fd_to_matrix(A))
+    .aa_data_to_matrix(A)
+}
+
+.aa_object_data_matrix <- function(object, context = "Operation") {
+    X <- object[["data"]]
+    if (is.null(X)) {
+        stop(paste(
+            context, "requires original data `X`;",
+            "provide it when constructing the archetypes object."
+        ), call. = FALSE)
     }
-    as.matrix(A)
+    .aa_data_to_matrix(X)
+}
+
+.aa_data_to_matrix <- function(x) {
+    if (is.null(x)) {
+        return(NULL)
+    }
+    if (inherits(x, "fd")) {
+        return(.aa_fd_to_matrix(x))
+    }
+    as.matrix(x)
 }
 
 .aa_fd_to_matrix <- function(x) {

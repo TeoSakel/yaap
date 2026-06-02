@@ -2,34 +2,56 @@
 
 #' Information Criteria for Archetype Fits
 #'
-#' Computes AIC, BIC, or Mallows' Cp-like criteria for fitted archetype models
+#' Computes AIC or BIC for fitted archetype models
 #' with selectable degrees-of-freedom estimates.
 #'
 #' @param object An object of class `archetypes`.
-#' @param type Criterion to compute: `"aic"`, `"bic"`, or `"cp"`.
-#' @param df_method Degrees-of-freedom estimate. `"suleman"` preserves the
-#'   adapted efficiency-corrected criterion used historically by `AIC()`;
-#'   `"covariance"` uses Stein's frozen-smoother formula; `"parametric"`
-#'   uses the full archetype parameter count.
-#' @param n_eff Effective sample size used in standard AIC/BIC/Cp penalties:
+#' @param type Criterion to compute: `"aic"` or `"bic"`.
+#' @param df_method Degrees-of-freedom estimate. `"suleman"` uses the adapted
+#'   efficiency-corrected criterion from Suleman (2017); `"covariance"` uses a
+#'   fitted-value sensitivity estimate; `"parametric"` uses the full archetype
+#'   parameter count; `"active"` uses an active-set simplex-face count.
+#' @param n_eff Effective sample size used in standard AIC/BIC penalties:
 #'   `"samples"` uses rows of the training matrix; `"entries"` uses finite
 #'   matrix entries.
-#' @param sigma2 Optional Gaussian variance estimate for `type = "cp"`.
+#' @param support_tol Non-negative threshold used by df_method = active to
+#'   decide whether simplex weights belong to a support set.
 #' @param ... Additional arguments passed to `aa_ic()`.
 #'
 #' @return A numeric scalar.
 #'
 #' @details
-#' `AIC.archetypes()` defaults to the Suleman adapted criterion for backward
-#' compatibility. `BIC.archetypes()` uses the analogous Suleman-style penalty by
-#' default. For `df_method = "covariance"`, the fitted archetype weights are held
-#' fixed and the fitted-value map is treated as `X_hat = H X`, with
-#' `H = compositions(object) %*% coefficients(object)`. The degrees of freedom
-#' are then `M * sum(diag(H))`, where `M` is the number of features.
+#' `df_method = "suleman"` uses the adapted efficiency-corrected criterion
+#' proposed by Suleman (2017), with AIC and BIC differing only in the
+#' penalty multiplier.
 #'
-#' For non-Suleman Gaussian criteria, AIC and BIC use the profile log-RSS scale.
+#' For `df_method = "covariance"`, the fitted archetype weights are held fixed and
+#' the degrees of freedom are estimated from how strongly the fitted values
+#' respond to the data. In linear-model terms, this is the trace of the
+#' corresponding hat matrix. Here the fitted-value map is treated as
+#' `X_hat = H X`, with `H = compositions(object) %*% coefficients(object)`, so
+#' the degrees of freedom are `M * sum(diag(H))`, where `M` is the number of
+#' features. This is Stein's frozen-smoother covariance formula applied to the
+#' fixed archetype-weight map.
+#'
+#' For `df_method = "parametric"`, the structural degrees of freedom are the
+#' full ambient simplex parameter count: `N * (K - 1)` free composition
+#' weights and `K * (N - 1)` free coefficient weights.
+#'
+#' For `df_method = "active"`, unlike "parametric", only the active simplex-face
+#' dimensions (ie with non-zero coefficients) are counted towards the degrees of
+#' freedom of the compositions and coefficients simplices. The coefficient-face
+#' dimensions are further capped by the local affine rank of the corresponding
+#' rows of `X` because the archetype vertices must live in the affine span of
+#' the data. This estimate is more accurate for methods that produce sparse
+#' simplex weights through regularization or constraints.
+#'
+#' For criteria with a free scalar residual parameter, such as Gaussian fits,
+#' one additional degree of freedom is added outside the structural
+#' `df_method` calculation. For non-Suleman Gaussian criteria, AIC and BIC use
+#' the profile log-RSS scale.
 #' For non-Gaussian PAA families, AIC and BIC use twice the final optimized
-#' objective plus the selected penalty. Cp is only defined for Gaussian fits.
+#' objective plus the selected penalty.
 #'
 #' @references
 #' A. Suleman, "Validation of archetypal analysis"
@@ -41,10 +63,10 @@
 #'
 #' @export
 aa_ic <- function(object,
-                  type = c("aic", "bic", "cp"),
-                  df_method = c("suleman", "covariance", "parametric"),
+                  type = c("aic", "bic"),
+                  df_method = c("suleman", "covariance", "parametric", "active"),
                   n_eff = c("samples", "entries"),
-                  sigma2 = NULL) {
+                  support_tol = 1e-8) {
     if (!inherits(object, "archetypes")) {
         stop("`object` must be an `archetypes` object.", call. = FALSE)
     }
@@ -52,23 +74,14 @@ aa_ic <- function(object,
     df_method <- match.arg(df_method)
     n_eff <- match.arg(n_eff)
 
-    X <- .aa_ic_data_matrix(object, type)
+    X <- .aa_object_data_matrix(object, toupper(type))
     family <- object[["family"]] %||% "gaussian"
     if (identical(df_method, "suleman")) {
         return(.aa_ic_suleman(object, X, type, n_eff))
     }
 
-    df <- .aa_ic_df(object, X, df_method)
+    df <- .aa_ic_total_df(object, X, df_method, family, support_tol)
     n <- .aa_ic_n_eff(X, n_eff)
-    if (identical(type, "cp")) {
-        if (!identical(family, "gaussian")) {
-            stop("Cp is only defined for Gaussian archetypes objects.", call. = FALSE)
-        }
-        rss <- .aa_ic_rss(object, X)
-        sigma2 <- .aa_ic_sigma2(object, sigma2)
-        return(rss / sigma2 - n + 2 * df)
-    }
-
     penalty <- switch(type,
         aic = 2,
         bic = log(n)
@@ -103,25 +116,7 @@ BIC.archetypes <- function(object, ...) {
     aa_ic(object, type = "bic", ...)
 }
 
-.aa_ic_data_matrix <- function(object, type) {
-    X <- object[["data"]]
-    if (is.null(X)) {
-        stop(paste(
-            toupper(type), "requires original data `X`;",
-            "provide it when constructing the archetypes object."
-        ), call. = FALSE)
-    }
-    if (inherits(X, "fd")) {
-        return(.aa_fd_to_matrix(X))
-    }
-    as.matrix(X)
-}
-
 .aa_ic_suleman <- function(object, X, type, n_eff) {
-    if (identical(type, "cp")) {
-        stop("Cp is not defined for `df_method = 'suleman'`.", call. = FALSE)
-    }
-
     family <- object[["family"]] %||% "gaussian"
     if (!identical(family, "gaussian")) {
         stop(
@@ -167,7 +162,7 @@ BIC.archetypes <- function(object, ...) {
 
     rss <- norm(X - X_hat, "F")^2
     nelem <- prod(dim(X))
-    npar <- .aa_ic_parametric_df(N, K)
+    npar <- .aa_ic_parametric_df(N, K) + .aa_ic_residual_parameter_df(family)
     penalty <- switch(type,
         aic = 2,
         bic = log(.aa_ic_n_eff(X, n_eff))
@@ -175,24 +170,60 @@ BIC.archetypes <- function(object, ...) {
     log(rss / nelem) + penalty * npar / (N * eta)
 }
 
-.aa_ic_df <- function(object, X, df_method) {
+.aa_ic_total_df <- function(object, X, df_method, family, support_tol) {
+    .aa_ic_df(object, X, df_method, support_tol) + .aa_ic_residual_parameter_df(family)
+}
+
+.aa_ic_df <- function(object, X, df_method, support_tol) {
     K <- nrow(coefficients(object))
     N <- nrow(X)
     switch(df_method,
         parametric = .aa_ic_parametric_df(N, K),
-        covariance = .aa_ic_covariance_df(object, X)
+        covariance = .aa_ic_covariance_df(object, X),
+        active = .aa_ic_active_df(object, X, support_tol)
     )
 }
 
 .aa_ic_parametric_df <- function(N, K) {
-    N * (K - 1L) + K * (N - 1L) + 1L
+    # N K-simplices (S) + K N-simplices (B)
+    N * (K - 1L) + K * (N - 1L)
 }
 
 .aa_ic_covariance_df <- function(object, X) {
+    # Stein formula: df = E[ div(X_hat) ] = E[ tr(dX_hat/dX) ]
+    # X_hat = S*B*X, so H = S B and df = M * tr(H)
     S <- compositions(object)
     B <- coefficients(object)
     M <- ncol(X)
-    M * sum(tcrossprod(S, B))
+    M * sum(S * t(B))
+}
+
+.aa_ic_active_df <- function(object, X, support_tol) {
+    # Active simplex-face dimensions for compositions and coefficients,
+    # capped by local affine ranks because A must live in X-space.
+    if (!is_non_negative(support_tol)) {
+        stop("`support_tol` must be a single non-negative finite number.", call. = FALSE)
+    }
+
+    s_df <- sum(pmax(rowSums(compositions(object) > support_tol) - 1L, 0L))
+    B_active <- apply(coefficients(object) > support_tol, 1L, which, simplify = FALSE)
+    b_df <- sum(vapply(B_active, function(active) {
+        .aa_ic_local_affine_rank(X, active)
+    }, integer(1L)))
+    s_df + b_df
+}
+
+.aa_ic_local_affine_rank <- function(X, active = seq_len(nrow(X))) {
+    n_active <- length(active)
+    if (n_active <= 1L) {
+        return(0L)
+    }
+    centered <- scale(X[active, , drop = FALSE], center = TRUE, scale = FALSE)
+    min(qr(centered)[["rank"]], n_active - 1L)
+}
+
+.aa_ic_residual_parameter_df <- function(family) {
+    if (identical(family, "gaussian")) 1L else 0L
 }
 
 .aa_ic_n_eff <- function(X, n_eff) {
@@ -210,22 +241,6 @@ BIC.archetypes <- function(object, ...) {
     A <- .aa_input_coordinates_matrix(object)
     X_hat <- compositions(object) %*% A
     norm(X - X_hat, "F")^2
-}
-
-.aa_ic_sigma2 <- function(object, sigma2) {
-    if (is.null(sigma2)) {
-        loss <- object[["loss"]]
-        if (!is.null(loss[["sigma2"]])) {
-            sigma2 <- utils::tail(loss[["sigma2"]], 1L)
-        }
-    }
-    if (is.null(sigma2)) {
-        stop("`sigma2` must be supplied for Cp when no finite `loss$sigma2` is stored.", call. = FALSE)
-    }
-    if (!is_positive(sigma2)) {
-        stop("`sigma2` must be a single positive finite number.", call. = FALSE)
-    }
-    sigma2
 }
 
 .aa_ic_final_loss <- function(object) {

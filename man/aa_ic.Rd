@@ -8,10 +8,10 @@
 \usage{
 aa_ic(
   object,
-  type = c("aic", "bic", "cp"),
-  df_method = c("suleman", "covariance", "parametric"),
+  type = c("aic", "bic"),
+  df_method = c("suleman", "covariance", "parametric", "active"),
   n_eff = c("samples", "entries"),
-  sigma2 = NULL
+  support_tol = 1e-08
 )
 
 \method{AIC}{archetypes}(object, ..., k = 2)
@@ -21,18 +21,19 @@ aa_ic(
 \arguments{
 \item{object}{An object of class \code{archetypes}.}
 
-\item{type}{Criterion to compute: \code{"aic"}, \code{"bic"}, or \code{"cp"}.}
+\item{type}{Criterion to compute: \code{"aic"} or \code{"bic"}.}
 
-\item{df_method}{Degrees-of-freedom estimate. \code{"suleman"} preserves the
-adapted efficiency-corrected criterion used historically by \code{AIC()};
-\code{"covariance"} uses Stein's frozen-smoother formula; \code{"parametric"}
-uses the full archetype parameter count.}
+\item{df_method}{Degrees-of-freedom estimate. \code{"suleman"} uses the adapted
+efficiency-corrected criterion from Suleman (2017); \code{"covariance"} uses a
+fitted-value sensitivity estimate; \code{"parametric"} uses the full archetype
+parameter count; \code{"active"} uses an active-set simplex-face count.}
 
-\item{n_eff}{Effective sample size used in standard AIC/BIC/Cp penalties:
+\item{n_eff}{Effective sample size used in standard AIC/BIC penalties:
 \code{"samples"} uses rows of the training matrix; \code{"entries"} uses finite
 matrix entries.}
 
-\item{sigma2}{Optional Gaussian variance estimate for \code{type = "cp"}.}
+\item{support_tol}{Non-negative threshold used by df_method = active to
+decide whether simplex weights belong to a support set.}
 
 \item{...}{Additional arguments passed to \code{aa_ic()}.}
 }
@@ -40,20 +41,41 @@ matrix entries.}
 A numeric scalar.
 }
 \description{
-Computes AIC, BIC, or Mallows' Cp-like criteria for fitted archetype models
+Computes AIC or BIC for fitted archetype models
 with selectable degrees-of-freedom estimates.
 }
 \details{
-\code{AIC.archetypes()} defaults to the Suleman adapted criterion for backward
-compatibility. \code{BIC.archetypes()} uses the analogous Suleman-style penalty by
-default. For \code{df_method = "covariance"}, the fitted archetype weights are held
-fixed and the fitted-value map is treated as \verb{X_hat = H X}, with
-\code{H = compositions(object) \%*\% coefficients(object)}. The degrees of freedom
-are then \code{M * sum(diag(H))}, where \code{M} is the number of features.
+\code{df_method = "suleman"} uses the adapted efficiency-corrected criterion
+proposed by Suleman (2017), with AIC and BIC differing only in the
+penalty multiplier.
 
-For non-Suleman Gaussian criteria, AIC and BIC use the profile log-RSS scale.
+For \code{df_method = "covariance"}, the fitted archetype weights are held fixed and
+the degrees of freedom are estimated from how strongly the fitted values
+respond to the data. In linear-model terms, this is the trace of the
+corresponding hat matrix. Here the fitted-value map is treated as
+\verb{X_hat = H X}, with \code{H = compositions(object) \%*\% coefficients(object)}, so
+the degrees of freedom are \code{M * sum(diag(H))}, where \code{M} is the number of
+features. This is Stein's frozen-smoother covariance formula applied to the
+fixed archetype-weight map.
+
+For \code{df_method = "parametric"}, the structural degrees of freedom are the
+full ambient simplex parameter count: \code{N * (K - 1)} free composition
+weights and \code{K * (N - 1)} free coefficient weights.
+
+For \code{df_method = "active"}, unlike "parametric", only the active simplex-face
+dimensions (ie with non-zero coefficients) are counted towards the degrees of
+freedom of the compositions and coefficients simplices. The coefficient-face
+dimensions are further capped by the local affine rank of the corresponding
+rows of \code{X} because the archetype vertices must live in the affine span of
+the data. This estimate is more accurate for methods that produce sparse
+simplex weights through regularization or constraints.
+
+For criteria with a free scalar residual parameter, such as Gaussian fits,
+one additional degree of freedom is added outside the structural
+\code{df_method} calculation. For non-Suleman Gaussian criteria, AIC and BIC use
+the profile log-RSS scale.
 For non-Gaussian PAA families, AIC and BIC use twice the final optimized
-objective plus the selected penalty. Cp is only defined for Gaussian fits.
+objective plus the selected penalty.
 }
 \references{
 A. Suleman, "Validation of archetypal analysis"
