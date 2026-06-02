@@ -7,12 +7,14 @@
 #'
 #' @param object An object of class `archetypes`.
 #' @param type Criterion to compute: `"aic"` or `"bic"`.
-#' @param df_method Degrees-of-freedom estimate. `"suleman"` uses the adapted
-#'   efficiency-corrected criterion from Suleman (2017); `"covariance"` uses a
-#'   fitted-value sensitivity estimate; `"parametric"` uses the full archetype
-#'   parameter count; `"active"` uses an active-set simplex-face count.
-#' @param n_eff Effective sample size used in standard AIC/BIC penalties:
-#'   `"samples"` uses rows of the training matrix; `"entries"` uses finite
+#' @param df_method Degrees-of-freedom estimate. "suleman" uses a
+#'   Suleman-style efficiency-adjusted parameter count; "covariance" uses a
+#'   fitted-value sensitivity estimate; "parametric" uses the full
+#'   archetype parameter count; "active" uses an active-set simplex-face
+#'   count.
+#' @param n_eff Effective sample size used for the BIC penalty multiplier:
+#'   "samples" uses rows of the training matrix; "entries" uses observed
+#'   matrix entries. The Gaussian RSS term is always normalized by observed
 #'   matrix entries.
 #' @param support_tol Non-negative threshold used by df_method = active to
 #'   decide whether simplex weights belong to a support set.
@@ -21,9 +23,11 @@
 #' @return A numeric scalar.
 #'
 #' @details
-#' `df_method = "suleman"` uses the adapted efficiency-corrected criterion
-#' proposed by Suleman (2017), with AIC and BIC differing only in the
-#' penalty multiplier.
+#' `df_method = "suleman"` corrects the full parametric degree of freedom count
+#' based on how well the fitted covariance structure matches the data covariance,
+#' as proposed by Suleman (2017). Unlike the normalized criterion in Suleman (2017),
+#' `aa_ic()` applies this correction on the same Gaussian RSS scale used by the other
+#' `df_method` choices for consistency.
 #'
 #' For `df_method = "covariance"`, the fitted archetype weights are held fixed and
 #' the degrees of freedom are estimated from how strongly the fitted values
@@ -47,11 +51,13 @@
 #' simplex weights through regularization or constraints.
 #'
 #' For criteria with a free scalar residual parameter, such as Gaussian fits,
-#' one additional degree of freedom is added outside the structural
-#' `df_method` calculation. For non-Suleman Gaussian criteria, AIC and BIC use
-#' the profile log-RSS scale.
-#' For non-Gaussian PAA families, AIC and BIC use twice the final optimized
-#' objective plus the selected penalty.
+#' one additional degree of freedom is added outside the structural `df_method`
+#' calculation, assuming homoscedastic errors. Gaussian AIC and BIC use the
+#' profile log-RSS scale `nelem * log(rss / nelem)`, where `nelem` is the number
+#' of observed matrix entries. Missing data are not counted towards `nelem`.
+#' `n_eff` affects the BIC penalty multiplier but not this RSS scale. For
+#' non-Gaussian PAA families, AIC and BIC use twice the final optimized
+#' objective (deviance) plus the selected penalty.
 #'
 #' @references
 #' A. Suleman, "Validation of archetypal analysis"
@@ -76,22 +82,19 @@ aa_ic <- function(object,
 
     X <- .aa_object_data_matrix(object, toupper(type))
     family <- object[["family"]] %||% "gaussian"
-    if (identical(df_method, "suleman")) {
-        return(.aa_ic_suleman(object, X, type, n_eff))
-    }
-
     df <- .aa_ic_total_df(object, X, df_method, family, support_tol)
-    n <- .aa_ic_n_eff(X, n_eff)
+    df <- .aa_ic_adjust_df(object, X, df, df_method, family, type)
+    if (is.na(df)) {
+        return(NA_real_)
+    }
+    n <- .aa_ic_n_eff(object, X, n_eff)
     penalty <- switch(type,
         aic = 2,
         bic = log(n)
     )
     if (identical(family, "gaussian")) {
-        rss <- .aa_ic_rss(object, X)
-        if (!is_non_negative(rss)) {
-            stop("Gaussian information criteria require finite non-negative RSS.", call. = FALSE)
-        }
-        return(n * log(rss / n) + penalty * df)
+        fit_term <- .aa_ic_gaussian_fit_term(object, X)
+        return(fit_term + penalty * df)
     }
 
     if (!(family %in% c("binomial", "poisson", "multinomial"))) {
@@ -116,11 +119,13 @@ BIC.archetypes <- function(object, ...) {
     aa_ic(object, type = "bic", ...)
 }
 
-.aa_ic_suleman <- function(object, X, type, n_eff) {
-    family <- object[["family"]] %||% "gaussian"
+.aa_ic_adjust_df <- function(object, X, df, df_method, family, type) {
+    if (!identical(df_method, "suleman")) {
+        return(df)
+    }
     if (!identical(family, "gaussian")) {
         stop(
-            "Suleman information criteria are not defined for non-Gaussian archetypes objects.",
+            "Suleman-style information criteria are not defined for non-Gaussian archetypes objects.",
             call. = FALSE
         )
     }
@@ -131,14 +136,12 @@ BIC.archetypes <- function(object, ...) {
         ), call. = FALSE)
     }
 
-    S <- compositions(object)
-    K <- ncol(S)
     N <- nrow(X)
     M <- ncol(X)
     if (N <= M) {
         warning(
             paste(
-                "Adapted", toupper(type), "is undefined when the number of samples",
+                "Suleman-style", toupper(type), "is undefined when the number of samples",
                 "is not larger than the number of features; returning NA."
             ),
             call. = FALSE
@@ -147,12 +150,12 @@ BIC.archetypes <- function(object, ...) {
     }
 
     A <- .aa_input_coordinates_matrix(object)
-    X_hat <- S %*% A
+    X_hat <- compositions(object) %*% A
     eta <- tryCatch(.aa_effic(X, X_hat), error = function(e) NA_real_)
     if (!is.finite(eta) || eta <= 0) {
         warning(
             paste(
-                "Adapted", toupper(type), "is undefined because the efficiency term",
+                "Suleman-style", toupper(type), "is undefined because the efficiency term",
                 "is non-positive or non-finite; returning NA."
             ),
             call. = FALSE
@@ -160,14 +163,7 @@ BIC.archetypes <- function(object, ...) {
         return(NA_real_)
     }
 
-    rss <- norm(X - X_hat, "F")^2
-    nelem <- prod(dim(X))
-    npar <- .aa_ic_parametric_df(N, K) + .aa_ic_residual_parameter_df(family)
-    penalty <- switch(type,
-        aic = 2,
-        bic = log(.aa_ic_n_eff(X, n_eff))
-    )
-    log(rss / nelem) + penalty * npar / (N * eta)
+    df / (N * eta)
 }
 
 .aa_ic_total_df <- function(object, X, df_method, family, support_tol) {
@@ -178,6 +174,7 @@ BIC.archetypes <- function(object, ...) {
     K <- nrow(coefficients(object))
     N <- nrow(X)
     switch(df_method,
+        suleman = .aa_ic_parametric_df(N, K),
         parametric = .aa_ic_parametric_df(N, K),
         covariance = .aa_ic_covariance_df(object, X),
         active = .aa_ic_active_df(object, X, support_tol)
@@ -226,15 +223,35 @@ BIC.archetypes <- function(object, ...) {
     if (identical(family, "gaussian")) 1L else 0L
 }
 
-.aa_ic_n_eff <- function(X, n_eff) {
+.aa_ic_n_eff <- function(object, X, n_eff) {
     out <- switch(n_eff,
         samples = nrow(X),
-        entries = if (inherits(X, "sparseMatrix")) length(X@x) else sum(!is.na(X))
+        entries = .aa_ic_n_entries(object, X)
     )
     if (!is_positive(out)) {
         stop("`n_eff` must resolve to a positive finite value.", call. = FALSE)
     }
     out
+}
+
+.aa_ic_gaussian_fit_term <- function(object, X) {
+    rss <- .aa_ic_rss(object, X)
+    if (!is_non_negative(rss)) {
+        stop("Gaussian information criteria require finite non-negative RSS.", call. = FALSE)
+    }
+    nelem <- .aa_ic_n_entries(object, X)
+    nelem * log(rss / nelem)
+}
+
+.aa_ic_n_entries <- function(object, X) {
+    if (isTRUE(object[["fit_info"]][["missing"]])) {
+        if (inherits(X, "sparseMatrix")) {
+            return(sum(!is.na(X@x)))
+        }
+        return(sum(!is.na(X)))
+    }
+
+    if (inherits(X, "sparseMatrix")) prod(dim(X)) else sum(!is.na(X))
 }
 
 .aa_ic_rss <- function(object, X) {

@@ -23,13 +23,15 @@ aa_ic(
 
 \item{type}{Criterion to compute: \code{"aic"} or \code{"bic"}.}
 
-\item{df_method}{Degrees-of-freedom estimate. \code{"suleman"} uses the adapted
-efficiency-corrected criterion from Suleman (2017); \code{"covariance"} uses a
-fitted-value sensitivity estimate; \code{"parametric"} uses the full archetype
-parameter count; \code{"active"} uses an active-set simplex-face count.}
+\item{df_method}{Degrees-of-freedom estimate. "suleman" uses a
+Suleman-style efficiency-adjusted parameter count; "covariance" uses a
+fitted-value sensitivity estimate; "parametric" uses the full
+archetype parameter count; "active" uses an active-set simplex-face
+count.}
 
-\item{n_eff}{Effective sample size used in standard AIC/BIC penalties:
-\code{"samples"} uses rows of the training matrix; \code{"entries"} uses finite
+\item{n_eff}{Effective sample size used for the BIC penalty multiplier:
+"samples" uses rows of the training matrix; "entries" uses observed
+matrix entries. The Gaussian RSS term is always normalized by observed
 matrix entries.}
 
 \item{support_tol}{Non-negative threshold used by df_method = active to
@@ -45,9 +47,11 @@ Computes AIC or BIC for fitted archetype models
 with selectable degrees-of-freedom estimates.
 }
 \details{
-\code{df_method = "suleman"} uses the adapted efficiency-corrected criterion
-proposed by Suleman (2017), with AIC and BIC differing only in the
-penalty multiplier.
+\code{df_method = "suleman"} uses the full parametric structural count with
+the efficiency correction \code{1 / (N * eta)} motivated by Suleman (2017).
+Unlike the normalized criterion in Suleman (2017), \code{aa_ic()} applies this
+correction on the same Gaussian RSS scale used by the other \code{df_method}
+choices.
 
 For \code{df_method = "covariance"}, the fitted archetype weights are held fixed and
 the degrees of freedom are estimated from how strongly the fitted values
@@ -72,8 +76,12 @@ simplex weights through regularization or constraints.
 
 For criteria with a free scalar residual parameter, such as Gaussian fits,
 one additional degree of freedom is added outside the structural
-\code{df_method} calculation. For non-Suleman Gaussian criteria, AIC and BIC use
-the profile log-RSS scale.
+\code{df_method} calculation. Gaussian AIC and BIC use the profile log-RSS
+scale \code{nelem * log(rss / nelem)}, where \code{nelem} is the number of observed
+matrix entries. For ordinary sparse input, structural zeros are counted as
+observed zeros. For missing-data sparse fits, only stored non-missing entries are
+counted as observed. \code{n_eff} affects the BIC penalty multiplier but not this
+RSS scale.
 For non-Gaussian PAA families, AIC and BIC use twice the final optimized
 objective plus the selected penalty.
 }

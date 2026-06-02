@@ -80,12 +80,12 @@ test_that("aa_ic exposes AIC, BIC, and degrees-of-freedom choices", {
     expect_equal(aa_ic(fit), AIC(fit))
     expect_equal(
         AIC(fit),
-        log(rss / n_eff_entries) + 2 * npar / (N * eta),
+        n_eff_entries * log(rss / n_eff_entries) + 2 * npar / (N * eta),
         tolerance = 1e-12
     )
     expect_equal(
         BIC(fit),
-        log(rss / n_eff_entries) + log(N) * npar / (N * eta),
+        n_eff_entries * log(rss / n_eff_entries) + log(N) * npar / (N * eta),
         tolerance = 1e-12
     )
 
@@ -99,12 +99,54 @@ test_that("aa_ic exposes AIC, BIC, and degrees-of-freedom choices", {
     )
     expect_equal(
         aa_ic(fit, type = "aic", df_method = "active", n_eff = "samples"),
-        N * log(rss / N) + 2 * expected_active_df,
+        n_eff_entries * log(rss / n_eff_entries) + 2 * expected_active_df,
         tolerance = 1e-12
     )
     expect_equal(
         aa_ic(fit, type = "bic", df_method = "parametric", n_eff = "samples"),
-        N * log(rss / N) + log(N) * expected_param_df,
+        n_eff_entries * log(rss / n_eff_entries) + log(N) * expected_param_df,
+        tolerance = 1e-12
+    )
+})
+
+test_that("IC entry counts respect missing-data semantics", {
+    dense <- matrix(c(1, 0, NA, 2), nrow = 2L)
+    sparse <- Matrix::Matrix(matrix(c(1, 0, 0, 2), nrow = 2L), sparse = TRUE)
+    fit <- manual_fit()
+
+    fit[["fit_info"]][["missing"]] <- FALSE
+    expect_equal(.aa_ic_n_entries(fit, dense), 3L)
+    expect_equal(.aa_ic_n_entries(fit, sparse), 4L)
+
+    fit[["fit_info"]][["missing"]] <- TRUE
+    expect_equal(.aa_ic_n_entries(fit, dense), 3L)
+    expect_equal(.aa_ic_n_entries(fit, sparse), sum(!is.na(sparse@x)))
+})
+
+test_that("Suleman df adjustment uses the universal Gaussian RSS scale", {
+    fit <- manual_fit()
+    X <- fit[["data"]]
+    B <- rbind(
+        c(0.5, 0.5, 0, 0),
+        c(0, 0.5, 0.5, 0),
+        c(0.25, 0.25, 0.25, 0.25)
+    )
+    rownames(B) <- rownames(coefficients(fit))
+    fit[["coefficients"]] <- B
+    fit[["A"]] <- B %*% X
+
+    S <- compositions(fit)
+    A <- coordinates(fit)
+    rss <- norm(X - S %*% A, "F")^2
+    nelem <- prod(dim(X))
+    eta <- .aa_effic(X, S %*% A)
+    K <- ncol(S)
+    N <- nrow(X)
+    npar <- N * (K - 1L) + K * (N - 1L) + 1L
+
+    expect_equal(
+        aa_ic(fit, type = "aic", df_method = "suleman"),
+        nelem * log(rss / nelem) + 2 * npar / (N * eta),
         tolerance = 1e-12
     )
 })
@@ -127,7 +169,7 @@ test_that("active-set information criteria use local affine ranks", {
 
     expect_equal(
         aa_ic(fit, type = "aic", df_method = "active", n_eff = "samples"),
-        nrow(X) * log(rss / nrow(X)) + 2 * expected_df,
+        prod(dim(X)) * log(rss / prod(dim(X))) + 2 * expected_df,
         tolerance = 1e-12
     )
 })
@@ -142,7 +184,7 @@ test_that("active-set degrees of freedom respect support tolerance", {
 
     S <- compositions(fit)
     rss <- norm(X - S %*% coordinates(fit), "F")^2
-    base <- nrow(X) * log(rss / nrow(X))
+    base <- prod(dim(X)) * log(rss / prod(dim(X)))
 
     expect_equal(
         aa_ic(fit, type = "aic", df_method = "active", n_eff = "samples"),
@@ -152,6 +194,11 @@ test_that("active-set degrees of freedom respect support tolerance", {
     expect_equal(
         aa_ic(fit, type = "aic", df_method = "active", n_eff = "samples", support_tol = 0),
         base + 2 * 4,
+        tolerance = 1e-12
+    )
+    expect_equal(
+        aa_ic(fit, type = "aic", df_method = "active", n_eff = "samples"),
+        aa_ic(fit, type = "aic", df_method = "active", n_eff = "entries"),
         tolerance = 1e-12
     )
     expect_error(
