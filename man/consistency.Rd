@@ -52,11 +52,15 @@ computed from \code{Pxy} and its row and column marginals, then normalized as
 permutations of the archetype labels.
 
 For \code{what = "coordinates"}, archetypes in \code{x} are greedily matched to the
-nearest unmatched archetypes in \code{y}, then a R2-like score is computed by
-scaling the mean matched distances by the overall variation in \code{data}. This
-option is useful for checking whether two fits place archetypes in similar
-regions of the input space. It returns \code{NA} when \code{x} has more archetypes than
-\code{y}, because not every archetype in \code{x} can be matched.
+nearest unmatched archetypes in \code{y}, then a similarity-style score is
+computed by scaling the mean matched squared distances by the average
+squared pairwise distance between observations in \code{data}. This denominator
+is computed through the equivalent identity \code{2 * sum(colVars(data))},
+avoiding explicit pairwise distances. The score is useful for checking
+whether two fits place archetypes in similar regions of the input space.
+Values can be negative when matched archetypes are farther apart than the
+typical data-to-data squared distance. It returns \code{NA} when \code{x} has more
+archetypes than \code{y}, because not every archetype in \code{x} can be matched.
 }
 \references{
 J. L. Hinrich, S. E. Bardenfleth, R. E. Røge, N. W. Churchill, K. H.

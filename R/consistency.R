@@ -25,11 +25,15 @@
 #' permutations of the archetype labels.
 #'
 #' For `what = "coordinates"`, archetypes in `x` are greedily matched to the
-#' nearest unmatched archetypes in `y`, then a R2-like score is computed by
-#' scaling the mean matched distances by the overall variation in `data`. This
-#' option is useful for checking whether two fits place archetypes in similar
-#' regions of the input space. It returns `NA` when `x` has more archetypes than
-#' `y`, because not every archetype in `x` can be matched.
+#' nearest unmatched archetypes in `y`, then a similarity-style score is
+#' computed by scaling the mean matched squared distances by the average
+#' squared pairwise distance between observations in `data`. This denominator
+#' is computed through the equivalent identity `2 * sum(colVars(data))`,
+#' avoiding explicit pairwise distances. The score is useful for checking
+#' whether two fits place archetypes in similar regions of the input space.
+#' Values can be negative when matched archetypes are farther apart than the
+#' typical data-to-data squared distance. It returns `NA` when `x` has more
+#' archetypes than `y`, because not every archetype in `x` can be matched.
 #'
 #' @references
 #' J. L. Hinrich, S. E. Bardenfleth, R. E. Røge, N. W. Churchill, K. H.
@@ -129,7 +133,7 @@ consistency.archetypes <- function(x,
     }
 
     d2 <- .aa_greedy_coordinate_d2(ax, ay)
-    denom <- mean(matrixStats::colVars(data))
+    denom <- 2 * sum(matrixStats::colVars(data))
     if (!is.finite(denom) || denom <= 0) {
         stop("Coordinate consistency requires data with positive column variance.", call. = FALSE)
     }

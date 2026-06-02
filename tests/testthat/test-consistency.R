@@ -25,10 +25,12 @@ test_that("composition consistency is symmetric with unit diagonal", {
     expect_error(.aa_nmi(fit[["compositions"]] * 2, fit[["compositions"]]), "row-stochastic")
 })
 
-test_that("coordinate consistency returns NA for decreasing K and uses column variance denominator", {
+test_that("coordinate consistency returns NA for decreasing K and uses mean pairwise distance denominator", {
     fit3 <- manual_fit()
     X <- fit3[["data"]]
-    A4 <- rbind(coordinates(fit3), c(0.5, 0.5))
+    A4_base <- coordinates(fit3)
+    A4_base[, 1L] <- A4_base[, 1L] + 0.1
+    A4 <- rbind(A4_base, c(0.5, 0.5))
     B4 <- diag(4)
     S4 <- diag(4)
     loss <- data.frame(loss = 0, r2 = 1, k_S = 1, k_A = 1)
@@ -42,7 +44,7 @@ test_that("coordinate consistency returns NA for decreasing K and uses column va
     )
 
     expected_d2 <- mean(.aa_greedy_coordinate_d2(coordinates(fit3), coordinates(fit4)))
-    expected <- 1 - expected_d2 / mean(matrixStats::colVars(X))
+    expected <- 1 - expected_d2 / (2 * sum(matrixStats::colVars(X)))
 
     expect_equal(consistency(fit3, fit4, what = "coordinates"), expected)
     expect_true(is.na(consistency(fit4, fit3, what = "coordinates")))
