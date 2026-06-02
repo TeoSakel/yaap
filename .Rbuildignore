@@ -14,6 +14,7 @@
 ^vignettes/.*\.html$
 ^vignettes/.*_cache$
 ^vignettes/.*_files$
+^articles$
 ^AGENTS[.]md$
 ^references[.]bib$
 ^cran-comments[.]md$

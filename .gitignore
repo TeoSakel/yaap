@@ -8,3 +8,8 @@ dev/
 yaap.Rcheck/
 yaap_*.tar.gz
 CRAN-SUBMISSION
+.quarto/
+**/*.quarto_ipynb
+articles/*.html
+articles/*_cache/
+articles/*_files/

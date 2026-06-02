@@ -1,0 +1,669 @@
+---
+title: "Tuning Archetypal Analysis with Information Criteria and Consistency"
+bibliography: ../vignettes/references.bib
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    df-print: paged
+    embed-resources: true
+execute:
+  collapse: true
+  comment: "#>"
+  fig-width: 7
+  fig-height: 5
+  fig-align: center
+  warning: false
+  message: false
+params:
+  mode: development
+---
+
+```{r setup, include = FALSE}
+benchmark_budget_preset <- function(mode = c("development", "article", "vignette")) {
+    mode <- match.arg(mode)
+    presets <- list(
+        development = list(
+            mode = "development",
+            n_scenarios = 2L,
+            n_reps_data = 1L,
+            n_restarts_per_K = 3L,
+            max_iter = 60L,
+            nrep_fit = 1L,
+            K_extra = 2L,
+            cache = TRUE
+        ),
+        article = list(
+            mode = "article",
+            n_scenarios = 4L,
+            n_reps_data = 10L,
+            n_restarts_per_K = 8L,
+            max_iter = 150L,
+            nrep_fit = 1L,
+            K_extra = 3L,
+            cache = TRUE
+        ),
+        vignette = list(
+            mode = "vignette",
+            n_scenarios = 1L,
+            n_reps_data = 1L,
+            n_restarts_per_K = 2L,
+            max_iter = 40L,
+            nrep_fit = 1L,
+            K_extra = 1L,
+            cache = FALSE
+        )
+    )
+    presets[[mode]]
+}
+
+benchmark_budget <- benchmark_budget_preset(params$mode)
+
+knitr::opts_chunk$set(
+    cache = benchmark_budget$cache
+)
+
+
+load_yaap_for_article <- function() {
+    candidates <- c(".", "..")
+    descriptions <- file.path(candidates, "DESCRIPTION")
+    is_yaap <- vapply(descriptions, function(path) {
+        file.exists(path) && any(grepl("^Package: yaap$", readLines(path, n = 5L)))
+    }, logical(1L))
+    root <- candidates[which(is_yaap)[[1L]]]
+    if (!is.na(root) && requireNamespace("pkgload", quietly = TRUE)) {
+        pkgload::load_all(root, quiet = TRUE)
+    } else {
+        library(yaap)
+    }
+}
+
+
+set.seed(42)
+load_yaap_for_article()
+```
+
+## Goal
+
+The main tuning parameter in archetypal analysis is `K`, the number of
+archetypes. A common first diagnostic is a scree or elbow plot of reconstruction
+loss across candidate values of `K`. `yaap` also provides information criteria
+through `AIC()`, `BIC()`, and the lower-level `aa_ic()` helper.
+
+This article expands that workflow into a small benchmark-style investigation.
+The benchmark uses synthetic datasets where the true number of generating
+archetypes is known. We compare two families of diagnostics:
+
+- **Information criteria**: lower values indicate a better fit/parsimony tradeoff.
+- **Consistency curves**: higher values indicate more stable recovered
+  coordinates or sample compositions across repeated fits at the same `K`.
+
+The article is not a CRAN vignette. It is intentionally placed under
+`articles/` and can run heavier investigations locally.
+
+## Computational Budget
+
+All computational complexity is controlled by one object, `benchmark_budget`.
+Render with a different preset by passing `params = list(mode = "...")`.
+
+```{r budget}
+data.frame(
+    setting = names(benchmark_budget),
+    value = unlist(benchmark_budget, use.names = FALSE),
+    stringsAsFactors = FALSE
+)
+```
+
+The supported presets are:
+
+- `development`: fast settings for editing the article.
+- `article`: deeper settings for a more informative non-CRAN report.
+- `vignette`: small settings suitable if the source is later adapted into a
+  CRAN-running vignette.
+
+Every scenario, candidate `K` grid, repeated fit, and scoring step below reads
+from `benchmark_budget`. This keeps the investigation easy to tune without
+editing helper internals.
+
+## Information Criteria
+
+`aa_ic()` has two criterion types:
+
+- `type = "aic"` uses a penalty multiplier of 2.
+- `type = "bic"` uses a penalty multiplier of `log(n_eff)`.
+
+The more important comparison here is the degrees-of-freedom estimate:
+
+- `df_method = "suleman"` uses the adapted Suleman-style correction
+  [@Suleman2017]. This is the default behind bare `AIC()` and `BIC()`.
+- `df_method = "covariance"` treats the fitted weights as fixed and estimates
+  the trace of the fitted-value smoother.
+- `df_method = "parametric"` counts the full ambient simplex parameter count.
+- `df_method = "active"` counts only active simplex-face dimensions, capped by
+  local affine rank for archetype coordinates.
+
+These criteria are not monotone in `K`; the selected model is the minimum of
+the curve. Some criteria can be undefined for particular fits. For example, the
+Suleman-style correction depends on covariance assumptions and may return `NA`
+when those assumptions fail.
+
+## Consistency Curves
+
+Consistency asks a different question from AIC or BIC. Rather than balancing
+fit and parsimony, it asks whether repeated fits at the same `K` recover similar
+objects. `yaap` exposes this through `consistency()`.
+
+For each candidate `K`, we fit multiple independent models and compute mean
+pairwise consistency for:
+
+- `what = "coordinates"`: are the archetype locations stable?
+- `what = "compositions"`: are the sample barycentric weights stable?
+
+Higher consistency is better, and the selected `K` is the maximum curve value.
+Ties are resolved toward smaller `K`. This can favor stable underfit models, so
+consistency should be read alongside IC and reconstruction diagnostics rather
+than as a replacement for them.
+
+For plotting, consistency values are shown on their raw scale after averaging
+over data replicates. Coordinate and composition consistency therefore use their
+native definitions rather than a shared max-normalized scale. Negative
+coordinate-consistency values are left visible because they indicate matched
+archetype locations farther apart than the data-scale variance reference.
+locations farther apart than the data-scale variance reference.
+
+## Benchmark Generation
+
+Each synthetic dataset is generated from a known latent archetypal model. We
+choose the true number of archetypes `K_true`, the feature dimension `M`, a
+matrix of true archetype coordinates `A_true`, a Dirichlet concentration
+parameter `alpha`, and a fixed Gaussian noise level `sigma`. For sample `n`,
+the latent composition vector is sampled on the simplex and the observed row is
+a noisy convex combination of the true archetypes:
+
+$$s_n \sim \operatorname{Dirichlet}(\alpha_1, \ldots, \alpha_K),$$
+
+$$e_n \sim \mathcal{N}(0, \sigma^2 I_M),$$
+
+$$x_n = s_n A_\mathrm{true} + e_n.$$
+
+Equivalently, for the full data matrix:
+
+$$X = S_\mathrm{true} A_\mathrm{true} + E.$$
+
+Rows of `S_true` are non-negative and sum to one, so the clean data are inside
+the true archetype simplex. The noise matrix `E` perturbs those clean points in
+feature space. The benchmark therefore separates several controls:
+
+- `K_true` sets the ground-truth model size.
+- `M` sets feature dimension.
+- `A_true` sets archetype geometry and separation.
+- `alpha` controls composition purity versus mixing.
+- `corner_weights` can make one archetype sparsely represented.
+- `sigma` controls observation noise independently of mixing.
+
+```{mermaid}
+flowchart LR
+    alpha["α"] --> s["sₙ ~ Dirichlet(α)"]
+    sigma["σ"] --> e["eₙ ~ N(0, σ² Iₘ)"]
+    A["A_true"]
+
+    subgraph plate["n = 1,...,N"]
+        s
+        e
+        x["xₙ = sₙ A_true + eₙ"]
+        s --> x
+        e --> x
+    end
+
+    A --> x
+    style plate fill:transparent,stroke:#6b7280,stroke-width:1.5px
+```
+
+The current "Choosing K" benchmark keeps `alpha` fixed within each scenario
+because the focus is model-selection behavior over candidate `K`. A natural
+future benchmark axis is an **Archetype Discoverability** experiment where
+`alpha` becomes a function of a mixing-time parameter `t`. Small `alpha(t)`
+would generate nearly pure samples near simplex corners; larger `alpha(t)`
+would move samples toward increasingly mixed, interior compositions. That
+extension would ask when true coordinates and compositions remain recoverable.
+We expect coordinate recovery to become difficult when corner support
+disappears, while composition recovery may remain useful for describing the
+observed mixtures even when the true vertices are only weakly supported.
+
+```{r helpers}
+`%||%` <- function(x, y) {
+    if (is.null(x)) y else x
+}
+
+sample_simplex_weights <- function(n, K, alpha = 1, corner_weights = NULL) {
+    if (is.null(corner_weights)) {
+        shape <- rep(alpha, K)
+    } else {
+        shape <- alpha * corner_weights / mean(corner_weights)
+    }
+    Z <- matrix(stats::rgamma(n * K, shape = rep(shape, each = n), rate = 1),
+        nrow = n,
+        ncol = K
+    )
+    Z / rowSums(Z)
+}
+
+random_archetypes <- function(K, M, seed) {
+    set.seed(seed)
+    A <- matrix(stats::rnorm(K * M), nrow = K, ncol = M)
+    colnames(A) <- paste0("x", seq_len(ncol(A)))
+    rownames(A) <- paste0("true_A", seq_len(nrow(A)))
+    A
+}
+
+scenario_definitions <- function() {
+    list(
+        triangle_easy = list(
+            name = "triangle_easy",
+            title = "Easy triangle",
+            K_true = 3L,
+            n = 120L,
+            M = 2L,
+            alpha = 0.35,
+            noise = 0.03,
+            seed = 1001L,
+            A = rbind(c(0, 0), c(1, 0), c(0.25, 0.9))
+        ),
+        simplex_moderate = list(
+            name = "simplex_moderate",
+            title = "Moderate 4-archetype simplex",
+            K_true = 4L,
+            n = 160L,
+            M = 5L,
+            alpha = 0.45,
+            noise = 0.06,
+            seed = 2001L
+        ),
+        high_dim_noisy = list(
+            name = "high_dim_noisy",
+            title = "Noisy high-dimensional simplex",
+            K_true = 5L,
+            n = 200L,
+            M = 10L,
+            alpha = 0.85,
+            noise = 0.10,
+            seed = 3001L
+        ),
+        imbalanced_corner = list(
+            name = "imbalanced_corner",
+            title = "Imbalanced sparse corner",
+            K_true = 4L,
+            n = 170L,
+            M = 4L,
+            alpha = 0.30,
+            corner_weights = c(1, 1, 1, 0.18),
+            noise = 0.05,
+            seed = 4001L
+        )
+    )
+}
+
+select_scenarios <- function(budget) {
+    scenarios <- scenario_definitions()
+    scenarios[seq_len(min(budget$n_scenarios, length(scenarios)))]
+}
+
+make_benchmark_data <- function(scenario, data_rep, budget) {
+    seed <- scenario$seed + 100L * data_rep
+    set.seed(seed)
+    K_true <- scenario$K_true
+    M <- scenario$M
+    A <- scenario$A
+    if (is.null(A)) {
+        A <- random_archetypes(K_true, M, seed = scenario$seed)
+    } else {
+        A <- as.matrix(A)
+        colnames(A) <- paste0("x", seq_len(ncol(A)))
+        rownames(A) <- paste0("true_A", seq_len(nrow(A)))
+    }
+    S <- sample_simplex_weights(
+        n = scenario$n,
+        K = K_true,
+        alpha = scenario$alpha,
+        corner_weights = scenario$corner_weights
+    )
+    X <- S %*% A
+    X <- X + matrix(stats::rnorm(length(X), sd = scenario$noise),
+        nrow = nrow(X),
+        ncol = ncol(X)
+    )
+    colnames(X) <- colnames(A)
+    rownames(X) <- paste0(scenario$name, "_", data_rep, "_", seq_len(nrow(X)))
+    list(X = X, A_true = A, S_true = S, scenario = scenario, data_rep = data_rep)
+}
+
+candidate_K <- function(scenario, budget) {
+    seq_len(scenario$K_true + budget$K_extra)
+}
+
+final_loss <- function(fit) {
+    utils::tail(fit[["loss"]][["loss"]], 1L)
+}
+
+fit_repeated_grid <- function(benchmark_data, budget) {
+    scenario <- benchmark_data$scenario
+    K_values <- candidate_K(scenario, budget)
+    fits <- vector("list", length(K_values))
+    names(fits) <- paste0("K", K_values)
+
+    for (i in seq_along(K_values)) {
+        K <- K_values[[i]]
+        fits_for_K <- vector("list", budget$n_restarts_per_K)
+        for (restart in seq_len(budget$n_restarts_per_K)) {
+            set.seed(scenario$seed + 10000L * benchmark_data$data_rep + 100L * K + restart)
+            fits_for_K[[restart]] <- suppressWarnings(run_aa(
+                benchmark_data$X,
+                K = K,
+                init = "random",
+                max_iter = budget$max_iter,
+                nrep = budget$nrep_fit
+            ))
+        }
+        fits[[i]] <- fits_for_K
+    }
+    list(
+        scenario = scenario,
+        data_rep = benchmark_data$data_rep,
+        K = K_values,
+        data = benchmark_data,
+        fits = fits
+    )
+}
+
+best_fit_by_loss <- function(grid_result) {
+    lapply(grid_result$fits, function(fits_for_K) {
+        losses <- vapply(fits_for_K, final_loss, numeric(1L))
+        fits_for_K[[which.min(losses)]]
+    })
+}
+
+score_ic_grid <- function(grid_result) {
+    best_fits <- best_fit_by_loss(grid_result)
+    df_methods <- c("suleman", "covariance", "parametric", "active")
+    types <- c("aic", "bic")
+    rows <- vector("list", length(best_fits) * length(df_methods) * length(types))
+    idx <- 0L
+
+    for (K_name in names(best_fits)) {
+        K <- as.integer(sub("^K", "", K_name))
+        fit <- best_fits[[K_name]]
+        for (type in types) {
+            for (df_method in df_methods) {
+                idx <- idx + 1L
+                value <- suppressWarnings(tryCatch(
+                    aa_ic(fit, type = type, df_method = df_method, n_eff = "samples"),
+                    error = function(e) NA_real_
+                ))
+                rows[[idx]] <- data.frame(
+                    scenario = grid_result$scenario$name,
+                    data_rep = grid_result$data_rep,
+                    K_true = grid_result$scenario$K_true,
+                    K = K,
+                    diagnostic = toupper(type),
+                    variant = df_method,
+                    value = value,
+                    direction = "min",
+                    stringsAsFactors = FALSE
+                )
+            }
+        }
+    }
+    do.call(rbind, rows)
+}
+
+mean_pairwise_consistency <- function(fits, what, data) {
+    if (length(fits) < 2L) {
+        return(NA_real_)
+    }
+    pairs <- utils::combn(seq_along(fits), 2L)
+    values <- vapply(seq_len(ncol(pairs)), function(i) {
+        suppressWarnings(tryCatch(
+            consistency(fits[[pairs[1L, i]]], fits[[pairs[2L, i]]], what = what, data = data),
+            error = function(e) NA_real_
+        ))
+    }, numeric(1L))
+    if (all(is.na(values))) {
+        return(NA_real_)
+    }
+    mean(values, na.rm = TRUE)
+}
+
+score_consistency_grid <- function(grid_result) {
+    what_values <- c("coordinates", "compositions")
+    rows <- vector("list", length(grid_result$fits) * length(what_values))
+    idx <- 0L
+
+    for (K_name in names(grid_result$fits)) {
+        K <- as.integer(sub("^K", "", K_name))
+        fits_for_K <- grid_result$fits[[K_name]]
+        for (what in what_values) {
+            idx <- idx + 1L
+            rows[[idx]] <- data.frame(
+                scenario = grid_result$scenario$name,
+                data_rep = grid_result$data_rep,
+                K_true = grid_result$scenario$K_true,
+                K = K,
+                diagnostic = "consistency",
+                variant = what,
+                value = mean_pairwise_consistency(fits_for_K, what, grid_result$data$X),
+                direction = "max",
+                stringsAsFactors = FALSE
+            )
+        }
+    }
+    do.call(rbind, rows)
+}
+
+summarize_selection <- function(scores) {
+    split_keys <- paste(scores$scenario, scores$data_rep, scores$diagnostic, scores$variant, sep = "\r")
+    parts <- split(scores, split_keys)
+    rows <- lapply(parts, function(x) {
+        x <- x[is.finite(x$value), , drop = FALSE]
+        if (nrow(x) == 0L) {
+            return(NULL)
+        }
+        if (identical(x$direction[[1L]], "min")) {
+            best <- x[order(x$value, x$K), ][1L, ]
+        } else {
+            best <- x[order(-x$value, x$K), ][1L, ]
+        }
+        data.frame(
+            scenario = best$scenario,
+            data_rep = best$data_rep,
+            K_true = best$K_true,
+            diagnostic = best$diagnostic,
+            variant = best$variant,
+            selected_K = best$K,
+            recovered = best$K == best$K_true,
+            stringsAsFactors = FALSE
+        )
+    })
+    do.call(rbind, rows)
+}
+
+summarize_recovery <- function(selection) {
+    split_keys <- paste(selection$scenario, selection$diagnostic, selection$variant, sep = "\r")
+    parts <- split(selection, split_keys)
+    rows <- lapply(parts, function(x) {
+        data.frame(
+            scenario = x$scenario[[1L]],
+            diagnostic = x$diagnostic[[1L]],
+            variant = x$variant[[1L]],
+            n = nrow(x),
+            K_true = x$K_true[[1L]],
+            mean_selected_K = mean(x$selected_K),
+            recovery_rate = mean(x$recovered),
+            under_rate = mean(x$selected_K < x$K_true),
+            over_rate = mean(x$selected_K > x$K_true),
+            stringsAsFactors = FALSE
+        )
+    })
+    out <- do.call(rbind, rows)
+    out[order(out$scenario, out$diagnostic, out$variant), ]
+}
+
+mean_curve_scores <- function(scores) {
+    split_keys <- paste(scores$scenario, scores$diagnostic, scores$variant, scores$K, sep = "\r")
+    parts <- split(scores, split_keys)
+    rows <- lapply(parts, function(x) {
+        data.frame(
+            scenario = x$scenario[[1L]],
+            K_true = x$K_true[[1L]],
+            K = x$K[[1L]],
+            diagnostic = x$diagnostic[[1L]],
+            variant = x$variant[[1L]],
+            value = mean(x$value, na.rm = TRUE),
+            stringsAsFactors = FALSE
+        )
+    })
+    do.call(rbind, rows)
+}
+
+plot_selection_curves <- function(scores, scenario_name, diagnostic, main = NULL) {
+    cur <- scores[scores$scenario == scenario_name & scores$diagnostic == diagnostic, , drop = FALSE]
+    cur <- mean_curve_scores(cur)
+    cur <- cur[is.finite(cur$value), , drop = FALSE]
+    if (nrow(cur) == 0L) {
+        plot.new()
+        title(main = main %||% diagnostic)
+        text(0.5, 0.5, "No finite values")
+        return(invisible(cur))
+    }
+
+    variants <- unique(cur$variant)
+    colors <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")
+    colors <- colors[seq_along(variants)]
+    ylim <- range(cur$value, finite = TRUE)
+    plot(
+        NA,
+        xlim = range(cur$K),
+        ylim = ylim,
+        xlab = "Number of archetypes (K)",
+        ylab = diagnostic,
+        main = main %||% diagnostic,
+        frame.plot = FALSE
+    )
+    abline(v = cur$K_true[[1L]], lty = 2, col = "gray45")
+    for (i in seq_along(variants)) {
+        one <- cur[cur$variant == variants[[i]], , drop = FALSE]
+        one <- one[order(one$K), , drop = FALSE]
+        lines(one$K, one$value, type = "b", pch = 19, col = colors[[i]])
+    }
+    legend("topright", legend = variants, col = colors, pch = 19, lty = 1, bty = "n")
+    invisible(cur)
+}
+```
+
+The scenarios selected by the active budget are:
+
+```{r scenarios}
+scenarios <- select_scenarios(benchmark_budget)
+scenario_table <- data.frame(
+    scenario = vapply(scenarios, `[[`, character(1L), "name"),
+    K_true = vapply(scenarios, `[[`, integer(1L), "K_true"),
+    n = vapply(scenarios, `[[`, integer(1L), "n"),
+    M = vapply(scenarios, `[[`, integer(1L), "M"),
+    noise = vapply(scenarios, `[[`, numeric(1L), "noise"),
+    stringsAsFactors = FALSE
+)
+scenario_table
+```
+
+## Run the Benchmark
+
+The next chunk is the expensive part. In `development` mode it runs only a
+small subset. In `article` mode it runs all scenarios, multiple datasets per
+scenario, and multiple repeated fits per candidate `K`.
+
+```{r run-benchmark}
+grid_results <- list()
+idx <- 0L
+for (scenario in scenarios) {
+    for (data_rep in seq_len(benchmark_budget$n_reps_data)) {
+        idx <- idx + 1L
+        benchmark_data <- make_benchmark_data(scenario, data_rep, benchmark_budget)
+        grid_results[[idx]] <- fit_repeated_grid(benchmark_data, benchmark_budget)
+    }
+}
+```
+
+```{r score-benchmark}
+#| column: page
+
+
+ic_scores <- do.call(rbind, lapply(grid_results, score_ic_grid))
+consistency_scores <- do.call(rbind, lapply(grid_results, score_consistency_grid))
+all_scores <- rbind(ic_scores, consistency_scores)
+
+selection <- summarize_selection(all_scores)
+recovery_summary <- summarize_recovery(selection)
+recovery_summary
+```
+
+## Scenario Curves
+
+Each panel marks the true `K` with a vertical reference line. IC curves should
+be read by their minimum. Consistency curves should be read by their maximum.
+
+```{r scenario-curves, fig.width = 10, fig.height = 4.5, results = "hide"}
+#| column: page
+
+
+for (scenario in scenarios) {
+    op <- par(mfrow = c(1, 3), mar = c(4, 4, 3, 1), bty = "n")
+    plot_selection_curves(all_scores, scenario$name, "AIC",
+        main = paste(scenario$title, "AIC")
+    )
+    plot_selection_curves(all_scores, scenario$name, "BIC",
+        main = paste(scenario$title, "BIC")
+    )
+    plot_selection_curves(all_scores, scenario$name, "consistency",
+        main = paste(scenario$title, "consistency")
+    )
+    par(op)
+}
+```
+
+## Interpretation
+
+The benchmark separates three related but distinct questions:
+
+- Does a criterion select the known generating `K_true`?
+- Does it under-select stable but too-simple models?
+- Does it over-select because extra archetypes improve the empirical hull or
+  fit noise?
+
+Information criteria and consistency can disagree because they measure
+different properties. AIC and BIC penalize model size through degrees of freedom.
+Coordinate consistency checks whether repeated fits place archetypes in similar
+regions of input space. Composition consistency checks whether samples receive
+similar archetypal mixtures across repeated fits.
+
+High consistency is not automatically evidence that `K` is correct. A
+one-archetype model can be very stable because there are few choices to make.
+Conversely, a correct but hard geometry may have lower consistency if repeated
+fits find different local optima. In practice, consistency is best interpreted
+alongside IC curves, reconstruction loss, restarts, and domain knowledge.
+
+## Extending the Benchmark
+
+The benchmark scaffold is intentionally modular. Future comparisons can add
+criteria by extending the scoring step rather than changing the data generator.
+For example, a group-lasso selector could be added as another `diagnostic` with
+its own `variant` values and a declared selection direction. The existing
+scenario definitions, candidate `K` grids, and recovery summaries would still
+apply.
+
+The most useful additions would be:
+
+- repeated simulations with larger `n_reps_data`;
+- stronger noise and missing-data scenarios;
+- sparse or regularized fitters whose active sets make `df_method = "active"`
+  especially relevant;
+- runtime summaries, because consistency-based selection is substantially more
+  expensive than scoring one best fit per `K`.
