@@ -12,18 +12,17 @@ solver wrappers when you want more control.
 
 ## Installation 🛠️
 
-`yaap` is currently under revision and may not yet be available on CRAN. For
-now, install the development version from GitHub:
+Install the released version from CRAN:
+
+```r
+install.packages("yaap")
+```
+
+You can install the development version from GitHub:
 
 ```r
 # install.packages("pak")
 pak::pak("teosakel/yaap")
-```
-
-Once released on CRAN, installation will be:
-
-```r
-install.packages("yaap")
 ```
 
 ## Quick Start 🚀

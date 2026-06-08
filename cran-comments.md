@@ -1,6 +1,10 @@
-## Resubmission
+## CRAN Release
 
-This is a resubmission. In this version I have:
+Version 1.0.0 was accepted on CRAN.
+
+## Final Resubmission Notes
+
+In the final resubmission I:
 
 * Updated the Title and Description fields so software and package names are
   formatted according to CRAN policy.
@@ -31,4 +35,4 @@ macOS release, macOS Builder, <https://mac.R-project.org/macbuilder/results/1779
 
 ## revdepcheck results
 
-There are currently no downstream dependencies for this package because it is not yet on CRAN.
+There were no downstream dependencies for this package at initial CRAN release.

@@ -1,6 +1,6 @@
 # yaap 1.0.0
 
-* Initial CRAN submission.
+* Initial CRAN release.
 
 * Provides archetypal analysis fitters for Euclidean, probabilistic, kernel,
   and directional models.
